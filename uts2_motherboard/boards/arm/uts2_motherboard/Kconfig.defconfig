@@ -1,0 +1,10 @@
+kconfig
+if BOARD_UTS2_MOTHERBOARD
+
+config BOARD
+   default "uts2_motherboard"
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+   default 550000000
+
+endif

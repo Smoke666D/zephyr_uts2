@@ -1,0 +1,5 @@
+kconfig
+
+config BOARD_UTS2_MOTHERBOARD
+   bool "UTS2 Motherboard (STM32H723VG)"
+   depends on SOC_STM32H723VG
