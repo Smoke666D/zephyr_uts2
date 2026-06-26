@@ -166,7 +166,12 @@
 	pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb9>;
 	pinctrl-names = "default";
 	status = "okay";
-	clock-frequency = <I2C_BITRATE_FAST>;
+	clock-frequency = <100000>;
+	
+	tmp112@4a {
+           compatible = "ti,tmp112";
+	   reg = <0x4a>;
+	};
 };
 
 &backup_sram {

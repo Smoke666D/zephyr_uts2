@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include "sensor_thread.h"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
@@ -27,8 +28,8 @@ static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 #define STACK_SIZE 1024
 
 /* Периоды мигания */
-#define LED0_PERIOD_MS 300   /* Быстрое мигание зеленым */
-#define LED1_PERIOD_MS 700   /* Медленное мигание желтым */
+#define LED0_PERIOD_MS 500   /* Быстрое мигание зеленым */
+#define LED1_PERIOD_MS 500   /* Медленное мигание желтым */
 
 /* Приоритеты потоков (чем меньше число, тем выше приоритет) */
 #define LED0_PRIORITY 5
@@ -115,6 +116,8 @@ int main(void)
         K_NO_WAIT
     );
 	
+    ret = sensor_thread_start();
+
  	while (1) {
         k_msleep(5000);
         printf("[Main] Still alive... (LED0 fast, LED1 slow)\n");
