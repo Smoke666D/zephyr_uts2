@@ -1,0 +1,6 @@
+board:
+  name: uts2_motherboard
+  full_name: uts2 motherboard
+  vendor: others
+  socs:
+    - name: stm32h723xx

@@ -6,6 +6,7 @@
 /dts-v1/;
 #include <st/h7/stm32h723Xg.dtsi>
 #include <st/h7/stm32h723zgtx-pinctrl.dtsi>
+#include "arduino_r3_connector.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 /*
@@ -15,7 +16,7 @@
 
 / {
 	model = "UTS2 Motherboard (STM32H723VG)";
-        compatible = "my-company,uts2-motherboard";
+        compatible = "st,uts2-motherboard";
 
 	chosen {
 		zephyr,console = &usart3;
@@ -24,6 +25,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,canbus = &fdcan1;
+	        zephyr,code-partition = &flash0;
 	};
 
 	leds: leds {
