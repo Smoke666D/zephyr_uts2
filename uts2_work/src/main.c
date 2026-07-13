@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include "usb_thread.h"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
@@ -33,6 +34,8 @@ int main(void)
 	if (ret < 0) {
 		return 0;
 	}
+
+	usb_thread_start();
 
 	while (1) {
 		ret = gpio_pin_toggle_dt(&led);
