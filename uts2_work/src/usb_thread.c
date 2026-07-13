@@ -1,8 +1,21 @@
+
+#include <sample_usbd.h>
+
 #include <zephyr/kernel.h>
 #include <stdio.h>
+#include <string.h>
 #include "usb_thread.h"
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/ring_buffer.h>
 
+#include <zephyr/usb/usbd.h>
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(cdc_acm_echo, LOG_LEVEL_INF);
+
+const struct device *const uart_dev = DEVICE_DT_GET_ONE(zephyr_cdc_acm_uart);
 
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
@@ -12,6 +25,8 @@ static struct k_thread thread_data;
 static void func(void *arg1, void *arg2, void *arg3)
 {
     
+
+
 	bool led_state = true;
     int count = 0;
     while (1) {
@@ -41,5 +56,6 @@ int usb_thread_start(void)
 		return 0;
 	}
 
+   
     return 0;
 }
