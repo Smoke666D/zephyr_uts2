@@ -34,9 +34,3 @@ zephyr_udc0: &dwc2_fsotg0 {
 		compatible = "zephyr,cdc-acm-uart";
 	};
 };
-
-/ {
-    chosen {
-        zephyr,console = &cdc_acm_uart0;
-    };
-};
