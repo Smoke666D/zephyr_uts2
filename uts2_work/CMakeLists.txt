@@ -6,7 +6,9 @@ project(blinky)
 
 include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 
+
 target_sources(app PRIVATE 
         src/main.c
         src/usb_thread.c
+        src/dio_thread.c
 )
