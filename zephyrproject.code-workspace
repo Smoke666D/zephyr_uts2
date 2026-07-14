@@ -1,0 +1,15 @@
+{
+    "folders": [
+        {
+            "name": "zephyrproject",
+            "path": "../zephyr_workspace/zephyrproject"
+        },
+        {
+            "name": "uts2_work",
+            "path": "uts2_work"
+        }
+    ],
+    "settings": {
+        "terminal.integrated.stickyScroll.enabled": false
+    }
+}
