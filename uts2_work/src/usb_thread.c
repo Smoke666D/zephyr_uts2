@@ -16,16 +16,26 @@
 #include <zephyr/console/console.h>
 #include "system_status.h"
 
-/*static const struct gpio_dt_spec led0 = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
-static const struct gpio_dt_spec led2 = GPIO_DT_SPEC_GET(LED2_NODE, gpios);
-*/
+
+static void on_action(struct smf_ctx *, const struct smf_state *, enum smf_action_type);
+static void on_transition(struct smf_ctx *,const struct smf_state *,const struct smf_state *);
+
+
+
+
+static const struct smf_hooks hookss = {
+        .on_action = on_action,
+        .on_transition = on_transition,
+        /* .on_error = NULL — any member may be NULL */
+};
+
 const char *main_menu[] =
 {
     "Main testing menu, select the desired menu item",
     "1 - LED tests",
     "2 - I2C bus device tests",
     "3 - SPI bus device tests",
+    "4 - ADC device test",
     "A - Automatic test",
     "h - Display help",
     0,
@@ -39,7 +49,16 @@ const char *led_menu[] =
     "3 - Toggle led3",
     "O - ALL switch on",
     "F - ALL switch off",
-    "q - Back to main menu"
+    "q - Back to main menu",
+    "h - Display help",
+    0,
+};
+
+const char *adc_menu[] =
+{
+    "ADC testing menu, select the desired menu item",
+    "1 -Show all channel",    
+    "q - Back to main menu",
     "h - Display help",
     0,
 };
@@ -59,21 +78,25 @@ static void set_led_status(int led_index, bool on, bool blinking, int period_ms)
 
     /* Публикуем новое состояние */
     int ret = zbus_chan_pub(&leds_chan, &state, K_NO_WAIT);
-    if (ret != 0) {
-    printk("[MENU] Publish failed: %d\n", ret);
-} else {
-    printk("[MENU] Published LED state successfully\n");
+
+
 }
 
-    printf("[Menu] LED%d: on=%d blink=%d period=%d\n",
-           led_index, on, blinking, period_ms);
+static void set_led_toggle(int led_index)
+{
+    struct leds_state state;
+    zbus_chan_read(&leds_chan, &state, K_NO_WAIT);
+    state.led[led_index].on = !state.led[led_index].on;
+ /* Публикуем новое состояние */
+    int ret = zbus_chan_pub(&leds_chan, &state, K_NO_WAIT);
+
 }
 
 
 /*******************************************************************************************************/
 static const struct smf_state menu_states[];
 
-enum menu_state { PARENT,  LED_STATE, S0, S1, S2 };
+enum menu_state {COMMON_ACTION, PARENT,  LED_STATE, ADC_STATE, S1, S2 };
 
 // Дискриптор конечного автомата 
 struct s_object 
@@ -84,55 +107,79 @@ struct s_object
         char          cmd[MAX_INPUT_STRING];        
 } s_obj;
 
-static void parent_entry(void *o)
-{
-    for (uint8_t i=0; main_menu[i] != 0; i++)
-    {
-        printf("%s\r\n",main_menu[i]);
-    }
-}
 
 static enum smf_state_result parent_run(void *o)
 {   
-    switch(s_obj.cmd[0])
+    enum smf_state_result res = SMF_EVENT_HANDLED;
+    if (s_obj.cmd[0])
     {
-        case '1':
-            smf_set_initial(SMF_CTX(&s_obj), &menu_states[LED_STATE]);
-            break;
-        case 'h':
-        case 'H':
-            smf_set_initial(SMF_CTX(&s_obj), &menu_states[PARENT]);
-            break;
-        default:
-            break;
-
+        switch(s_obj.cmd[0])
+        {
+            case '1':
+                smf_set_state(SMF_CTX(&s_obj), &menu_states[LED_STATE]);
+                break;
+            case '4':
+                smf_set_state(SMF_CTX(&s_obj), &menu_states[ADC_STATE]);
+                break;
+            case 'h':
+            case 'H':
+                smf_set_state(SMF_CTX(&s_obj), &menu_states[PARENT]);
+                break;
+            default:
+                break;
+        }
+       
+        res =  SMF_EVENT_PROPAGATE;
     }
-    s_obj.cmd[0] = 0;
-
-    return SMF_EVENT_HANDLED;
+      s_obj.cmd[0] = 0;
+    return res;
+    
 }
 
-
-static void led_entry(void *o)
+/** 
+* @brief Функция отображает текущие мени
+* @details Должна быть присвоена параметру on_entry при объявлении состояния конечного автомата
+*/
+static void menu_print(void * obj)
 {
-    for (uint8_t i=0; led_menu[i] != 0; i++)
+    const char **menu_text_p;
+
+    struct smf_ctx *ctx = obj;
+    const struct smf_state *current = smf_get_current_executing_state(ctx);
+
+    if (current == &menu_states[PARENT])
     {
-        printf("%s\r\n", led_menu[i]);
+            menu_text_p = main_menu;
     }
+    else if (current == &menu_states[LED_STATE])
+    {
+            menu_text_p = led_menu;
+    }
+    else if (current == &menu_states[ADC_STATE])
+    {
+            menu_text_p = adc_menu;
+    }
+    for (uint8_t i=0; menu_text_p[i] != 0; i++)
+    {
+        printf("%s\r\n", menu_text_p[i]);
+    }
+    
+
 }
+
 
 static enum smf_state_result led_run(void *o)
 {   
     switch(s_obj.cmd[0])
     {
         case '1':
-           // gpio_pin_toggle_dt(&led0);
+            set_led_toggle(0);           
             break;
         case '2':
-           // gpio_pin_toggle_dt(&led1);
+           set_led_toggle(1);
             break;
         case '3':
-           // gpio_pin_toggle_dt(&led2);
+           set_led_toggle(2);
             break;
         case 'o':
         case 'O':
@@ -148,27 +195,73 @@ static enum smf_state_result led_run(void *o)
             break;
         case 'q':
         case 'Q':
-            smf_set_initial(SMF_CTX(&s_obj), &menu_states[PARENT]);
+            smf_set_state(SMF_CTX(&s_obj), &menu_states[PARENT]);
             break;
         case 'h':
         case 'H':
-            smf_set_initial(SMF_CTX(&s_obj), &menu_states[LED_STATE]);
+            smf_set_state(SMF_CTX(&s_obj), &menu_states[LED_STATE]);
             break;
         default:
             break;
 
     }
-    s_obj.cmd[0] = 0;
+    
+  s_obj.cmd[0] = 0;
+    return SMF_EVENT_HANDLED;
+}
+
+static enum smf_state_result adc_run(void *o)
+{   
+    switch(s_obj.cmd[0])
+    {
+        case '1':
+                  
+            break;
+        case '2':
+           
+            break;
+        case '3':
+           
+            break;
+       
+        case 'q':
+        case 'Q':
+            smf_set_state(SMF_CTX(&s_obj), &menu_states[PARENT]);
+            break;
+        case 'h':
+        case 'H':
+            smf_set_state(SMF_CTX(&s_obj), &menu_states[ADC_STATE]);
+            break;
+        default:
+            break;
+
+    }
+    
+  s_obj.cmd[0] = 0;
+    return SMF_EVENT_HANDLED;
+}
+
+
+static enum smf_state_result common_run(void *o)
+{   
+   printk("Commnad run\r");
+    
 
     return SMF_EVENT_HANDLED;
+}
+
+static void common_exit(void *o)
+{
+       printk("Commnad exit\r");
 }
 
 /* Populate state table */
 static const struct smf_state menu_states[] = 
 {
-        /* Parent state does not have a run action */
-        [PARENT]    = SMF_CREATE_STATE(parent_entry, parent_run,NULL, NULL, NULL),  
-        [LED_STATE] = SMF_CREATE_STATE(led_entry,    led_run,   NULL, NULL, NULL),       
+        [COMMON_ACTION]    = SMF_CREATE_STATE(NULL, common_run,common_exit, NULL, NULL),  
+        [PARENT]           = SMF_CREATE_STATE(menu_print, parent_run,NULL, &menu_states[COMMON_ACTION], NULL),  
+        [LED_STATE]        = SMF_CREATE_STATE(menu_print,    led_run,   NULL, &menu_states[COMMON_ACTION], NULL),       
+        [ADC_STATE]        = SMF_CREATE_STATE(menu_print,    adc_run,   NULL, NULL, NULL),       
 };
 
 
@@ -262,6 +355,8 @@ static void func(void *arg1, void *arg2, void *arg3)
                 {
                     buf[i] = '\0';
                     strcpy(s_obj.cmd,buf);
+                    //Выполняем конечный автомат
+                    
                     i = 0;
                 }
             } 
@@ -276,8 +371,7 @@ static void func(void *arg1, void *arg2, void *arg3)
         }
         k_msleep(100);
 
-        //Выполняем конечный автомат
-        smf_run_state(SMF_CTX(&s_obj));
+        smf_run_state(SMF_CTX(&s_obj));        
       
     }
 }
@@ -302,6 +396,22 @@ int usb_thread_start(void)
    
     //Инициализируем конечный автомат
    smf_set_initial(SMF_CTX(&s_obj), &menu_states[PARENT]);
+   
+  // smf_set_hooks(SMF_CTX(&s_obj), &hookss);
 
     return 0;
+}
+
+static void on_action(struct smf_ctx *ctx,
+                      const struct smf_state *state,
+                      enum smf_action_type action_type)
+{
+      //  s_obj.cmd[0] = 0;
+}
+
+static void on_transition(struct smf_ctx *ctx,
+                          const struct smf_state *source,
+                          const struct smf_state *dest)
+{
+        /* Log or record the transition */
 }

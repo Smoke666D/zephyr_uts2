@@ -82,16 +82,6 @@ static void handle_blinking(void)
 }
 
 
-/*static void led_init()
-{
-      
-    gpio_pin_configure_dt(&led0, GPIO_OUTPUT_ACTIVE);
-    gpio_pin_configure_dt(&led1, GPIO_OUTPUT_ACTIVE);
-    gpio_pin_configure_dt(&led2, GPIO_OUTPUT_ACTIVE);
-    
-}*/
-
-
 K_THREAD_STACK_DEFINE(stack1, STACK_SIZE);
 
 static struct k_thread thread_data;
@@ -116,11 +106,9 @@ static void func(void *arg1, void *arg2, void *arg3)
          int ret = zbus_sub_wait(&led_sub, &chan, K_MSEC(50));
 
         if (ret == 0) {
-            /* Прочитали новый статус */
-            printf("new status\r\n");
+            /* Прочитали новый статус */         
             zbus_chan_read(&leds_chan, &state, K_NO_WAIT);
             apply_state(&state);
-            printf("[LED Thread] Status updated\n");
         }
 
         /* Мигание обрабатывается всегда */
