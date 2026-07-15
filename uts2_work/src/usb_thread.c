@@ -266,7 +266,6 @@ static const struct smf_state menu_states[] =
 
 
 
-LOG_MODULE_REGISTER(cdc_acm_echo, LOG_LEVEL_INF);
 
 const struct device *const uart_dev = DEVICE_DT_GET_ONE(zephyr_cdc_acm_uart);
 

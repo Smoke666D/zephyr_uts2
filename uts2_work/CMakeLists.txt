@@ -11,4 +11,5 @@ target_sources(app PRIVATE
         src/main.c
         src/usb_thread.c
         src/dio_thread.c
+        src/adc_thread.c
 )
