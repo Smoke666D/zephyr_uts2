@@ -15,6 +15,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/console/console.h>
 #include "system_status.h"
+#include "memomory_link_macro.h"
 
 
 static void on_action(struct smf_ctx *, const struct smf_state *, enum smf_action_type);
@@ -330,8 +331,7 @@ static bool enable_usb_device_next(void)
 
 
 
-K_THREAD_STACK_DEFINE(stack, STACK_SIZE);
-static struct k_thread thread_data;
+
 
 static void func(void *arg1, void *arg2, void *arg3)
 {
@@ -375,6 +375,10 @@ static void func(void *arg1, void *arg2, void *arg3)
     }
 }
 
+
+static uint8_t __attribute__((__section__("DTCM"))) stack[STACK_SIZE];
+static struct k_thread thread_data;
+
 int usb_thread_start(void)
 {
     if (false
@@ -390,7 +394,7 @@ int usb_thread_start(void)
 	k_msleep(100);
 
     // Создаем поток для работы с меню
-    k_thread_create(&thread_data, stack, STACK_SIZE,
+    k_thread_create(&thread_data, (k_thread_stack_t *)stack, STACK_SIZE,
                     func, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
    
     //Инициализируем конечный автомат

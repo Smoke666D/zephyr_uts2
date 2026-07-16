@@ -3,8 +3,10 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/dma/stm32_dma.h>
+#include <zephyr/dt-bindings/pinctrl/stm32-pinctrl.h>
+#include "src/board_define.h"
 
 / {
     chosen {
@@ -25,3 +27,83 @@
 
 };
 
+&pinctrl {
+    /* Создаем отдельный узел для каждого пина */
+    mux_a0_default: mux_a0_default {
+        pinmux = <STM32_PINMUX(MUX_AIN_GPIO_PORT_CHAR, MUX_AO_PIN, GPIO)>;
+        drive-push-pull;
+        slew-rate = "very-high-speed";
+        output-low;
+    };
+
+    mux_a1_default: mux_a1_default {
+        pinmux = <STM32_PINMUX(MUX_AIN_GPIO_PORT_CHAR, MUX_A1_PIN, GPIO)>;
+        drive-push-pull;
+        slew-rate = "very-high-speed";
+        output-low;
+    };
+
+    mux_a2_default: mux_a2_default {
+        pinmux = <STM32_PINMUX(MUX_AIN_GPIO_PORT_CHAR, MUX_A2_PIN, GPIO)>;
+        drive-push-pull;
+        slew-rate = "very-high-speed";
+        output-low;
+    };
+};
+
+/* Узел контейнер. В данном случае используем leds
+ */
+/ {
+    /* 
+     * Идеально чистый узел-контейнер. 
+     * compatible нужен только для валидации макросов pinctrl в Си.
+     */
+    seq_pins: seq_pins {
+        compatible = "seq-pins";
+        pinctrl-0 = <&mux_a0_default &mux_a1_default &mux_a2_default>;
+        pinctrl-names = "default";
+    };
+};
+
+
+/ {
+    zephyr,user {
+        /* Запрашиваем канал у DMAMUX1
+         * Формат: <&dmamux1 stream_id slot_id config_flags>
+         * stream_id: 0
+         * slot_id: 27 (соответствует TIM3_UP на STM32H7)
+         * config_flags: цикличный режим, 32-битная передача, инкремент источника
+         */
+        dmas = <&dmamux1 0 27 (STM32_DMA_MEMORY_TO_PERIPH | 
+                               STM32_DMA_MEM_INC | 
+                               STM32_DMA_MEM_32BITS | 
+                               STM32_DMA_PERIPH_32BITS | 
+                               STM32_DMA_PRIORITY_HIGH | 
+                               STM32_DMA_MODE_CYCLIC)>;
+        dma-names = "seq_dma";
+
+       
+    };
+};
+
+/* Ссылка на таймер и его дочерний счетчик раскрывается автоматически */
+&SEQ_TIMER_NODELABEL {
+    status = "okay";
+    st,prescaler = <10000>; 
+    counter {
+        status = "okay";
+    };
+};
+
+
+&MUX_AIN_GPIO_PORT_NODELABEL {
+    status = "okay";
+};
+
+&dma1 {
+    status = "okay";
+};
+
+&dmamux1 {
+    status = "okay";
+};

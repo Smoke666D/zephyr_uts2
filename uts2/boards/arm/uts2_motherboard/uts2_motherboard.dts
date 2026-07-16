@@ -6,7 +6,6 @@
 /dts-v1/;
 #include <st/h7/stm32h723Xg.dtsi>
 #include <st/h7/stm32h723zgtx-pinctrl.dtsi>
-#include "arduino_r3_connector.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 /*
@@ -190,7 +189,7 @@
 };
 
 &mac {
-	status = "okay";
+	status = "disabled";
 	pinctrl-0 = <&eth_ref_clk_pa1
 		     &eth_crs_dv_pa7
 		     &eth_rxd0_pc4
@@ -204,7 +203,7 @@
 };
 
 &mdio {
-	status = "okay";
+	status = "disabled";
 	pinctrl-0 = <&eth_mdio_pa2 &eth_mdc_pc1>;
 	pinctrl-names = "default";
 
@@ -223,6 +222,17 @@ zephyr_udc0: &usbotg_hs {
 &rng {
 	status = "okay";
 };
+
+&adc3 {
+    status = "okay";
+    st,adc-clock-source = "SYNC";
+    st,adc-prescaler = <4>;
+};
+
+&dma1 {
+    status = "okay";
+};
+
 
 &fdcan1 {
 	pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;

@@ -1,0 +1,3 @@
+description: Custom Sequencer Pins Device
+compatible: "seq-pins"
+include: [base.yaml, pinctrl-device.yaml] 
