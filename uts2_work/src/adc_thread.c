@@ -16,6 +16,8 @@
 #include "board_define.h"
 #include <zephyr/drivers/pinctrl.h>
 
+#define ADC_CHANNELS_COUNT 2 /* Опрашиваем 2 внутренних канала: Температура и VREFINT */
+
 // Макросы для получения адреса регистра BSSR
 #define MUX_AIN_GPIO_BSRR_ADDR (DT_REG_ADDR(DT_NODELABEL(MUX_AIN_GPIO_PORT_NODELABEL)) + 0x18)
 
@@ -41,6 +43,12 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
 }
 
 static uint32_t dma_buffer[COMBINATIONS_COUNT] __attribute__((aligned(32)));
+/* 
+ * Буфер результатов АЦП3.
+ * Атрибут __nocache принудительно размещает массив в некэшируемой RAM.
+ * Выравнивание по-прежнему оставляем для порядка, но для MPU это уже не критично.
+ */
+static uint32_t adc_raw_buffer[COMBINATIONS_COUNT * ADC_CHANNELS_COUNT] __nocache __attribute__((aligned(32)));
 
 /** 
 * @brief Функция подготовки буфера DMA
@@ -81,15 +89,6 @@ int StartDmaGPIO(void)
         printk("[ERR] Failed to apply pinctrl state! Code: %d\n", ret);
         return ret;
     }
-
-// Выводим адрес буфера в консоль для проверки области памяти
-    printk("[DMA] dma_buffer address: %p\n", (void *)dma_buffer);
-    
-    uint32_t buf_addr = (uint32_t)dma_buffer;
-    if (buf_addr >= 0x20000000 && buf_addr <= 0x2001FFFF) {
-        printk("[ERR] CRITICAL ERROR: Buffer is located in DTCM memory! DMA will fail to read it.\n");
-        return -EFAULT;
-    }
      
     // Подготовка DMA буффера и запись его из D-Cache в SRAM
     fill_combinations_buffer();
@@ -105,6 +104,9 @@ int StartDmaGPIO(void)
 
     uint32_t dma_channel = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), seq_dma, channel);
     uint32_t dma_slot = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), seq_dma, slot);
+
+    uint32_t adc_dma_channel = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), adc_dma, channel);
+    uint32_t adc_dma_slot = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), adc_dma, slot);
 
     printk("[DMA] Channel: %d, Slot: %d\n", dma_channel, dma_slot);
 
@@ -139,7 +141,32 @@ int StartDmaGPIO(void)
         printk("[ERR] Failed to configure DMA! Error code: %d\n", ret);
         return ret;
     }
-    printk("[DMA] Configuration applied successfully.\n");
+       // ---- Конфигурация DMA 2: ADC3 Scan Buffer ----
+    struct dma_block_config adc_block_cfg = {0};
+    adc_block_cfg.source_address = (uint32_t)&(ADC3->DR); // Регистр данных ADC3
+    adc_block_cfg.dest_address = (uint32_t)adc_raw_buffer;
+    adc_block_cfg.block_size = sizeof(adc_raw_buffer);
+    adc_block_cfg.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
+    adc_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
+    adc_block_cfg.source_reload_en = 1;
+    adc_block_cfg.dest_reload_en = 1;
+
+    struct dma_config adc_dma_cfg = {0};
+    adc_dma_cfg.dma_slot = adc_dma_slot;
+    adc_dma_cfg.channel_direction = PERIPHERAL_TO_MEMORY;
+    adc_dma_cfg.source_data_size = 4;
+    adc_dma_cfg.dest_data_size = 4;
+    adc_dma_cfg.block_count = 1;
+    adc_dma_cfg.head_block = &adc_block_cfg;
+    adc_dma_cfg.dma_callback = dma_callback;
+    adc_dma_cfg.complete_callback_en = true;
+
+    ret = dma_config(dma_dev, adc_dma_channel, &adc_dma_cfg);
+    if (ret < 0) {
+        printk("[ERR] Failed to configure ADC DMA! Code: %d\n", ret);
+        return ret;
+    }
+    printk("[DMA] Both DMA channels configured for TIM3 and ADC3 successfully.\n");
 
 
 // 3. Настройка таймера через Counter API

@@ -49,6 +49,25 @@
         slew-rate = "very-high-speed";
         output-low;
     };
+    /* 
+     * Аналоговые пины Vsense (АЦП).
+     * Режим ANALOG отключает цифровые буферы на ножках.
+     */
+    mux1_adc_vsense: mux1_adc_vsense {
+        pinmux = <STM32_PINMUX(MUX1_ADC_VSENSE_PORT, MUX1_ADC_VSENSE_PIN, ANALOG)>;
+    };
+    mux2_adc_vsense: mux2_adc_vsense {
+        pinmux = <STM32_PINMUX(MUX2_ADC_VSENSE_PORT, MUX2_ADC_VSENSE_PIN, ANALOG)>;
+    };
+    mux3_adc_vsense: mux3_adc_vsense {
+        pinmux = <STM32_PINMUX(MUX3_ADC_VSENSE_PORT, MUX3_ADC_VSENSE_PIN, ANALOG)>;
+    };
+    mux4_adc_vsense: mux4_adc_vsense {
+        pinmux = <STM32_PINMUX(MUX4_ADC_VSENSE_PORT, MUX4_ADC_VSENSE_PIN, ANALOG)>;
+    };
+    mux5_adc_vsense: mux5_adc_vsense {
+        pinmux = <STM32_PINMUX(MUX5_ADC_VSENSE_PORT, MUX5_ADC_VSENSE_PIN, ANALOG)>;
+    };
 };
 
 /* Узел контейнер. В данном случае используем leds
@@ -68,21 +87,21 @@
 
 / {
     zephyr,user {
-        /* Запрашиваем канал у DMAMUX1
-         * Формат: <&dmamux1 stream_id slot_id config_flags>
-         * stream_id: 0
-         * slot_id: 27 (соответствует TIM3_UP на STM32H7)
-         * config_flags: цикличный режим, 32-битная передача, инкремент источника
-         */
-        dmas = <&dmamux1 0 27 (STM32_DMA_MEMORY_TO_PERIPH | 
-                               STM32_DMA_MEM_INC | 
-                               STM32_DMA_MEM_32BITS | 
-                               STM32_DMA_PERIPH_32BITS | 
-                               STM32_DMA_PRIORITY_HIGH | 
-                               STM32_DMA_MODE_CYCLIC)>;
-        dma-names = "seq_dma";
-
-       
+       /* DMA1 Stream 0: Переключает мультиплексор по TIM3_UP (Слот 27) */
+        dmas = <&dmamux1 0 SEQ_TIMER_DMAMUX_SLOT (STM32_DMA_MEMORY_TO_PERIPH | 
+                                                 STM32_DMA_MEM_INC | 
+                                                 STM32_DMA_MEM_32BITS | 
+                                                 STM32_DMA_PERIPH_32BITS | 
+                                                 STM32_DMA_PRIORITY_HIGH | 
+                                                 STM32_DMA_MODE_CYCLIC)>,
+               /* DMA1 Stream 1: ADC3 Circular Scan (Слот 115) */
+               <&dmamux1 1 115 (STM32_DMA_PERIPH_TO_MEMORY | 
+                              STM32_DMA_MEM_INC | 
+                              STM32_DMA_PERIPH_32BITS | 
+                              STM32_DMA_MEM_32BITS | 
+                              STM32_DMA_PRIORITY_VERY_HIGH | 
+                              STM32_DMA_MODE_CYCLIC)>;
+        dma-names = "seq_dma", "adc_dma";
     };
 };
 
@@ -98,6 +117,13 @@
 
 &MUX_AIN_GPIO_PORT_NODELABEL {
     status = "okay";
+};
+
+/* Включаем АЦП3 в дереве устройств */
+&adc3 {
+    status = "okay";
+    pinctrl-0 = <&mux1_adc_vsense &mux2_adc_vsense &mux3_adc_vsense &mux4_adc_vsense &mux5_adc_vsense>;
+    pinctrl-names = "default";
 };
 
 &dma1 {
