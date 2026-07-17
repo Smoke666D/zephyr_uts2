@@ -12,6 +12,32 @@
     chosen {
         zephyr,console = &cdc_acm_uart0;   /* ← Вот эта строка! */
     };
+
+     my_sequencer: my_sequencer {
+        compatible = "custom,seq-mux-adc";
+        
+        /* 
+         * Передаем ссылки на аппаратные блоки таймера и АЦП.
+         * Это избавляет наш Си-код драйвера от хардкода.
+         */
+        adc-dev = <&adc3>;
+        timer-dev = <&timers3>;
+
+        /* 
+         * Настройка каналов DMA:
+         * 1. DMA1 Stream 0: Переключение пинов мультиплексора (Слот 27, TIM3_UP)
+         * 2. DMA1 Stream 1: Опрос АЦП3 в циклическом режиме по кругу (Слот 115, ADC3)
+         */
+        dmas = <&dmamux1 0 SEQ_TIMER_DMAMUX_SLOT 0>,
+               <&dmamux1 1 115 0>;
+        dma-names = "seq_dma", "adc_dma";
+
+        /* Ссылка на аппаратный pinctrl управляющих пинов */
+        pinctrl-0 = <&mux_a0_default &mux_a1_default &mux_a2_default>;
+        pinctrl-names = "default";
+        
+        status = "okay";
+    };
 };
 
 &zephyr_udc0 {
@@ -67,40 +93,6 @@
     };
 };
 
-/* Узел контейнер. В данном случае используем leds
- */
-/ {
-    /* 
-     * Идеально чистый узел-контейнер. 
-     * compatible нужен только для валидации макросов pinctrl в Си.
-     */
-    seq_pins: seq_pins {
-        compatible = "seq-pins";
-        pinctrl-0 = <&mux_a0_default &mux_a1_default &mux_a2_default>;
-        pinctrl-names = "default";
-    };
-};
-
-
-/ {
-    zephyr,user {
-       /* DMA1 Stream 0: Переключает мультиплексор по TIM3_UP (Слот 27) */
-        dmas = <&dmamux1 0 SEQ_TIMER_DMAMUX_SLOT (STM32_DMA_MEMORY_TO_PERIPH | 
-                                                 STM32_DMA_MEM_INC | 
-                                                 STM32_DMA_MEM_32BITS | 
-                                                 STM32_DMA_PERIPH_32BITS | 
-                                                 STM32_DMA_PRIORITY_HIGH | 
-                                                 STM32_DMA_MODE_CYCLIC)>,
-               /* DMA1 Stream 1: ADC3 Circular Scan (Слот 115) */
-               <&dmamux1 1 115 (STM32_DMA_PERIPH_TO_MEMORY | 
-                              STM32_DMA_MEM_INC | 
-                              STM32_DMA_PERIPH_32BITS | 
-                              STM32_DMA_MEM_32BITS | 
-                              STM32_DMA_PRIORITY_VERY_HIGH | 
-                              STM32_DMA_MODE_CYCLIC)>;
-        dma-names = "seq_dma", "adc_dma";
-    };
-};
 
 /* Ссылка на таймер и его дочерний счетчик раскрывается автоматически */
 &SEQ_TIMER_NODELABEL {

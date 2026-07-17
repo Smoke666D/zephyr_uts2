@@ -1,0 +1,18 @@
+description: Custom STM32 Timer-triggered DMA-GPIO-ADC Sequencer Driver
+
+compatible: "custom,seq-mux-adc"
+
+# Используем максимально надежный вертикальный формат списков для импорта
+include:
+  - base.yaml
+  - pinctrl-device.yaml
+
+properties:
+  adc-dev:
+    type: phandle
+    required: true
+
+  timer-dev:
+    type: phandle
+    required: true
+

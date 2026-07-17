@@ -18,7 +18,7 @@ int main(void)
 {
 	//dio_thread_start();
 	usb_thread_start();
-    StartDmaGPIO();
+   // StartDmaGPIO();
 	ain_thread_start();
 	while (1) 
 	{	
