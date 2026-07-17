@@ -20,10 +20,7 @@
         label = "СDC Console";
     };
 	
-    cdc_acm_uart1: cdc_acm_uart1 {
-        compatible = "zephyr,cdc-acm-uart";
-        label = "СDC data";
-    };
+   
 
 };
 

@@ -19,6 +19,7 @@ int main(void)
 	//dio_thread_start();
 	usb_thread_start();
     StartDmaGPIO();
+	ain_thread_start();
 	while (1) 
 	{	
 		k_msleep(SLEEP_TIME_MS);

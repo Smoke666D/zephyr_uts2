@@ -370,7 +370,7 @@ static void func(void *arg1, void *arg2, void *arg3)
         }
         k_msleep(100);
 
-        smf_run_state(SMF_CTX(&s_obj));        
+      //  smf_run_state(SMF_CTX(&s_obj));        
       
     }
 }
@@ -394,11 +394,11 @@ int usb_thread_start(void)
 	k_msleep(100);
 
     // Создаем поток для работы с меню
-    k_thread_create(&thread_data, (k_thread_stack_t *)stack, STACK_SIZE,
-                    func, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
+   // k_thread_create(&thread_data, (k_thread_stack_t *)stack, STACK_SIZE,
+     //               func, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
    
     //Инициализируем конечный автомат
-   smf_set_initial(SMF_CTX(&s_obj), &menu_states[PARENT]);
+   //smf_set_initial(SMF_CTX(&s_obj), &menu_states[PARENT]);
    
   // smf_set_hooks(SMF_CTX(&s_obj), &hookss);
 

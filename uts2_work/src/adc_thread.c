@@ -16,6 +16,10 @@
 #include "board_define.h"
 #include <zephyr/drivers/pinctrl.h>
 
+#include <stm32_ll_tim.h>
+#include <stm32_ll_adc.h>
+#include <stm32_ll_bus.h>
+
 #define ADC_CHANNELS_COUNT 2 /* Опрашиваем 2 внутренних канала: Температура и VREFINT */
 
 // Макросы для получения адреса регистра BSSR
@@ -42,7 +46,7 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
     // Заглушка, прерывание завершения передачи DMA
 }
 
-static uint32_t dma_buffer[COMBINATIONS_COUNT] __attribute__((aligned(32)));
+static uint32_t gpio_dma_buffer[COMBINATIONS_COUNT] __attribute__((aligned(32)));
 /* 
  * Буфер результатов АЦП3.
  * Атрибут __nocache принудительно размещает массив в некэшируемой RAM.
@@ -70,7 +74,7 @@ static void fill_combinations_buffer(void)
                 bsrr_val |= (1 << (pins[bit] + 16));
             }
         }
-        dma_buffer[i] = bsrr_val;
+        gpio_dma_buffer[i] = bsrr_val;
     }
 }
 
@@ -92,7 +96,7 @@ int StartDmaGPIO(void)
      
     // Подготовка DMA буффера и запись его из D-Cache в SRAM
     fill_combinations_buffer();
-    sys_cache_data_flush_range(dma_buffer, sizeof(dma_buffer));
+    sys_cache_data_flush_range(gpio_dma_buffer, sizeof(gpio_dma_buffer));
 
     // 2. Инициализация DMA
     const struct device *dma_dev = DEVICE_DT_GET(DT_DMAS_CTLR(DT_PATH(zephyr_user)));
@@ -102,43 +106,43 @@ int StartDmaGPIO(void)
         return -ENODEV;
     }
 
-    uint32_t dma_channel = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), seq_dma, channel);
-    uint32_t dma_slot = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), seq_dma, slot);
+   uint32_t gpio_dma_channel = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), seq_dma, channel);
+uint32_t gpio_dma_slot = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), seq_dma, slot);
 
-    uint32_t adc_dma_channel = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), adc_dma, channel);
-    uint32_t adc_dma_slot = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), adc_dma, slot);
+uint32_t adc_dma_channel = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), adc_dma, channel);
+uint32_t adc_dma_slot = DT_DMAS_CELL_BY_NAME(DT_PATH(zephyr_user), adc_dma, slot);
 
-    printk("[DMA] Channel: %d, Slot: %d\n", dma_channel, dma_slot);
+   
 
-     struct dma_block_config dma_block_cfg = {0}; 
+     struct dma_block_config gpio_block_cfg = {0}; 
      
-        dma_block_cfg.source_address     = (uint32_t)dma_buffer;
-        dma_block_cfg.dest_address       = MUX_AIN_GPIO_BSRR_ADDR;
-        dma_block_cfg.block_size         = sizeof(dma_buffer);
-        dma_block_cfg.source_addr_adj    = DMA_ADDR_ADJ_INCREMENT;
-        dma_block_cfg.dest_addr_adj      = DMA_ADDR_ADJ_NO_CHANGE;
-        dma_block_cfg.source_reload_en = 1;
-        dma_block_cfg.dest_reload_en = 1;
+        gpio_block_cfg.source_address     = (uint32_t)gpio_dma_buffer;
+        gpio_block_cfg.dest_address       = MUX_AIN_GPIO_BSRR_ADDR;
+        gpio_block_cfg.block_size         = sizeof(gpio_dma_buffer);
+        gpio_block_cfg.source_addr_adj    = DMA_ADDR_ADJ_INCREMENT;
+        gpio_block_cfg.dest_addr_adj      = DMA_ADDR_ADJ_NO_CHANGE;
+        gpio_block_cfg.source_reload_en = 1;
+        gpio_block_cfg.dest_reload_en = 1;
     
 
-     struct dma_config dma_cfg = {0}; 
+     struct dma_config gpio_dma_cfg = {0}; 
      
-        dma_cfg .dma_slot           = dma_slot,
-        dma_cfg .channel_direction  = MEMORY_TO_PERIPHERAL,
-        dma_cfg .source_data_size   = 4,
-        dma_cfg .dest_data_size     = 4,
-        dma_cfg.source_burst_length = 4; 
-        dma_cfg.dest_burst_length = 4;   
-        dma_cfg .block_count        = 1,
-        dma_cfg .head_block         = &dma_block_cfg,
-    dma_cfg.dma_callback = dma_callback;
-    dma_cfg.complete_callback_en = true;
+        gpio_dma_cfg .dma_slot           = gpio_dma_slot;
+        gpio_dma_cfg.channel_direction  = MEMORY_TO_PERIPHERAL;
+        gpio_dma_cfg.source_data_size   = 4;
+        gpio_dma_cfg.dest_data_size     = 4;
+        gpio_dma_cfg.source_burst_length = 4; 
+        gpio_dma_cfg.dest_burst_length = 4;   
+        gpio_dma_cfg.block_count        = 1;
+        gpio_dma_cfg.head_block         = &gpio_block_cfg;
+    gpio_dma_cfg.dma_callback = dma_callback;
+    gpio_dma_cfg.complete_callback_en = true;
    
     
 
-    ret = dma_config(dma_dev, dma_channel , &dma_cfg);
-      if (ret < 0) {
-        printk("[ERR] Failed to configure DMA! Error code: %d\n", ret);
+ ret = dma_config(dma_dev, gpio_dma_channel, &gpio_dma_cfg);
+    if (ret < 0) {
+        printk("[ERR] Failed to configure GPIO DMA! Code: %d\n", ret);
         return ret;
     }
        // ---- Конфигурация DMA 2: ADC3 Scan Buffer ----
@@ -169,50 +173,156 @@ int StartDmaGPIO(void)
     printk("[DMA] Both DMA channels configured for TIM3 and ADC3 successfully.\n");
 
 
-// 3. Настройка таймера через Counter API
- // 5. Настройка таймера через Counter API
-    const struct device *counter_dev = DEVICE_DT_GET(DT_CHILD(SEQ_TIMER_NODE, counter));
-    if (!device_is_ready(counter_dev)) {
-        printk("[ERR] Timer device not ready!\n");
-        return -ENODEV;
+   // 3. Тонкая настройка Таймера (TIM3)
+    TIM_TypeDef *tim3 = (TIM_TypeDef *)SEQ_TIMER_BASE;
+    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM3);
+
+    LL_TIM_SetPrescaler(tim3, 10000 - 1);
+    LL_TIM_SetAutoReload(tim3, 27500 - 1); // 1 секунда переполнения
+
+    // PWM Mode 1 и Settling time (20% задержка перед АЦП)
+    LL_TIM_OC_SetMode(tim3, LL_TIM_CHANNEL_CH1, LL_TIM_OCMODE_PWM1);
+    LL_TIM_OC_SetCompareCH1(tim3, 5500);
+    LL_TIM_CC_EnableChannel(tim3, LL_TIM_CHANNEL_CH1);
+
+    // Событие Compare Match 1 выводим на TRGO
+    LL_TIM_SetTriggerOutput(tim3, LL_TIM_TRGO_OC1REF);
+    LL_TIM_EnableDMAReq_UPDATE(tim3);
+    printk("[TIMER] TIM3 hardware sync configured successfully.\n");
+
+    // 4. Настройка АЦП3 (ADC3) через LL API
+    // Включаем тактирование шины AHB4 для ADC3 (АЦП3 находится в домене D3)
+    LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_ADC3);
+
+    // Выводим АЦП3 из режима глубокого энергосбережения
+    if (LL_ADC_IsDeepPowerDownEnabled(ADC3) != 0UL) {
+        LL_ADC_DisableDeepPowerDown(ADC3);
     }
 
-    uint32_t freq = counter_get_frequency(counter_dev);
-    printk("[TIMER] Timer frequency: %u Hz\n", freq);
+    // Включаем внутренний стабилизатор напряжения АЦП3 и ждем его стабилизации
+    if (LL_ADC_IsInternalRegulatorEnabled(ADC3) == 0UL) {
+        LL_ADC_EnableInternalRegulator(ADC3);
+        k_busy_wait(20); // Пауза ~20 мкс для стабилизации LDO
+    }
+
+    // Настраиваем тактовую частоту для блока ADC3
+    LL_ADC_SetCommonClock(ADC3_COMMON, LL_ADC_CLOCK_ASYNC_DIV2);
+
+    // Активируем внутренние каналы (Температурный датчик и ИОН VREFINT) в общем блоке АЦП3
+    LL_ADC_SetCommonPathInternalCh(ADC3_COMMON, LL_ADC_PATH_INTERNAL_TEMPSENSOR | LL_ADC_PATH_INTERNAL_VREFINT);
+
+    // Настраиваем АЦП3 на внешний триггер от TIM3_TRGO
+    LL_ADC_REG_SetTriggerSource(ADC3, LL_ADC_REG_TRIG_EXT_TIM3_TRGO);
+    LL_ADC_REG_SetTriggerEdge(ADC3, LL_ADC_REG_TRIG_EXT_RISING);
+
+    // Разрешаем циклическую передачу результатов АЦП3 через DMA
+    LL_ADC_REG_SetDataTransferMode(ADC3, LL_ADC_REG_DMA_TRANSFER_UNLIMITED);
+
+    // Настраиваем сканирующий режим (Scan Mode) для последовательного опроса 2 каналов
+    LL_ADC_REG_SetSequencerLength(ADC3, LL_ADC_REG_SEQ_SCAN_ENABLE_2RANKS);
     
-    struct counter_top_cfg top_cfg = {
-        .ticks = freq, // Шаг перебора - 1 секунда
-        .callback = NULL,
-        .user_data = NULL,
-        .flags = 0,
-    };
+    // Назначаем каналы в последовательность опроса: Rank 1 - Temp, Rank 2 - VREFINT
+    LL_ADC_REG_SetSequencerRanks(ADC3, LL_ADC_REG_RANK_1, LL_ADC_CHANNEL_TEMPSENSOR);
+    LL_ADC_REG_SetSequencerRanks(ADC3, LL_ADC_REG_RANK_2, LL_ADC_CHANNEL_VREFINT);
 
-    ret = counter_set_top_value(counter_dev, &top_cfg);
-    if (ret < 0) {
-        printk("[ERR] Failed to set timer top value! Code: %d\n", ret);
-        return ret;
+    // Предвыбор каналов (Preselection) для переключения аналоговых ключей STM32H7
+    LL_ADC_SetChannelPreSelection(ADC3, LL_ADC_CHANNEL_TEMPSENSOR);
+    LL_ADC_SetChannelPreSelection(ADC3, LL_ADC_CHANNEL_VREFINT);
+
+    // Задаем длинное время выборки (810.5 циклов), необходимое для точной работы внутренних датчиков
+    LL_ADC_SetChannelSamplingTime(ADC3, LL_ADC_CHANNEL_TEMPSENSOR, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(ADC3, LL_ADC_CHANNEL_VREFINT, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+
+    LL_ADC_SetChannelSingleDiff(ADC3, LL_ADC_CHANNEL_TEMPSENSOR, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(ADC3, LL_ADC_CHANNEL_VREFINT, LL_ADC_SINGLE_ENDED);
+
+    // Калибровка АЦП3
+    LL_ADC_StartCalibration(ADC3, LL_ADC_CALIB_OFFSET, LL_ADC_SINGLE_ENDED);
+    while (LL_ADC_IsCalibrationOnGoing(ADC3)) {
+        k_busy_wait(1);
     }
 
-   // 6. Разрешаем таймеру генерировать DMA-запросы (Update DMA Request Enable)
-    volatile uint32_t *tim_dier = (volatile uint32_t *)SEQ_TIMER_DIER;
-    *tim_dier |= TIM_DIER_UDE;
-    printk("[TIMER] DMA trigger activated (DIER: 0x%08X)\n", *tim_dier);
-
-    // 7. Запуск DMA
-    ret = dma_start(dma_dev, dma_channel);
-    if (ret < 0) {
-        printk("[ERR] Failed to start DMA! Code: %d\n", ret);
-        return ret;
+    // Включение АЦП3
+    LL_ADC_Enable(ADC3);
+    while (!LL_ADC_IsActiveFlag_ADRDY(ADC3)) {
+        k_busy_wait(1);
     }
-    printk("[DMA] Transfer started, waiting for trigger.\n");
+    printk("[ADC] ADC3 internal channels calibrated and ready.\n");
 
-    // 8. Запуск таймера
-    ret = counter_start(counter_dev);
-    if (ret < 0) {
-        printk("[ERR] Failed to start timer! Code: %d\n", ret);
-        return ret;
-    }
-    printk("[TIMER] Timer started.\n");
+    // 5. Запуск
+    ret = dma_start(dma_dev, gpio_dma_channel);
+    if (ret < 0) return ret;
 
+    ret = dma_start(dma_dev, adc_dma_channel);
+    if (ret < 0) return ret;
+
+    // Включаем регулярную конверсию АЦП в режиме готовности к внешнему триггеру
+    LL_ADC_REG_StartConversion(ADC3);
+    printk("[SYSTEM] DMA and ADC3 waiting for TIM3 triggers...\n");
+
+    // Запускаем таймер
+    LL_TIM_EnableCounter(tim3);
+    printk("[SYSTEM] TIM3-ADC3 test loop started successfully!\n");
+
+    return 0;
+}
+
+K_THREAD_STACK_DEFINE(stack3, AIN_TASK_STACK_SIZE);
+
+static struct k_thread thread_data;
+
+static void func(void *arg1, void *arg2, void *arg3)
+{
+    
+    printk("Starting ADC3 Real-Time Monitor (No-Cache Mode)...\n");
+    k_msleep(2000);
+    
+    while (1) 
+    {
+        		
+      
+        /* 
+         * БОЛЬШЕ НЕ НУЖНО вызывать sys_cache_data_invd_range!
+         * CPU гарантированно читает данные напрямую из RAM, куда их записал DMA2.
+         */
+
+        printk("\n--- New Multiplexer Cycle Measurements ---\n");
+        for (int step = 0; step < 8; step++) {
+            uint32_t raw_temp = adc_raw_buffer[step * 2 + 0];
+            uint32_t raw_vref = adc_raw_buffer[step * 2 + 1];
+            if (raw_vref == 0 || raw_temp == 0) {
+                printk("Step %d | Data not ready yet (0x0)\n", step);
+                continue;
+            }
+           // Теперь деление на ноль физически невозможно и вызов безопасен
+            uint32_t vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
+            int32_t temp_c = __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
+
+            printk("Step %d | VDDA: %u mV | Core Temp: %d C\n", step, vdda_mv, temp_c);
+        }
+
+        k_msleep(3000);
+
+        /* Мигание обрабатывается всегда */
+       // handle_blinking();
+
+
+      
+    
+}
+}
+
+int ain_thread_start(void)
+{
+   
+
+    
+    // Создаем поток для работы с меню
+    k_thread_create(&thread_data, stack3, AIN_TASK_STACK_SIZE,
+                    func, NULL, NULL, NULL, AIN_TASK_PRIORITY, 0, K_NO_WAIT);
+
+
+ 
+	   
     return 0;
 }

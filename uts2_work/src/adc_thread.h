@@ -2,7 +2,8 @@
 #define ADC_THREAD_H
 
 
-
+#define AIN_TASK_STACK_SIZE 2024
+#define AIN_TASK_PRIORITY 10
 
 
 
@@ -15,6 +16,6 @@
 int adc_scanner_start(void);
 
 int StartDmaGPIO(void);
-
+int ain_thread_start(void);
 
 #endif
