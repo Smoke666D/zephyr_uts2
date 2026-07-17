@@ -16,3 +16,15 @@ properties:
     type: phandle
     required: true
 
+  mux-gpios:
+    type: phandle-array
+    required: true
+    description: GPIO specifiers for the 3 multiplexer address lines.
+     
+  adc-duration-us:
+    type: int
+    required: true
+
+  switch-duration-us:
+    type: int
+    required: true

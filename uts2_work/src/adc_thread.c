@@ -13,7 +13,6 @@
 #include <zephyr/cache.h>
 #include <zephyr/drivers/dma.h>
 #include <zephyr/drivers/counter.h>
-#include "board_define.h"
 #include <zephyr/drivers/pinctrl.h>
 
 #include <stm32_ll_tim.h>

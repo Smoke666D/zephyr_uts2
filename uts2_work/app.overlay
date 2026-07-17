@@ -28,14 +28,18 @@
          * 1. DMA1 Stream 0: Переключение пинов мультиплексора (Слот 27, TIM3_UP)
          * 2. DMA1 Stream 1: Опрос АЦП3 в циклическом режиме по кругу (Слот 115, ADC3)
          */
-        dmas = <&dmamux1 0 SEQ_TIMER_DMAMUX_SLOT 0>,
+        dmas = <&dmamux1 0 23 0>,
                <&dmamux1 1 115 0>;
         dma-names = "seq_dma", "adc_dma";
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
-        pinctrl-0 = <&mux_a0_default &mux_a1_default &mux_a2_default>;
-        pinctrl-names = "default";
-        
+        mux-gpios = <&gpiob 0 GPIO_ACTIVE_HIGH>,
+                    <&gpiob 13 GPIO_ACTIVE_HIGH>,
+                    <&gpiob 14 GPIO_ACTIVE_HIGH>;
+
+        adc-duration-us = <1000000>;     /* T1: время АЦП */
+        switch-duration-us = <1000000>;  /* T2: время переключения */
+
         status = "okay";
     };
 };
@@ -52,30 +56,6 @@
 
 &pinctrl {
     /* Создаем отдельный узел для каждого пина */
-    mux_a0_default: mux_a0_default {
-        pinmux = <STM32_PINMUX(MUX_AIN_GPIO_PORT_CHAR, MUX_AO_PIN, GPIO)>;
-        drive-push-pull;
-        slew-rate = "very-high-speed";
-        output-low;
-    };
-
-    mux_a1_default: mux_a1_default {
-        pinmux = <STM32_PINMUX(MUX_AIN_GPIO_PORT_CHAR, MUX_A1_PIN, GPIO)>;
-        drive-push-pull;
-        slew-rate = "very-high-speed";
-        output-low;
-    };
-
-    mux_a2_default: mux_a2_default {
-        pinmux = <STM32_PINMUX(MUX_AIN_GPIO_PORT_CHAR, MUX_A2_PIN, GPIO)>;
-        drive-push-pull;
-        slew-rate = "very-high-speed";
-        output-low;
-    };
-    /* 
-     * Аналоговые пины Vsense (АЦП).
-     * Режим ANALOG отключает цифровые буферы на ножках.
-     */
     mux1_adc_vsense: mux1_adc_vsense {
         pinmux = <STM32_PINMUX(MUX1_ADC_VSENSE_PORT, MUX1_ADC_VSENSE_PIN, ANALOG)>;
     };
@@ -103,8 +83,7 @@
     };
 };
 
-
-&MUX_AIN_GPIO_PORT_NODELABEL {
+&gpiob {
     status = "okay";
 };
 
