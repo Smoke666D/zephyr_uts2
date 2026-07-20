@@ -42,8 +42,6 @@ static void func(void *arg1, void *arg2, void *arg3)
     /* Извлекаем интерфейс высокоуровневого API нашего драйвера */
     struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)seq_dev->api;
     
-    /* Запрашиваем у драйвера некэшируемый буфер данных АЦП */
-    uint32_t *adc_raw_buffer = api->get_raw_value ? NULL : NULL; // Для информации (внутри API есть функции прямого доступа)
 
     
     while (1) 

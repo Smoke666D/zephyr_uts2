@@ -58,7 +58,18 @@ struct seq_mux_adc_api {
     int32_t (*get_core_temp)(const struct device *dev, uint8_t step);
 
     /* Получить данные АЦП для определенного шага и канала */
-     int (*get_channel_value)(const struct device *dev, uint8_t channel_idx, uint32_t *val);
+    int (*get_channel_value)(const struct device *dev, uint8_t channel_idx, uint32_t *val);
+
+    int (*get_channel_voltage)(const struct device *dev, uint8_t channel_idx, uint32_t *voltage_mv);
+};
+
+struct seq_mux_adc_config 
+{
+    const struct device *dma_dev;
+    uint32_t gpio_dma_channel;
+    uint32_t gpio_dma_slot;
+    uint32_t adc_dma_channel;
+    uint32_t adc_dma_slot;    
 };
 
 
@@ -84,10 +95,5 @@ struct seq_mux_adc_api {
     ))))))
 
 
-/* 4. ДИНАМИЧЕСКИЙ СТАРТ ТАКТИРОВАНИЯ ДЛЯ АЦП */
-#define SEQ_ADC_CLOCK_ENABLE() \
-    COND_CODE_1(DT_SAME_NODE(SEQ_ADC_NODE, DT_NODELABEL(adc3)), \
-        (LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_ADC3);), \
-        (LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_ADC12);))
 
 #endif /* ZEPHYR_DRIVERS_SEQ_MUX_ADC_H_ */
