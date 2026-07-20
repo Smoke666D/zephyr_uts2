@@ -8,7 +8,7 @@
 #include <stm32_ll_adc.h>
 #include <stm32_ll_bus.h>
 #include <stm32_ll_gpio.h>
-
+#include <stm32_ll_dma.h> 
 #include "seq_mux_adc.h" 
 #include <zephyr/dt-bindings/dma/stm32_dma.h>
 
@@ -22,16 +22,41 @@ struct seq_mux_adc_config {
 };
 
 uint32_t gpio_raw_buffer[COMBINATIONS_COUNT] __attribute__((section("SRAM4")));
-uint32_t adc_raw_buffer[COMBINATIONS_COUNT * ADC_CHANNELS_COUNT]  __nocache;
+static uint32_t adc_buffer_a[TOTAL_CHANNELS_COUNT] __nocache;
+static uint32_t adc_buffer_b[TOTAL_CHANNELS_COUNT] __nocache;
+//uint32_t adc_raw_buffer[COMBINATIONS_COUNT * ADC_CHANNELS_COUNT]  __nocache;
+uint32_t adc_shadow_buffer[TOTAL_CHANNELS_COUNT];
 
 struct seq_mux_adc_data 
 {
     struct k_mutex lock;
     uint32_t *gpio_buffer;
-    uint32_t *adc_buffer;
-
-    
+    uint32_t adc_shadow_buffer[TOTAL_CHANNELS_COUNT];  
 };
+
+
+/* Обработчик завершения DMA-передачи АЦП (Выполняется в контексте прерывания ISR) */
+static void dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status)
+{
+    const struct device *seq_dev = user_data;
+    if (seq_dev == NULL) return;
+
+    struct seq_mux_adc_data *data = seq_dev->data;
+
+    if (status >= 0) {
+        /* 
+         * Считываем аппаратный бит CT (Current Target) из регистра DMA1 Stream 1.
+         * - Если CT == 1: DMA сейчас пишет в Buffer B -> значит, Buffer A полностью готов!
+         * - Если CT == 0: DMA сейчас пишет в Buffer A -> значит, Buffer B полностью готов!
+         */
+        if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_1) == 1) {
+            memcpy(data->adc_shadow_buffer, adc_buffer_a, sizeof(data->adc_shadow_buffer));
+        } else {
+            memcpy(data->adc_shadow_buffer, adc_buffer_b, sizeof(data->adc_shadow_buffer));
+        }
+    }
+}
+
 
 static int seq_mux_adc_get_channel_value_impl(const struct device *dev, uint8_t channel_idx, uint32_t *val)
 {
@@ -48,7 +73,7 @@ static int seq_mux_adc_get_channel_value_impl(const struct device *dev, uint8_t 
     }
 
     // Читаем значение из стабильного теневого буфера
-    *val = data->adc_buffer[channel_idx];
+    *val = data->adc_shadow_buffer[channel_idx];
 
     k_mutex_unlock(&data->lock);
     return 0;
@@ -57,34 +82,48 @@ static int seq_mux_adc_get_channel_value_impl(const struct device *dev, uint8_t 
 /* Реализация API */
 static uint32_t seq_mux_adc_get_raw_value_impl(const struct device *dev, uint8_t step, uint8_t channel)
 {
-    struct seq_mux_adc_data *data = dev->data;
-    if (step >= COMBINATIONS_COUNT || channel >= ADC_CHANNELS_COUNT) {
-        return 0;
-    }
     uint32_t raw_data;
-    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + channel,&raw_data); 
+    if (false 
+        || step >= COMBINATIONS_COUNT 
+        || channel >= ADC_CHANNELS_COUNT
+        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + channel,&raw_data) < 0
+    )
+    {
+        return 0;
+    }        
     return raw_data;
 }
 
 static uint32_t seq_mux_adc_get_vdda_mv_impl(const struct device *dev, uint8_t step)
-{
-    
-    if (step >= COMBINATIONS_COUNT) return 0;
+{    
     uint32_t raw_vref;
-    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref); 
-    if (raw_vref == 0) return 0; 
+    if (false 
+        || step >= COMBINATIONS_COUNT
+        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref) < 0 
+        || raw_vref == 0
+    ) 
+    {
+        return 0; 
+    }
     return __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
 }
 
 static int32_t seq_mux_adc_get_core_temp_impl(const struct device *dev, uint8_t step)
 {
-    if (step >= COMBINATIONS_COUNT) return 0;
     uint32_t raw_temp; 
     uint32_t raw_vref;
-    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref); 
-    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 0,&raw_temp); 
-    if (raw_vref == 0 || raw_temp == 0) return 0; 
-    uint32_t vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
+    uint32_t vdda_mv;
+    if (false 
+        || step >= COMBINATIONS_COUNT
+        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref) < 0
+        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 0,&raw_temp) < 0
+        || raw_vref == 0 
+        || raw_temp == 0
+    ) 
+    {
+        return 0; 
+    }
+    vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
     return __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
 }
 
@@ -116,7 +155,7 @@ static void fill_gpio_buffer(uint32_t *buf)
     }
 }
 
-static inline int _dma_init(const struct seq_mux_adc_config *config, struct seq_mux_adc_data *data, ADC_TypeDef *adc_inst)
+static inline int _dma_init(const struct seq_mux_adc_config *config, struct seq_mux_adc_data *data, ADC_TypeDef *adc_inst,const struct device *dev)
 {
     int ret;
 
@@ -147,7 +186,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *config, struct seq_
 
     struct dma_block_config adc_block_cfg = {0};
     adc_block_cfg.source_address = (uint32_t)&(adc_inst->DR);
-    adc_block_cfg.dest_address = (uint32_t)data->adc_buffer;
+    adc_block_cfg.dest_address = (uint32_t)adc_buffer_a;
     adc_block_cfg.block_size = TOTAL_CHANNELS_COUNT * sizeof(uint32_t);
     adc_block_cfg.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
     adc_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
@@ -165,8 +204,15 @@ static inline int _dma_init(const struct seq_mux_adc_config *config, struct seq_
     adc_dma_cfg.block_count = 1;
     adc_dma_cfg.head_block = &adc_block_cfg;
 
+    adc_dma_cfg.dma_callback = dma_callback;
+    adc_dma_cfg.user_data = (void *)dev; 
+    adc_dma_cfg.complete_callback_en = true;
+
     ret = dma_config(config->dma_dev, config->adc_dma_channel, &adc_dma_cfg);
     if (ret < 0) return ret;
+
+    LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_1, (uint32_t)adc_buffer_b);
+    LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_1);
 
     return 0;
 }
@@ -223,7 +269,7 @@ static int seq_mux_adc_init(const struct device *dev)
     sys_cache_data_flush_range(data->gpio_buffer, sizeof(data->gpio_buffer));
 
     // Конфигурация DMA
-    ret = _dma_init(config, data, adc_inst);
+    ret = _dma_init(config, data, adc_inst,dev);
     if (ret < 0) return ret;
 
     const struct device *counter_dev = DEVICE_DT_GET(DT_CHILD(SEQ_TIM_NODE, counter));
@@ -328,7 +374,6 @@ static const struct seq_mux_adc_config seq_config = {
 
 static struct seq_mux_adc_data seq_data = {
     .gpio_buffer = gpio_raw_buffer,
-    .adc_buffer = adc_raw_buffer,
 };
 
 DEVICE_DT_DEFINE(DT_NODELABEL(my_sequencer),
