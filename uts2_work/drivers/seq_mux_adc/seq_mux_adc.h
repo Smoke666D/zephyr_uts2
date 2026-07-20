@@ -27,6 +27,8 @@
 #define COMBINATIONS_COUNT 8
 #define ADC_CHANNELS_COUNT 2
 
+#define TOTAL_CHANNELS_COUNT (COMBINATIONS_COUNT * ADC_CHANNELS_COUNT)
+
 /* Извлекаем временные параметры из DTS */
 #define SEQ_ADC_DURATION_US    DT_PROP(SEQ_NODE, adc_duration_us)
 #define SEQ_SWITCH_DURATION_US DT_PROP(SEQ_NODE, switch_duration_us)
@@ -55,6 +57,13 @@ struct seq_mux_adc_api {
     
     /* Получить вычисленную температуру ядра кристалла в градусах Цельсия */
     int32_t (*get_core_temp)(const struct device *dev, uint8_t step);
+
+    /* 
+     * Потокобезопасная функция получения значения любого из каналов.
+     * Принимает индекс канала (0..15) и записывает результат в val.
+     * Возвращает 0 при успехе, или отрицательный код ошибки.
+     */
+    int (*get_channel_value)(const struct device *dev, uint8_t channel_idx, uint32_t *val);
 };
 
 
