@@ -21,10 +21,38 @@ struct seq_mux_adc_config {
     /* УДАЛЕНО: pcfg больше не требуется */
 };
 
-struct seq_mux_adc_data {
-    uint32_t gpio_buffer[COMBINATIONS_COUNT];
-    uint32_t adc_buffer[COMBINATIONS_COUNT * ADC_CHANNELS_COUNT];
+uint32_t gpio_raw_buffer[COMBINATIONS_COUNT] __attribute__((section("SRAM4")));
+uint32_t adc_raw_buffer[COMBINATIONS_COUNT * ADC_CHANNELS_COUNT]  __nocache;
+
+struct seq_mux_adc_data 
+{
+    struct k_mutex lock;
+    uint32_t *gpio_buffer;
+    uint32_t *adc_buffer;
+
+    
 };
+
+static int seq_mux_adc_get_channel_value_impl(const struct device *dev, uint8_t channel_idx, uint32_t *val)
+{
+    struct seq_mux_adc_data *data = dev->data;
+    
+    if (channel_idx >= TOTAL_CHANNELS_COUNT || val == NULL) {
+        return -EINVAL;
+    }
+
+    /* Захватываем мьютекс для CPU-to-CPU потокобезопасности */
+    if (k_mutex_lock(&data->lock, K_MSEC(100)) < 0)
+    {
+        return -EAGAIN; 
+    }
+
+    // Читаем значение из стабильного теневого буфера
+    *val = data->adc_buffer[channel_idx];
+
+    k_mutex_unlock(&data->lock);
+    return 0;
+}
 
 /* Реализация API */
 static uint32_t seq_mux_adc_get_raw_value_impl(const struct device *dev, uint8_t step, uint8_t channel)
@@ -33,33 +61,41 @@ static uint32_t seq_mux_adc_get_raw_value_impl(const struct device *dev, uint8_t
     if (step >= COMBINATIONS_COUNT || channel >= ADC_CHANNELS_COUNT) {
         return 0;
     }
-    return data->adc_buffer[step * ADC_CHANNELS_COUNT + channel];
+    uint32_t raw_data;
+    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + channel,&raw_data); 
+    return raw_data;
 }
 
 static uint32_t seq_mux_adc_get_vdda_mv_impl(const struct device *dev, uint8_t step)
 {
-    struct seq_mux_adc_data *data = dev->data;
+    
     if (step >= COMBINATIONS_COUNT) return 0;
-    uint32_t raw_vref = data->adc_buffer[step * ADC_CHANNELS_COUNT + 1];
+    uint32_t raw_vref;
+    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref); 
     if (raw_vref == 0) return 0; 
     return __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
 }
 
 static int32_t seq_mux_adc_get_core_temp_impl(const struct device *dev, uint8_t step)
 {
-    struct seq_mux_adc_data *data = dev->data;
     if (step >= COMBINATIONS_COUNT) return 0;
-    uint32_t raw_temp = data->adc_buffer[step * ADC_CHANNELS_COUNT + 0];
-    uint32_t raw_vref = data->adc_buffer[step * ADC_CHANNELS_COUNT + 1];
+    uint32_t raw_temp; 
+    uint32_t raw_vref;
+    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref); 
+    seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 0,&raw_temp); 
     if (raw_vref == 0 || raw_temp == 0) return 0; 
     uint32_t vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
     return __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
 }
 
+
+
+
 static const struct seq_mux_adc_api driver_api = {
     .get_raw_value = seq_mux_adc_get_raw_value_impl,
     .get_vdda_mv = seq_mux_adc_get_vdda_mv_impl,
     .get_core_temp = seq_mux_adc_get_core_temp_impl,
+    .get_channel_value = seq_mux_adc_get_channel_value_impl,
 };
 
 static void fill_gpio_buffer(uint32_t *buf)
@@ -89,7 +125,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *config, struct seq_
     struct dma_block_config gpio_block_cfg = {0}; 
     gpio_block_cfg.source_address = (uint32_t)data->gpio_buffer;
     gpio_block_cfg.dest_address = SEQ_GPIO_BSRR_ADDR;
-    gpio_block_cfg.block_size = sizeof(data->gpio_buffer);
+    gpio_block_cfg.block_size = COMBINATIONS_COUNT * sizeof(uint32_t);
     gpio_block_cfg.source_addr_adj = DMA_ADDR_ADJ_INCREMENT;
     gpio_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
     gpio_block_cfg.source_reload_en = 1; 
@@ -112,7 +148,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *config, struct seq_
     struct dma_block_config adc_block_cfg = {0};
     adc_block_cfg.source_address = (uint32_t)&(adc_inst->DR);
     adc_block_cfg.dest_address = (uint32_t)data->adc_buffer;
-    adc_block_cfg.block_size = sizeof(data->adc_buffer);
+    adc_block_cfg.block_size = TOTAL_CHANNELS_COUNT * sizeof(uint32_t);
     adc_block_cfg.source_addr_adj = DMA_ADDR_ADJ_NO_CHANGE;
     adc_block_cfg.dest_addr_adj = DMA_ADDR_ADJ_INCREMENT;
     adc_block_cfg.source_reload_en = 1;
@@ -179,18 +215,8 @@ static int seq_mux_adc_init(const struct device *dev)
     ADC_TypeDef *adc_inst = (ADC_TypeDef *)SEQ_ADC_BASE;
     TIM_TypeDef *tim_inst = (TIM_TypeDef *)SEQ_TIM_BASE;
 
-    // Включаем тактирование шины GPIO (AHB4 для GPIOB на STM32H7)
-    LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOB);
-    
-    // Включаем тактирование шины Таймера 3 (APB1)
-    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM3);
-    
-  
-    
-    
-  
+    k_mutex_init(&data->lock);
 
-    /* ИСПРАВЛЕНИЕ: Обязательно вызываем инициализацию пинов мультиплексора */
     _gpio_init();
 
     fill_gpio_buffer(data->gpio_buffer);
@@ -300,7 +326,10 @@ static const struct seq_mux_adc_config seq_config = {
     /* УДАЛЕНО: Инициализация pcfg полностью удалена */
 };
 
-static struct seq_mux_adc_data seq_data __nocache __attribute__((aligned(32)));
+static struct seq_mux_adc_data seq_data = {
+    .gpio_buffer = gpio_raw_buffer,
+    .adc_buffer = adc_raw_buffer,
+};
 
 DEVICE_DT_DEFINE(DT_NODELABEL(my_sequencer),
                  seq_mux_adc_init,
