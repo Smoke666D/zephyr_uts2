@@ -101,7 +101,3 @@
 &dmamux1 {
     status = "okay";
 };
-
-&sram4 {
-    status = "okay";
-};
