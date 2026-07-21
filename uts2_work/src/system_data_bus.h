@@ -17,5 +17,20 @@ struct adc_data_msg {
  */
 ZBUS_CHAN_DECLARE(adc_data_chan);
 
+/**********************Каналы контроля тока, датчики IDC**************************/
+
+#define NUM_SENSORS 8
+
+
+struct sensor_reading 
+{
+    double voltage;
+    double current;
+};
+
+struct ina_batch_msg 
+{
+    struct sensor_reading sensors[NUM_SENSORS];
+};
 
 #endif /* ADC_ZBUS_H_ */
