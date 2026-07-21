@@ -15,6 +15,8 @@ target_sources(app PRIVATE
         src/dio_thread.c
         src/adc_thread.c
         src/adc_monitor.c
+        src/ina228_stream_thread.c
+
 )
 
 add_subdirectory_ifdef(CONFIG_CUSTOM_SEQ_MUX_ADC drivers/seq_mux_adc)

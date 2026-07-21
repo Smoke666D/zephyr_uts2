@@ -26,10 +26,10 @@ LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 /* Получаем указатель на наш прибор из дерева устройств */
 static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
 
-static uint8_t __attribute__((__section__("DTCM"))) stack3[AIN_TASK_STACK_SIZE];
 
+static uint8_t __attribute__((__section__("DTCM"))) adc_thread_stack[AIN_TASK_STACK_SIZE];
+static struct __attribute__((__section__("DTCM"))) k_thread thread_data;
 
-static struct k_thread thread_data;
 
 static void func(void *arg1, void *arg2, void *arg3)
 {
@@ -74,15 +74,10 @@ static void func(void *arg1, void *arg2, void *arg3)
 
 int ain_thread_start(void)
 {
-   
-
-    
     // Создаем поток для работы с меню
-    k_thread_create(&thread_data, (k_thread_stack_t *)stack3, AIN_TASK_STACK_SIZE,
+
+    k_thread_create(&thread_data, (k_thread_stack_t *)adc_thread_stack, AIN_TASK_STACK_SIZE,
+
                     func, NULL, NULL, NULL, AIN_TASK_PRIORITY, 0, K_NO_WAIT);
-
-
- 
-	   
     return 0;
 }
