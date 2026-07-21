@@ -177,3 +177,71 @@
 &sram4  {
     status = "okay";
 };
+&i2c1 {
+    status = "okay";
+    clock-frequency = <400000>; /* 400 kHz (Fast Mode) */
+
+    CUR_SENS_BRD_LOW: ina228@40 {
+        compatible = "ti,ina228";
+        reg = <0x40>;
+        current-lsb-microamps = <10>;
+        rshunt-micro-ohms = <50000>;      /* Закрыто корректно: <50000> */
+        status = "okay";
+    };
+
+    CUR_SENS_BRD_HIGH: ina228@41 {
+        compatible = "ti,ina228";
+        reg = <0x41>;
+        current-lsb-microamps = <10>;
+        rshunt-micro-ohms = <50000>;
+        status = "okay";
+    };
+
+    CUR_SENS_VDUT2: ina228@42 {
+        compatible = "ti,ina228";
+        reg = <0x42>;
+        rshunt-micro-ohms = <500000>;
+        current-lsb-microamps = <1>;
+        status = "okay";
+    };
+
+    CUR_SENS_VDUT3: ina228@43 {
+        compatible = "ti,ina228";
+        reg = <0x43>;
+        rshunt-micro-ohms = <500000>;
+        current-lsb-microamps = <1>;
+        status = "okay";
+    };
+
+    CUR_SENS_VIN: ina228@44 {
+        compatible = "ti,ina228";
+        reg = <0x44>;
+        current-lsb-microamps = <10>;
+        rshunt-micro-ohms = <50000>;
+        status = "okay";
+    };
+
+    CUR_SENS_3_3_DCDC: ina228@45 {
+        compatible = "ti,ina228";
+        reg = <0x45>;
+        current-lsb-microamps = <10>;
+        rshunt-micro-ohms = <50000>;
+        status = "okay";
+    };
+
+    CUR_SENS_VDOUT_PWR: ina228@46 {
+        compatible = "ti,ina228";
+        reg = <0x46>;                     /* Исправлено совпадение адресов (было 0x45) */
+        current-lsb-microamps = <10>;
+        rshunt-micro-ohms = <50000>;
+        status = "okay";
+    };
+
+    CUR_SENS_5VD: ina228@47 {
+        compatible = "ti,ina228";
+        reg = <0x47>;
+        current-lsb-microamps = <10>;
+        rshunt-micro-ohms = <50000>;
+        status = "okay";
+    };
+};
