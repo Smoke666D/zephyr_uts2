@@ -1,3 +1,6 @@
+
+
+
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/dma.h>
@@ -12,13 +15,14 @@
 #include "seq_mux_adc.h" 
 #include <zephyr/dt-bindings/dma/stm32_dma.h>
 
-static const uint32_t r1_resistors[ADC_CHANNELS_COUNT] = DT_PROP(SEQ_NODE, resistors_r1);
-static const uint32_t r2_resistors[ADC_CHANNELS_COUNT] = DT_PROP(SEQ_NODE, resistors_r2);
+static const uint32_t r1_resistors[] = DT_PROP(SEQ_NODE, resistors_r1);
+static const uint32_t r2_resistors[] = DT_PROP(SEQ_NODE, resistors_r2);
 static uint32_t gpio_raw_buffer[COMBINATIONS_COUNT] __attribute__((section("SRAM4")));
 static uint32_t adc_buffer_a[TOTAL_CHANNELS_COUNT] __nocache;
 static uint32_t adc_buffer_b[TOTAL_CHANNELS_COUNT] __nocache;
 static uint32_t adc_shadow_buffer[TOTAL_CHANNELS_COUNT];
 static struct k_mutex lock;
+static struct k_sem data_ready_sem;
 static float coefficients[TOTAL_CHANNELS_COUNT];
 
 
@@ -41,6 +45,7 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
         {
             memcpy(adc_shadow_buffer, adc_buffer_b, sizeof(adc_shadow_buffer));
         }
+        k_sem_give(&data_ready_sem);
     }
 }
 
@@ -157,13 +162,7 @@ static int seq_mux_adc_get_channel_voltage_impl(const struct device *dev, uint8_
     return 0;
 }
 
-static const struct seq_mux_adc_api driver_api = {
-    .get_raw_value = seq_mux_adc_get_raw_value_impl,
-    .get_vdda_mv = seq_mux_adc_get_vdda_mv_impl,
-    .get_core_temp = seq_mux_adc_get_core_temp_impl,
-    .get_channel_value = seq_mux_adc_get_channel_value_impl,
-    .get_channel_voltage = seq_mux_adc_get_channel_voltage_impl,
-};
+
 
 static void fill_gpio_buffer(uint32_t *buf)
 {
@@ -280,7 +279,17 @@ static inline void _gpio_init(void)
     LL_GPIO_ResetOutputPin(port2, 1 << MUX_PIN_2_NUM);
 }
 
-
+/* Реализация функции ожидания готовности данных */
+static int seq_mux_adc_wait_for_data_impl(const struct device *dev, k_timeout_t timeout)
+{
+    ARG_UNUSED(dev);
+    
+    /* 
+     * Переводим вызывающий поток в спящий режим на семафоре.
+     * Когда сработает прерывание dma_callback, поток мгновенно проснется!
+     */
+    return k_sem_take(&data_ready_sem, timeout);
+}
 
 
 static int seq_mux_adc_init(const struct device *dev)
@@ -292,6 +301,7 @@ static int seq_mux_adc_init(const struct device *dev)
     TIM_TypeDef *tim_inst = (TIM_TypeDef *)SEQ_TIM_BASE;
 
     k_mutex_init(&lock);
+    k_sem_init(&data_ready_sem, 0, 1);
 
     for (int i = 0; i < ADC_CHANNELS_COUNT; i++)
     {
@@ -408,6 +418,14 @@ static const struct seq_mux_adc_config seq_config = {
     /* УДАЛЕНО: Инициализация pcfg полностью удалена */
 };
 
+static const struct seq_mux_adc_api driver_api = {
+    .get_raw_value = seq_mux_adc_get_raw_value_impl,
+    .get_vdda_mv = seq_mux_adc_get_vdda_mv_impl,
+    .get_core_temp = seq_mux_adc_get_core_temp_impl,
+    .get_channel_value = seq_mux_adc_get_channel_value_impl,
+    .get_channel_voltage = seq_mux_adc_get_channel_voltage_impl,
+    .wait_for_data = seq_mux_adc_wait_for_data_impl,
+};
 
 DEVICE_DT_DEFINE(DT_NODELABEL(my_sequencer),
                  seq_mux_adc_init,
