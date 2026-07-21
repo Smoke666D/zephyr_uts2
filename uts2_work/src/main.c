@@ -10,6 +10,7 @@
 #include "usb_thread.h"
 #include "dio_thread.h"
 #include "adc_thread.h"
+#include "adc_monitor.h"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
@@ -20,6 +21,7 @@ int main(void)
 	usb_thread_start();
    // StartDmaGPIO();
 	ain_thread_start();
+	adc_monitor_thread_start();
 	while (1) 
 	{	
 		k_msleep(SLEEP_TIME_MS);

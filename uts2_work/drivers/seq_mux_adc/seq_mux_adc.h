@@ -61,6 +61,8 @@ struct seq_mux_adc_api {
     int (*get_channel_value)(const struct device *dev, uint8_t channel_idx, uint32_t *val);
 
     int (*get_channel_voltage)(const struct device *dev, uint8_t channel_idx, uint32_t *voltage_mv);
+
+    int (*wait_for_data)(const struct device *dev, k_timeout_t timeout);
 };
 
 struct seq_mux_adc_config 

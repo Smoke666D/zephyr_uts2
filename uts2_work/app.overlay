@@ -37,8 +37,8 @@
                     <&gpiob 13 GPIO_ACTIVE_HIGH>,
                     <&gpiob 14 GPIO_ACTIVE_HIGH>;
 
-        adc-duration-us = <1000000>;     /* T1: время АЦП */
-        switch-duration-us = <1000000>;  /* T2: время переключения */
+        adc-duration-us = <100000>;     /* T1: время АЦП */
+        switch-duration-us = <100000>;  /* T2: время переключения */
 
         /* Резисторные делители на входнвх каналах R1 (Верхнее плечо)*/
         resistors-r1 = <
