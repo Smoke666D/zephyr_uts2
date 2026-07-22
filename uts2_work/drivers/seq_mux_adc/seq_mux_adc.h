@@ -25,7 +25,7 @@
 #define SEQ_GPIO_BSRR_ADDR (MUX_PIN_0_PORT_BASE + 0x18)
 
 #define COMBINATIONS_COUNT 8
-#define ADC_CHANNELS_COUNT 2
+#define ADC_CHANNELS_COUNT 4
 #define TOTAL_CHANNELS_COUNT (COMBINATIONS_COUNT * ADC_CHANNELS_COUNT)
 
 /* Извлекаем временные параметры из DTS */
@@ -46,22 +46,11 @@
 
 
 
-/* Описание публичного API нашего драйвера секвенсора АЦП */
 struct seq_mux_adc_api {
-    /* Получить сырые данные АЦП для определенного шага и канала */
-    uint32_t (*get_raw_value)(const struct device *dev, uint8_t step, uint8_t channel);
-    
-    /* Получить вычисленное напряжение питания VDDA в милливольтах */
-    uint32_t (*get_vdda_mv)(const struct device *dev, uint8_t step);
-    
-    /* Получить вычисленную температуру ядра кристалла в градусах Цельсия */
-    int32_t (*get_core_temp)(const struct device *dev, uint8_t step);
-
-    /* Получить данные АЦП для определенного шага и канала */
+    /* 1. Получить сырые данные АЦП по сквозному номеру канала (0..31) */
     int (*get_channel_value)(const struct device *dev, uint8_t channel_idx, uint32_t *val);
-
-    int (*get_channel_voltage)(const struct device *dev, uint8_t channel_idx, uint32_t *voltage_mv);
-
+    
+    /* 2. Функция ожидания готовности данных */
     int (*wait_for_data)(const struct device *dev, k_timeout_t timeout);
 };
 

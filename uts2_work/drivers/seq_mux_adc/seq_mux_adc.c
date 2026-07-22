@@ -14,19 +14,14 @@
 #include <stm32_ll_dma.h> 
 #include "seq_mux_adc.h" 
 #include <zephyr/dt-bindings/dma/stm32_dma.h>
-
-static const uint32_t r1_resistors[] = DT_PROP(SEQ_NODE, resistors_r1);
-static const uint32_t r2_resistors[] = DT_PROP(SEQ_NODE, resistors_r2);
+;
 static uint32_t gpio_raw_buffer[COMBINATIONS_COUNT] __attribute__((section("SRAM4")));
 static uint32_t adc_buffer_a[TOTAL_CHANNELS_COUNT] __nocache;
 static uint32_t adc_buffer_b[TOTAL_CHANNELS_COUNT] __nocache;
 static uint32_t adc_shadow_buffer[TOTAL_CHANNELS_COUNT];
+
 static struct k_mutex lock;
 static struct k_sem data_ready_sem;
-static float coefficients[TOTAL_CHANNELS_COUNT];
-
-
-
 
 /* Обработчик завершения DMA-передачи АЦП (Выполняется в контексте прерывания ISR) */
 static void dma_callback(const struct device *dev, void *user_data, uint32_t channel, int status)
@@ -52,116 +47,34 @@ static void dma_callback(const struct device *dev, void *user_data, uint32_t cha
 
 static int seq_mux_adc_get_channel_value_impl(const struct device *dev, uint8_t channel_idx, uint32_t *val)
 {
-    ARG_UNUSED(dev);
-    
-    if (false 
-        || channel_idx >= TOTAL_CHANNELS_COUNT 
-        || val == NULL
-    ) 
-    {
+    int ret;
+
+    if (channel_idx >= TOTAL_CHANNELS_COUNT || val == NULL) {
         return -EINVAL;
     }
 
-    /* Захватываем мьютекс для CPU-to-CPU потокобезопасности */
-    if (k_mutex_lock(&lock, K_MSEC(100)) < 0)
-    {
-        return -EAGAIN; 
-    }
-
-    // Читаем значение из стабильного теневого буфера
-    *val = adc_shadow_buffer[channel_idx];
-
-    k_mutex_unlock(&lock);
-
-    return 0;
-}
-
-/* Реализация API */
-static uint32_t seq_mux_adc_get_raw_value_impl(const struct device *dev, uint8_t step, uint8_t channel)
-{
-    uint32_t raw_data;
-    if (false 
-        || step >= COMBINATIONS_COUNT 
-        || channel >= ADC_CHANNELS_COUNT
-        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + channel,&raw_data) < 0
-    )
-    {
-        return 0;
-    }        
-    return raw_data;
-}
-
-static uint32_t seq_mux_adc_get_vdda_mv_impl(const struct device *dev, uint8_t step)
-{    
-    uint32_t raw_vref;
-    if (false 
-        || step >= COMBINATIONS_COUNT
-        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref) < 0 
-        || raw_vref == 0
-    ) 
-    {
-        return 0; 
-    }
-    return __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
-}
-
-static int32_t seq_mux_adc_get_core_temp_impl(const struct device *dev, uint8_t step)
-{
-    uint32_t raw_temp; 
-    uint32_t raw_vref;
-    uint32_t vdda_mv;
-    if (false 
-        || step >= COMBINATIONS_COUNT
-        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 1,&raw_vref) < 0
-        || seq_mux_adc_get_channel_value_impl(dev,step * ADC_CHANNELS_COUNT + 0,&raw_temp) < 0
-        || raw_vref == 0 
-        || raw_temp == 0
-    ) 
-    {
-        return 0; 
-    }
-    vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
-    return __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
-}
-
-
-/* 
- * РЕАЛИЗАЦИЯ ПОТОКОБЕЗОПАСНОЙ ФУНКЦИИ ВЫЧИСЛЕНИЯ НАПРЯЖЕНИЯ.
- * Рассчитывает напряжение на входе делителя в милливольтах (mV).
- */
-static int seq_mux_adc_get_channel_voltage_impl(const struct device *dev, uint8_t channel_idx, uint32_t *voltage_mv)
-{
-    ARG_UNUSED(dev);
-    uint32_t raw_val = 0;
-    
-
-    if (false
-        || channel_idx >= TOTAL_CHANNELS_COUNT
-        || voltage_mv == NULL
-        || seq_mux_adc_get_channel_value_impl(dev, channel_idx, &raw_val) < 0
-    ) {
-        return -EINVAL;
-    }
-
-    // Находим индекс шага мультиплексора (0..7) и индекс аналогового входа (0..4)
-    uint8_t step = channel_idx / ADC_CHANNELS_COUNT;
-    uint8_t adc_chan = channel_idx % ADC_CHANNELS_COUNT;
-
-    // Вычисляем точное напряжение питания АЦП VDDA на текущем шаге
-    uint32_t vdda_mv = seq_mux_adc_get_vdda_mv_impl(dev, step);
-    if (vdda_mv == 0) {
+    ret = k_mutex_lock(&lock, K_MSEC(100));
+    if (ret < 0) {
         return -EAGAIN;
     }
 
-    // 1. Вычисляем напряжение на физической ножке АЦП (в милливольтах)
-    float v_pin_mv = (float)(raw_val * vdda_mv) / 4095.0f;
+    *val = adc_shadow_buffer[channel_idx];
 
-    // 2. Умножаем его на рассчитанный при загрузке коэффициент делителя
-    *voltage_mv = (uint32_t)(v_pin_mv * coefficients[adc_chan]);
-
+    k_mutex_unlock(&lock);
     return 0;
 }
 
+static int seq_mux_adc_wait_for_data_impl(const struct device *dev, k_timeout_t timeout)
+{
+    ARG_UNUSED(dev);
+    return k_sem_take(&data_ready_sem, timeout);
+}
+
+/* API теперь содержит строго две аппаратные функции */
+static const struct seq_mux_adc_api driver_api = {
+    .get_channel_value = seq_mux_adc_get_channel_value_impl,
+    .wait_for_data = seq_mux_adc_wait_for_data_impl,
+};
 
 
 static void fill_gpio_buffer(uint32_t *buf)
@@ -279,17 +192,6 @@ static inline void _gpio_init(void)
     LL_GPIO_ResetOutputPin(port2, 1 << MUX_PIN_2_NUM);
 }
 
-/* Реализация функции ожидания готовности данных */
-static int seq_mux_adc_wait_for_data_impl(const struct device *dev, k_timeout_t timeout)
-{
-    ARG_UNUSED(dev);
-    
-    /* 
-     * Переводим вызывающий поток в спящий режим на семафоре.
-     * Когда сработает прерывание dma_callback, поток мгновенно проснется!
-     */
-    return k_sem_take(&data_ready_sem, timeout);
-}
 
 
 static int seq_mux_adc_init(const struct device *dev)
@@ -302,12 +204,6 @@ static int seq_mux_adc_init(const struct device *dev)
 
     k_mutex_init(&lock);
     k_sem_init(&data_ready_sem, 0, 1);
-
-    for (int i = 0; i < ADC_CHANNELS_COUNT; i++)
-    {
-        // Формула: K = (R1 + R2) / R2
-        coefficients[i] = (float)(r1_resistors[i] + r2_resistors[i]) / (float)r2_resistors[i];
-    }
 
     _gpio_init();
 
@@ -377,6 +273,9 @@ static int seq_mux_adc_init(const struct device *dev)
     LL_ADC_REG_SetSequencerLength(adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_2RANKS);
     LL_ADC_REG_SetSequencerRanks(adc_inst, LL_ADC_REG_RANK_1, LL_ADC_CHANNEL_TEMPSENSOR);
     LL_ADC_REG_SetSequencerRanks(adc_inst, LL_ADC_REG_RANK_2, LL_ADC_CHANNEL_VREFINT);
+    LL_ADC_REG_SetSequencerRanks(adc_inst, LL_ADC_REG_RANK_3, LL_ADC_CHANNEL_TEMPSENSOR);
+    LL_ADC_REG_SetSequencerRanks(adc_inst, LL_ADC_REG_RANK_4, LL_ADC_CHANNEL_VREFINT);
+
     LL_ADC_SetChannelPreSelection(adc_inst, LL_ADC_CHANNEL_TEMPSENSOR);
     LL_ADC_SetChannelPreSelection(adc_inst, LL_ADC_CHANNEL_VREFINT);
     LL_ADC_SetChannelSamplingTime(adc_inst, LL_ADC_CHANNEL_TEMPSENSOR, LL_ADC_SAMPLINGTIME_810CYCLES_5);
@@ -418,14 +317,7 @@ static const struct seq_mux_adc_config seq_config = {
     /* УДАЛЕНО: Инициализация pcfg полностью удалена */
 };
 
-static const struct seq_mux_adc_api driver_api = {
-    .get_raw_value = seq_mux_adc_get_raw_value_impl,
-    .get_vdda_mv = seq_mux_adc_get_vdda_mv_impl,
-    .get_core_temp = seq_mux_adc_get_core_temp_impl,
-    .get_channel_value = seq_mux_adc_get_channel_value_impl,
-    .get_channel_voltage = seq_mux_adc_get_channel_voltage_impl,
-    .wait_for_data = seq_mux_adc_wait_for_data_impl,
-};
+
 
 DEVICE_DT_DEFINE(DT_NODELABEL(my_sequencer),
                  seq_mux_adc_init,

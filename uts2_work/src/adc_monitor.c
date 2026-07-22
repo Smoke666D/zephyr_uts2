@@ -15,38 +15,47 @@ ZBUS_SUBSCRIBER_DEFINE(adc_monitor_sub, 4);
 K_THREAD_STACK_DEFINE(monitor_stack, 2048);
 static struct k_thread monitor_thread_data;
 
-/* Функция нашего потока-подписчика */
 static void adc_monitor_thread_fn(void *p1, void *p2, void *p3)
 {
-    const struct zbus_channel *chan;
-    struct adc_data_msg msg;
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
 
-    LOG_INF("Starting Zbus ADC Monitor Thread...");
+    LOG_INF("Starting State-Reader ADC Monitor Thread...");
 
     while (1) {
-        /* Ждем сообщения из очереди подписчика */
-               k_msleep(3000);
+        /* Опрашиваем Zbus раз в 3 секунды */
+        k_msleep(3000);
 
-        /* 
-         * Потокобезопасно читаем из канала АЦП самую свежую копию данных.
-         * Защита от гонок данных гарантирована внутренним мьютексом канала Zbus.
-         */
-        int ret = zbus_chan_read(&adc_data_chan, &msg, K_MSEC(10));
-        if (ret == 0) {
-            /* Выводим данные в терминал */
-            LOG_INF("=== [Zbus State Monitor] Latest Data ===");
-            for (int step = 0; step < 8; step++) {
-                LOG_INF("Step %d | VDDA: %u mV | Temp: %d C | Chan0: %u mV | Chan1: %u mV",
-                        step, msg.vdda_mv, msg.core_temp,
-                        msg.channels_mv[step * 2 + 0],
-                        msg.channels_mv[step * 2 + 1]);
+        int ret = 0;
+        uint32_t val_ch0, val_ch1, val_ch2, val_ch3;
+
+        LOG_INF("=== [Zbus State Monitor] 32 Channels Test Pattern ===");
+        
+        for (int step = 0; step < 8; step++) {
+            /* 
+             * Запрашиваем 4 канала текущего шага из Zbus.
+             * На нечетных позициях (0 и 2) лежит VREF в мВ.
+             * На четных позициях (1 и 3) лежит Температура в градусах.
+             */
+            ret  = get_channel_voltage_from_zbus(step * 4 + 0, &val_ch0);
+            ret |= get_channel_voltage_from_zbus(step * 4 + 1, &val_ch1);
+            ret |= get_channel_voltage_from_zbus(step * 4 + 2, &val_ch2);
+            ret |= get_channel_voltage_from_zbus(step * 4 + 3, &val_ch3);
+
+            if (ret == 0) {
+                // Преобразуем беззнаковые значения температуры обратно в int32_t для красивого вывода
+                int32_t temp1 = (int32_t)val_ch1;
+                int32_t temp2 = (int32_t)val_ch3;
+
+                LOG_INF("Step %d | VREF: %u mV | Temp: %d C | VREF: %u mV | Temp: %d C",
+                        step, val_ch0, temp1, val_ch2, temp2);
+            } else {
+                LOG_WRN("Step %d | Data is not ready yet.", step);
             }
-        } else {
-            LOG_WRN("Failed to read Zbus state channel! Code: %d", ret);
         }
     }
 }
-
 /* Функция запуска потока монитора */
 int adc_monitor_thread_start(void)
 {
