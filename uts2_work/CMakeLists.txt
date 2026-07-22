@@ -20,5 +20,9 @@ target_sources(app PRIVATE
 
 )
 
+
+zephyr_iterable_section(NAME param_handler GROUP RODATA_REGION)
+
+
 add_subdirectory_ifdef(CONFIG_CUSTOM_SEQ_MUX_ADC drivers/seq_mux_adc)
 add_subdirectory_ifdef(CONFIG_CUSTOM_SEQ_MUX_ADC drivers/hc_595_chain)
