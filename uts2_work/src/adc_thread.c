@@ -144,7 +144,7 @@ static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequen
 
 
 static uint8_t __attribute__((__section__("DTCM"))) adc_thread_stack[AIN_TASK_STACK_SIZE];
-static struct __attribute__((__section__("DTCM"))) k_thread thread_data;
+static struct  k_thread thread_data; 
 
 
 /* Функция-помощник для считывания сырого опорного VREFINT для конкретного шага */
