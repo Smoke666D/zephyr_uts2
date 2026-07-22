@@ -50,11 +50,6 @@ typedef enum
 
 int ain_thread_start(void);
 
-/* 
- * Публичные Zbus-интерфейсы для других потоков.
- * Позволяют получить отфильтрованные физические величины.
- */
-int get_channel_voltage_from_zbus(uint8_t channel_idx, uint32_t *voltage_mv);
-int get_channel_temp_from_zbus(uint8_t channel_idx, int32_t *temp_c);
+
 
 #endif
