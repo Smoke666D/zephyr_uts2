@@ -245,3 +245,18 @@
         status = "okay";
     };
 };
+
+&spi1 {
+    status = "okay";
+    pinctrl-0 = <&spi1_sck_pa5 &spi1_mosi_pa7>;
+    pinctrl-names = "default";
+    cs-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;      // Пин защелки Latch (ST_CP)
+
+    hc595_chain: hc595-chain@0 {
+        compatible = "custom,hc595-chain";
+        reg = <0>;
+        spi-max-frequency = <10000000>;
+        chain-length = <5>;
+        oe-gpios = <&gpioa 3 GPIO_ACTIVE_LOW>;  // Пин разрешения выходов OE (активный 0)
+    };
+};

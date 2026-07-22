@@ -1,0 +1,6 @@
+config CUSTOM_HC595_CHAIN
+	bool "Custom 74HC595 Chain Driver"
+	default y
+	depends on SPI
+	help
+	  Enable support for the custom cascaded 74HC595 shift register chain.

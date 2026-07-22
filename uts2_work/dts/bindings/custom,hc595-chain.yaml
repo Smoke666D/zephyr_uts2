@@ -1,0 +1,16 @@
+description: Custom 74HC595 cascaded chain driver
+
+compatible: "custom,hc595-chain"
+
+include: spi-device.yaml
+
+properties:
+  chain-length:
+    type: int
+    required: true
+    description: Number of cascaded 74HC595 shift registers in the chain (e.g. 5)
+
+  oe-gpios:
+    type: phandle-array
+    required: false
+    description: GPIO specifier for the OE (Output Enable) pin (active low).
