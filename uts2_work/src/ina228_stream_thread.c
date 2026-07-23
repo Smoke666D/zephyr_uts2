@@ -5,7 +5,8 @@
 #include <zephyr/rtio/rtio.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
-#include "system_data_bus.h"
+#include "ina228_stram_thread.h"
+#include "global_params.h"
 
 LOG_MODULE_REGISTER(ina_rtio_poller, LOG_LEVEL_INF);
 

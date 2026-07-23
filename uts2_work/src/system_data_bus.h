@@ -3,53 +3,11 @@
 
 #include <zephyr/zbus/zbus.h>
 
-#include "adc_thread.h"
 
 
 
-/* Структура сообщения АЦП */
-struct adc_data_msg {
-    uint32_t vdda_mv;
-    int32_t raw_temp;
-    uint32_t channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
-};
-
-/* 
- * ОБЪЯВЛЕНИЕ ДЛЯ ДРУГИХ ФАЙЛОВ.
- * Эти макросы объявляют переменные канала и подписчика как "extern".
- * Благодаря этому компилятор разрешит ссылаться на них в любом .c-файле проекта.
- */
-ZBUS_CHAN_DECLARE(adc_data_chan);
 
 
-/**********************Каналы контроля тока, датчики IDC**************************/
-
-#define NUM_SENSORS 8
-
-
-/* Названия датчиков для понятного логирования */
-typedef enum
- {
-    BRD_LOW     = 0,
-    BRD_HIGH    = 1,
-    VDUT2       = 2,
-    VDUT3       = 3,
-    VIN         = 4,
-    DCDC_3_3    = 5,
-    VDOUT_PWR   = 6,
-    VD5         = 7,
-} CUR_SENS_CHANEL;
-
-struct sensor_reading 
-{
-    double voltage;
-    double current;
-};
-
-struct ina_batch_msg 
-{
-    struct sensor_reading sensors[NUM_SENSORS];
-};
 
 ZBUS_CHAN_DECLARE(ina_batch_chan);
 

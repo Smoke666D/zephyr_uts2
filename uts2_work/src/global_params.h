@@ -5,6 +5,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+
+
+
+
 /* Логические параметры всей системы */
 
 

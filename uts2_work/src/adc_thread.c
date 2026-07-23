@@ -1,7 +1,7 @@
 #include <zephyr/kernel.h>
 #include "adc_thread.h"
 #include <zephyr/logging/log.h>
-#include "system_data_bus.h"
+#include <zephyr/zbus/zbus.h>
 #include "global_params.h"
 
 /* Подключаем публичный заголовочный файл нашего драйвера */
