@@ -11,6 +11,7 @@
 #include "dio_thread.h"
 #include "adc_thread.h"
 #include "adc_monitor.h"
+#include "ina228_stream_thread.h"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
@@ -22,6 +23,7 @@ int main(void)
    // StartDmaGPIO();
 	ain_thread_start();
 	adc_monitor_thread_start();
+	start_ina228_poller_thread();
 	while (1) 
 	{	
 		k_msleep(SLEEP_TIME_MS);
