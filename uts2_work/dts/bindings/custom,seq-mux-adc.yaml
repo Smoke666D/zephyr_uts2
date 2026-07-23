@@ -29,10 +29,3 @@ properties:
     type: int
     required: true
 
-  resistors-r1:
-    type: array
-    required: true
-
-  resistors-r2:
-    type: array
-    required: true

@@ -1,6 +1,25 @@
-#ifndef DRIVERS_HC595_CHAIN_H_
-#define DRIVERS_HC595_CHAIN_H_
+/***************************************************************************************************
+ *   Project:       IGLA-X
+ *   Author:        Dymov Igor
+ ***************************************************************************************************
+ *   Distribution:  
+ *
+ ***************************************************************************************************
+ *   MCU Family:    STM32F / STM32H7
+ *   Compiler:      GCC (Zephyr toolchain)
+ ***************************************************************************************************
+ *   File:          hc595_chain.h
+ *   Description:   Интерфейс драйвера каскада сдвиговых регистров 74HC595
+ *
+ ***************************************************************************************************
+ *   History:       2026.07.23 - файл создан и оформлен по стандарту
+ *
+ **************************************************************************************************/
+#pragma once
 
+/***************************************************************************************************
+ *                                      INCLUDED FILES
+ **************************************************************************************************/
 #include <zephyr/device.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -10,36 +29,73 @@
 extern "C" {
 #endif
 
-__subsystem struct hc595_chain_api {
-    int (*write)(const struct device *dev, const uint8_t *data, size_t len);
-    int (*output_enable)(const struct device *dev, bool enable);
-};
+/***************************************************************************************************
+ *                                      PUBLIC TYPES
+ **************************************************************************************************/
 
 /**
- * @brief Отправить данные в цепочку 74HC595.
+ *  @brief Структура API для управления драйвером каскада регистров 74HC595
  */
-static inline int hc595_chain_write(const struct device *dev, const uint8_t *data, size_t len)
+__subsystem struct hc595_chain_api 
 {
-    const struct hc595_chain_api *api = (const struct hc595_chain_api *)dev->api;
-    return api->write(dev, data, len);
+    /// @brief Запись данных в цепочку сдвиговых регистров
+    int (*write)(const struct device *_dev, const uint8_t *_data, size_t _len);
+
+    /// @brief Управление разрешением выходов сдвиговых регистров
+    int (*output_enable)(const struct device *_dev, bool _enable);
+};
+
+typedef struct hc595_chain_api hc595_chain_api_t;
+
+/***************************************************************************************************
+ *                                PUBLIC FUNCTION PROTOTYPES
+ **************************************************************************************************/
+
+/**
+ *  @brief      Отправить данные в цепочку 74HC595
+ *  @details    Вызывает соответствующий метод реализации драйвера.
+ *
+ *  @param      _dev  - Указатель на устройство драйвера
+ *  @param      _data - Указатель на буфер с данными для отправки
+ *  @param      _len  - Длина отправляемых данных в байтах
+ *
+ *  @return     int - Ноль при успехе, отрицательный код ошибки при сбое
+ */
+static inline int hc595_chain_write(const struct device *_dev, 
+                                    const uint8_t *_data, 
+                                    size_t _len)
+{
+    const struct hc595_chain_api *api = (const struct hc595_chain_api *)_dev->api;
+    return api->write(_dev, _data, _len);
 }
 
 /**
- * @brief Включить или выключить физические выходы цепочки.
- * @param dev Указатель на устройство.
- * @param enable true для включения выходов, false — для перевода в Hi-Z.
+ *  @brief      Включить или выключить физические выходы цепочки
+ *  @details    Переводит выходы цепочки регистров в активное состояние 
+ *              или состояние высокого импеданса (Hi-Z).
+ *
+ *  @param      _dev    - Указатель на устройство драйвера
+ *  @param      _enable - true для включения выходов, false — для Hi-Z
+ *
+ *  @return     int - Ноль при успехе, отрицательный код ошибки при сбое
  */
-static inline int hc595_chain_output_enable(const struct device *dev, bool enable)
+static inline int hc595_chain_output_enable(const struct device *_dev, 
+                                            bool _enable)
 {
-    const struct hc595_chain_api *api = (const struct hc595_chain_api *)dev->api;
-    if (!api->output_enable) {
+    const struct hc595_chain_api *api = (const struct hc595_chain_api *)_dev->api;
+
+    if (!api->output_enable) 
+    {
         return -ENOTSUP;
     }
-    return api->output_enable(dev, enable);
+
+    return api->output_enable(_dev, _enable);
 }
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* DRIVERS_HC595_CHAIN_H_ */
+/***************************************************************************************************
+ *                                           END OF FILE
+ **************************************************************************************************/
