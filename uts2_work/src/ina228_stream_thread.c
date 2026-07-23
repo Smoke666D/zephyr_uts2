@@ -37,8 +37,6 @@ LOG_MODULE_REGISTER(ina_rtio_poller, LOG_LEVEL_INF);
 
 ZBUS_SUBSCRIBER_DEFINE(energy_sub, 1);
 
-
-
 // Канал ZBUS для периодических быстрых данных (U, I)
 ZBUS_CHAN_DEFINE(ina_batch_chan,
                  ina_batch_msg_t,
@@ -68,12 +66,12 @@ typedef struct ina_param_map
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
 static int    _ina2xx_param_get(PARAM_ID _id, PARAM_VAL *_val);
+static int    _ina2xx_param_get_power(PARAM_ID _id, PARAM_VAL *_val);
+static int    _ina2xx_param_set_power(PARAM_ID _id, const PARAM_VAL *_val);
 static double _q31_to_double(int32_t _value, int8_t _shift);
 static void   _process_energy_chain(bool _publish_to_zbus);
 static void   _process_fast_measurements(ina_batch_msg_t *_batch);
 static void   _rti_poller_thread(void *_p1, void *_p2, void *_p3);
-
-
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
@@ -153,7 +151,6 @@ static uint8_t __dtcm_noinit_section __aligned(ARCH_STACK_PTR_ALIGN)
 static struct k_thread rti_poller_thread_data;
 static k_tid_t         rti_poller_tid;
 
-
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
  **************************************************************************************************/
@@ -171,7 +168,10 @@ static k_tid_t         rti_poller_tid;
 static int _ina2xx_param_get(PARAM_ID _id, PARAM_VAL *_val)
 {
     // 1. Проверяем, попадает ли ID в непрерывный диапазон напряжений
-    if (_id >= SENS_BRD_LOW_VOLTAGE && _id <= SENS_VD5_VOLTAGE)
+    if (true
+        && _id >= SENS_BRD_LOW_VOLTAGE 
+        && _id <= SENS_VD5_VOLTAGE
+       )
     {
         ina_batch_msg_t batch;
 
@@ -186,7 +186,10 @@ static int _ina2xx_param_get(PARAM_ID _id, PARAM_VAL *_val)
         return err;
     }
     // 2. Проверяем, попадает ли ID в непрерывный диапазон токов
-    else if (_id >= SENS_BRD_LOW_CURRENT && _id <= SENS_VD5_CURRENT)
+    else if (true
+             && _id >= SENS_BRD_LOW_CURRENT 
+             && _id <= SENS_VD5_CURRENT
+            )
     {
         ina_batch_msg_t batch;
 
@@ -227,16 +230,17 @@ static int _ina2xx_param_get_power(PARAM_ID _id, PARAM_VAL *_val)
             return -EAGAIN;
         }
 
-        // 1. Сбрасываем (вычитываем) старые, необработанные уведомления из очереди, если они там были
+        // 1. Сброс старых необработанных уведомлений из очереди при их наличии
         const struct zbus_channel *chan;
-        while (zbus_sub_wait(&energy_sub, &chan, K_NO_WAIT) == 0) {
+        while (zbus_sub_wait(&energy_sub, &chan, K_NO_WAIT) == 0) 
+        {
             // Холостой цикл для очистки очереди подписчика
         }
         
-        // 2. Запускаем преобразование
+        // 2. Запуск преобразования
         k_sem_give(&sem_read_energy);
         
-        // 3. Блокируем поток и ждем уведомления о НОВОЙ публикации в канале
+        // 3. Блокировка потока и ожидание уведомления о новой публикации в канале
         err = zbus_sub_wait(&energy_sub, &chan, K_MSEC(500));
         if (err != 0)
         {
@@ -302,8 +306,7 @@ static int _ina2xx_param_set_power(PARAM_ID _id, const PARAM_VAL *_val)
                     // 2. Сбрасываем в 0 значение только для запрашиваемого датчика
                     batch.energy[sensor_idx] = 0.0;
                     
-                    // 3. Публикуем обновленный пакет обратно в ZBUS, чтобы
-                    // внешние потребители мгновенно увидели 0.0, не дожидаясь нового опроса
+                    // 3. Публикуем обновленный пакет обратно в ZBUS
                     zbus_chan_pub(&ina_energy_chan, &batch, K_NO_WAIT);
                 }
             }
@@ -338,6 +341,7 @@ PARAM_ROUTE_RO(SENS_VDOUT_PWR_CURRENT,  _ina2xx_param_get);
 PARAM_ROUTE_RO(SENS_VDOUT_PWR_VOLTAGE,  _ina2xx_param_get);
 PARAM_ROUTE_RO(SENS_VD5_CURRENT,        _ina2xx_param_get);
 PARAM_ROUTE_RO(SENS_VD5_VOLTAGE,        _ina2xx_param_get);
+
 PARAM_ROUTE_RW(SENS_I2C_POWER_BRD_LOW,   _ina2xx_param_set_power, _ina2xx_param_get_power);
 PARAM_ROUTE_RW(SENS_I2C_POWER_BRD_HIGH,  _ina2xx_param_set_power, _ina2xx_param_get_power);
 PARAM_ROUTE_RW(SENS_I2C_POWER_VDUT2,     _ina2xx_param_set_power, _ina2xx_param_get_power);
@@ -346,7 +350,6 @@ PARAM_ROUTE_RW(SENS_I2C_POWER_VIN,       _ina2xx_param_set_power, _ina2xx_param_
 PARAM_ROUTE_RW(SENS_I2C_POWER_DCDC_3_3,  _ina2xx_param_set_power, _ina2xx_param_get_power);
 PARAM_ROUTE_RW(SENS_I2C_POWER_VDOUT_PWR, _ina2xx_param_set_power, _ina2xx_param_get_power);
 PARAM_ROUTE_RW(SENS_I2C_POWER_VD5,       _ina2xx_param_set_power, _ina2xx_param_get_power);
-
 
 /**
  *  @brief      Преобразование формата Q31 в вещественное число
@@ -603,9 +606,7 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
             || do_reset_energy
            ) 
         {
-            // Выполняем внеочередную цепочку работы с энергией.
-            // Если do_read_energy истинно — декодируем и публикуем в ZBUS,
-            // в противном случае выполняем холостое чтение для аппаратного сброса.
+            // Выполняем внеочередную цепочку работы с энергией
             _process_energy_chain(do_read_energy);
         } 
         else 
