@@ -22,7 +22,7 @@
  **************************************************************************************************/
 #include <stdint.h>
 #include <stdbool.h>
-
+#include <zephyr/zbus/zbus.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,7 +31,9 @@ extern "C" {
 /***************************************************************************************************
  *                                      PUBLIC TYPES
  **************************************************************************************************/
-
+#define POLL_INTERVAL_MS   5
+#define INA228_THREAD_STACK_SIZE  3072
+#define INA228_THREAD_PRIORITY    4
 /**
  *  @brief Перечисление физических измерительных каналов (датчиков)
  */
@@ -45,7 +47,7 @@ typedef enum cur_sens_channel
     CUR_SENS_DCDC_3_3    = 5,
     CUR_SENS_VDOUT_PWR   = 6,
     CUR_SENS_VD5         = 7,
-    CUR_SENS_NUM_SENSORS = 8
+    CUR_SENS_NUM_SENSORS = 8,
 } cur_sens_channel_t;
 
 /**
@@ -65,9 +67,19 @@ typedef struct ina_batch_msg
     sensor_reading_t sensors[CUR_SENS_NUM_SENSORS];
 } ina_batch_msg_t;
 
+/**
+ *  @brief Пакетное сообщение ZBUS с накопленной энергией всех датчиков
+ */
+typedef struct ina_energy_msg 
+{
+    double energy[CUR_SENS_NUM_SENSORS];
+} ina_energy_msg_t;
+
 /***************************************************************************************************
  *                                PUBLIC FUNCTION PROTOTYPES
  **************************************************************************************************/
+
+
 
 /**
  *  @brief      Запуск потока опроса датчиков INA228
