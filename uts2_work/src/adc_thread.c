@@ -1,8 +1,10 @@
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include "adc_thread.h"
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 #include "global_params.h"
+#include "mediator.h"
 
 /* Подключаем публичный заголовочный файл нашего драйвера */
 #include <seq_mux_adc.h>
@@ -44,6 +46,43 @@ ZBUS_CHAN_DEFINE(adc_data_chan,
                  ZBUS_OBSERVERS(), /* Список получателей */
                  ZBUS_MSG_INIT(0) /* Инициализация нулями */
 );
+
+typedef uint32_t adc_chan_val_msg_t;
+
+ZBUS_CHAN_DEFINE(chan_ao1,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao7,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao13,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_avsense1, adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao2,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao8,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao14,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_avsense2, adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao3,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao9,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao15,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_avsense3, adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao4,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao10,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao16,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_avsense4, adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao5,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao11,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao17,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_avsense5, adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao6,      adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao12,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_ao18,     adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_avsense6, adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da11_t1,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da20_t1,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da33_t1,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da44_t1,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da11_t2,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da20_t2,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da33_t2,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+ZBUS_CHAN_DEFINE(chan_da44_t2,  adc_chan_val_msg_t, NULL, NULL, ZBUS_OBSERVERS(), ZBUS_MSG_INIT(0));
+
+MEDIATOR_ELEMENT_REGISTER(AIN_AO1,        &chan_ao1);
 
 static const AIN_MUX_CHANNEL_NUMBER param_to_adc_map[] = {
     [AIN_AO1]        = AO1,
