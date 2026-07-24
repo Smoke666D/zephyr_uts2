@@ -1,5 +1,7 @@
-#ifndef USB_THREAD_H
-#define USB_THREAD_H
+#pragma once
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define STACK_SIZE 1024
 #define PRIORITY 5
@@ -12,4 +14,7 @@
 #define LED2_NODE DT_ALIAS(led2)
 
 int usb_thread_start(void);
+
+#ifdef __cplusplus
+}
 #endif

@@ -1,6 +1,7 @@
-#ifndef ADC_THREAD_H
-#define ADC_THREAD_H
-
+#pragma once
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define AIN_TASK_STACK_SIZE 2024
 #define AIN_TASK_PRIORITY 10
@@ -62,4 +63,6 @@ int ain_thread_start(void);
 
 
 
+#ifdef __cplusplus
+}
 #endif
