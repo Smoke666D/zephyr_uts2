@@ -145,7 +145,7 @@ RTIO_DEFINE_WITH_MEMPOOL(ina_rtio,
                          128, 
                          sizeof(void *));
 
-static uint8_t __dtcm_noinit_section __aligned(ARCH_STACK_PTR_ALIGN) 
+static uint8_t  __attribute__((section("DTCM"), aligned(32))) 
     rti_poller_stack[INA228_THREAD_STACK_SIZE];
 
 static struct k_thread rti_poller_thread_data;
@@ -294,24 +294,33 @@ static int _ina2xx_param_set_power(PARAM_ID _id, const PARAM_VAL *_val)
         // Сброс запускается только при записи числового нуля (0.0f)
         if (_val->value.real == 0.0f)
         {
-            ina_energy_msg_t batch;
-
-            // 1. Читаем текущий снимок данных из ZBUS
-            int err = zbus_chan_read(&ina_energy_chan, &batch, K_NO_WAIT);
+            // 1. Монопольно захватываем канал ZBUS (блокируем его от вмешательства других потоков)
+            int err = zbus_chan_claim(&ina_energy_chan, K_MSEC(100));
             if (err == 0)
             {
                 uint32_t sensor_idx = _id - SENS_I2C_POWER_BRD_LOW;
                 if (sensor_idx < CUR_SENS_NUM_SENSORS)
                 {
-                    // 2. Сбрасываем в 0 значение только для запрашиваемого датчика
-                    batch.energy[sensor_idx] = 0.0;
+                    // 2. Получаем прямой указатель на область памяти сообщения в канале
+                    ina_energy_msg_t *msg = zbus_chan_msg(&ina_energy_chan);
                     
-                    // 3. Публикуем обновленный пакет обратно в ZBUS
-                    zbus_chan_pub(&ina_energy_chan, &batch, K_NO_WAIT);
+                    // 3. Сбрасываем в 0 значение только для запрашиваемого датчика напрямую в канале
+                    msg->energy[sensor_idx] = 0.0;
                 }
+                
+                // 4. Завершаем работу с каналом ZBUS (освобождаем его внутреннюю блокировку)
+                zbus_chan_finish(&ina_energy_chan);
+                
+                // 5. Оповещаем всех подписчиков (включая подписчика ожидания), что сообщение обновилось
+                zbus_chan_notify(&ina_energy_chan, K_MSEC(100));
+            }
+            else
+            {
+                LOG_ERR("Не удалось заблокировать канал ZBUS для сброса энергии");
+                return err;
             }
 
-            // 4. Выдаем семафор на фоновый аппаратный сброс накопителей в чипах INA228
+            // 6. Выдаем локальный семафор на фоновый аппаратный сброс накопителей в чипах INA228
             k_sem_give(&sem_reset_energy);
 
             return 0;

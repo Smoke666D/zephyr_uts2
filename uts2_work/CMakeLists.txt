@@ -17,6 +17,7 @@ target_sources(app PRIVATE
         src/adc_monitor.c
         src/ina228_stream_thread.c
         src/param_server.c 
+        src/out_and_power_control.c
 )
 
 

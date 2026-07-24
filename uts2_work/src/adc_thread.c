@@ -143,7 +143,7 @@ LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
 
 
-static uint8_t __attribute__((__section__("DTCM"))) adc_thread_stack[AIN_TASK_STACK_SIZE];
+static uint8_t  __attribute__((section("DTCM"), aligned(32)))  adc_thread_stack[AIN_TASK_STACK_SIZE];
 static struct  k_thread thread_data; 
 
 
