@@ -3,6 +3,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 #include "global_params.h"
+#include "os.h"
 
 /* Подключаем публичный заголовочный файл нашего драйвера */
 #include <seq_mux_adc.h>
@@ -140,11 +141,9 @@ PARAM_ROUTE_RO(AIN_DA44_test2, adc_param_get);
 LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 
 /* Получаем указатель на наш прибор из дерева устройств */
-static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
 
 
-static uint8_t  __attribute__((section("DTCM"), aligned(32)))  adc_thread_stack[AIN_TASK_STACK_SIZE];
-static struct  k_thread thread_data; 
+
 
 
 /* Функция-помощник для считывания сырого опорного VREFINT для конкретного шага */
@@ -157,16 +156,34 @@ static uint32_t get_vref_raw(const struct device *dev, uint8_t step)
     return raw_vref;
 }
 
+class AdcTask : public os::task<AdcTask, AIN_TASK_STACK_SIZE> {
+public:
+    // Конструктор: инициализирует базовый класс и рассчитывает коэффициенты
+    AdcTask();
+
+    // Основной цикл задачи
+    void task_func();
 
 
+ 
+};
 
-static void adc_pub_thread_fn(void *arg1, void *arg2, void *arg3)
+
+AdcTask::AdcTask() : os::task<AdcTask, AIN_TASK_STACK_SIZE>(
+    "adc_pub", 
+    static_cast<os::priority>(AIN_TASK_PRIORITY),
+    os::opt::start // Не запускаем сразу, ждем вызова из ain_thread_start или системного init
+) {
+    // Рассчитываем коэффициенты делителей один раз
+    for (int i = 0; i < TOTAL_CHANNEL_COUNT; i++) {
+        coefficients[i] = (float)(r1_resistors[i] + r2_resistors[i]) / (float)r2_resistors[i];
+    }
+}
+
+
+void AdcTask::task_func()
 {
-    ARG_UNUSED(arg1);
-    ARG_UNUSED(arg2);
-    ARG_UNUSED(arg3);
-
-
+static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
   // Проверяем готовность драйвера перед началом работы
     if (!device_is_ready(seq_dev)) {
          LOG_ERR("Sequencer driver is not ready!");
@@ -239,21 +256,5 @@ static void adc_pub_thread_fn(void *arg1, void *arg2, void *arg3)
     }
 }
 
-/* Запуск потока-издателя АЦП */
-int ain_thread_start(void)
-{
-    // Рассчитываем коэффициенты делителей один раз при старте
-    for (int i = 0; i < TOTAL_CHANNEL_COUNT; i++) {
-        coefficients[i] = (float)(r1_resistors[i] + r2_resistors[i]) / (float)r2_resistors[i];
-    }
-
-    k_thread_create(&thread_data, 
-                    (k_thread_stack_t *)adc_thread_stack, 
-                    AIN_TASK_STACK_SIZE,
-                    adc_pub_thread_fn, 
-                    NULL, NULL, NULL, 
-                    AIN_TASK_PRIORITY, 
-                    0, 
-                    K_MSEC(2000));
-    return 0;
-}
+// РАЗМЕЩЕНИЕ В DTCM: Создаем статический объект задачи в секции быстрой памяти
+static AdcTask adc_task_inst;

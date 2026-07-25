@@ -8,8 +8,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include "usb_thread.h"
-#include "dio_thread.h"
-#include "adc_thread.h"
 
 #include "ina228_stream_thread.h"
 
@@ -18,10 +16,10 @@
 
 int main(void)
 {
-	//dio_thread_start();
+
 	usb_thread_start();
    // StartDmaGPIO();
-	ain_thread_start();
+	
 	
 	start_ina228_poller_thread();
 	while (1) 
