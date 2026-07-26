@@ -18,8 +18,6 @@ int main(void)
 {
 
 	usb_thread_start();
-   // StartDmaGPIO();
-	
 	
 	start_ina228_poller_thread();
 	while (1) 

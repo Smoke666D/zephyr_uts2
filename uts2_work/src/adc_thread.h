@@ -59,10 +59,6 @@ typedef struct adc_data_msg {
 };
 
 
-int ain_thread_start(void);
-
-
-
 #ifdef __cplusplus
 }
 #endif

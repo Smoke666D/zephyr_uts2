@@ -15,7 +15,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/console/console.h>
 #include "system_status.h"
-#include "memomory_link_macro.h"
+
 
 
 static void on_action(struct smf_ctx *, const struct smf_state *, enum smf_action_type);
@@ -264,7 +264,6 @@ static const struct smf_state menu_states[] =
         [LED_STATE]        = SMF_CREATE_STATE(menu_print,    led_run,   NULL, &menu_states[COMMON_ACTION], NULL),       
         [ADC_STATE]        = SMF_CREATE_STATE(menu_print,    adc_run,   NULL, NULL, NULL),       
 };
-
 
 
 
