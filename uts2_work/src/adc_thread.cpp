@@ -4,7 +4,7 @@
 #include <zephyr/zbus/zbus.h>
 #include "global_params.h"
 #include "os.h"
-
+#include "mediator.hpp"
 /* Подключаем публичный заголовочный файл нашего драйвера */
 #include <seq_mux_adc.h>
 
@@ -136,7 +136,7 @@ PARAM_ROUTE_RO(AIN_DA33_test2, adc_param_get);
 PARAM_ROUTE_RO(AIN_DA44_test2, adc_param_get);
 
 
-
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_CH1, AIN_AO1, {0});
 
 LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 
@@ -237,6 +237,11 @@ static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequen
             msg.channels_mv[step * 4 + 1] = temp_val;
             msg.channels_mv[step * 4 + 2] = vdda_mv;
             msg.channels_mv[step * 4 + 3] = temp_val;
+
+            PARAM_VAL mediator_msg;
+            mediator_msg.value.integer = temp_val;
+             AIN_CH1.set(mediator_msg);
+            
 
             /* 
              * РЕАЛЬНЫЙ КОД ДЛЯ ПРИВЕДЕНИЯ К НАПРЯЖЕНИЮ (закомментирован для тестов по запросу):

@@ -1,4 +1,6 @@
+#include "global_params.h"
 #include "os.h"
+#include "mediator.hpp"
 #include <zephyr/logging/log.h>
 #include "param_server.h"
 #include "system_data_bus.h"
@@ -38,7 +40,7 @@ public:
      */
     void task_func() {
         LOG_INF("Starting State-Reader ADC Monitor (C++ Task)...");
-
+       // auto adc = os::mediator::access<PARAM_VAL>(AIN_AO1);
         while (true) {
             // Используем метод sleep из базового класса (обертка над k_msleep)
             sleep(3000);
@@ -66,6 +68,8 @@ public:
                     LOG_WRN("Step %d | Data is not ready yet.", step);
                 }
             }
+            LOG_INF("Mediator Temp: %d C",
+                            os::mediator(AIN_AO1).get().value.integer);
         }
     }
 };

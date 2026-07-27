@@ -17,10 +17,13 @@ target_sources(app PRIVATE
         src/param_server.c 
         src/out_and_power_control.c
         src/main.cpp 
-        src/os.cpp
+        src/os/os.cpp
+        src/os/mediator.cpp
+        
 )
 
-
+target_include_directories(app PRIVATE src/os)
+target_include_directories(app PRIVATE src)
 
 add_subdirectory_ifdef(CONFIG_CUSTOM_SEQ_MUX_ADC drivers/seq_mux_adc)
 add_subdirectory_ifdef(CONFIG_CUSTOM_SEQ_MUX_ADC drivers/hc_595_chain)
