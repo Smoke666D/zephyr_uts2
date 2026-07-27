@@ -33,48 +33,31 @@ static const uint32_t r2_resistors[TOTAL_CHANNEL_COUNT] = {
 
 static float coefficients[TOTAL_CHANNEL_COUNT];
 
-/* 
- * ОПРЕДЕЛЯЕМ КАНАЛ.
- * Поскольку adc_monitor_sub объявлен extern в adc_zbus.h, 
- * макрос ZBUS_OBSERVERS скомпилируется успешно.
- */
-ZBUS_CHAN_DEFINE(adc_data_chan,
-                 struct adc_data_msg,
-                 NULL, /* Валидатор */
-                 NULL, /* Пользовательские данные */
-                 ZBUS_OBSERVERS(), /* Список получателей */
-                 ZBUS_MSG_INIT(0) /* Инициализация нулями */
-);
 
-
-
-
-
-
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch1, AIN_AO1, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch7, AIN_AO7, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch13, AIN_AO13, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs1, AIN_AVsense1, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch2, AIN_AO2, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch8, AIN_AO8, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch14, AIN_AO14, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs2, AIN_AVsense2, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch3, AIN_AO3, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch9, AIN_AO9, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch15, AIN_AO15, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs3, AIN_AVsense3, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch4, AIN_AO4, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch10, AIN_AO10, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch16, AIN_AO16, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs4, AIN_AVsense4, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch5, AIN_AO5, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch11, AIN_AO11, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch17, AIN_AO17, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chss5, AIN_AVsense5, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch6, AIN_AO6, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch12, AIN_AO12, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch18, AIN_AO18, {0});
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chss6, AIN_AVsense6, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO1, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO7, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO13, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AVsense1, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO2, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO8, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO14, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AVsense2, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO3, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO9, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO15, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AVsense3, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO4, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO10, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO16, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AVsense4, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO5, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO11, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO17, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AVsense5, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO6, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO12, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AO18, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_AVsense6, {0});
 
 
 LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
@@ -173,10 +156,10 @@ static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequen
             mediator_msg_tmp.value.integer = temp_c;
             
            
-                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 1)).set(mediator_msg_tmp);
-                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 3)).set(mediator_msg_tmp);                  
-                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 0) ).set(mediator_msg_mv);
-                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 2 )).set(mediator_msg_mv);
+            os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 1)).set(mediator_msg_tmp);
+            os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 3)).set(mediator_msg_tmp);                  
+            os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 0) ).set(mediator_msg_mv);
+            os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 2 )).set(mediator_msg_mv);
               
             
             /* 
@@ -192,8 +175,7 @@ static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequen
              */
         }
 
-        // Публикуем тестовый 32-канальный пакет в Zbus
-        //zbus_chan_pub(&adc_data_chan, &msg, K_NO_WAIT);
+    
     }
 }
 

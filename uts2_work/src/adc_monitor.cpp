@@ -2,8 +2,6 @@
 #include "os.h"
 #include "mediator.hpp"
 #include <zephyr/logging/log.h>
-#include "param_server.h"
-#include "system_data_bus.h"
 
 LOG_MODULE_REGISTER(adc_mon, LOG_LEVEL_INF);
 
@@ -14,17 +12,7 @@ LOG_MODULE_REGISTER(adc_mon, LOG_LEVEL_INF);
  */
 class AdcMonitorTask : public os::task<AdcMonitorTask, 2048> {
 private:
-    // Список параметров выносим в статические данные класса
-    static inline const uint8_t param_names[] = {
-        AIN_AO1, AIN_AO7, AIN_AO13, AIN_AVsense1,
-        AIN_AO2, AIN_AO8, AIN_AO14, AIN_AVsense2,    
-        AIN_AO3, AIN_AO9, AIN_AO15, AIN_AVsense3,        
-        AIN_AO4, AIN_AO10, AIN_AO16, AIN_AVsense4,
-        AIN_AO5, AIN_AO11, AIN_AO17, AIN_AVsense5,
-        AIN_AO6, AIN_AO12, AIN_AO18, AIN_AVsense6,
-        AIN_DA11_test1, AIN_DA20_test1, AIN_DA33_test1, AIN_DA44_test1,
-        AIN_DA11_test2, AIN_DA20_test2, AIN_DA33_test2, AIN_DA44_test2, 
-    };
+
 
 public:
     // Конструктор инициализирует базовый класс (имя задачи, приоритет)
@@ -41,13 +29,11 @@ public:
     void task_func() 
     {
         LOG_INF("Starting State-Reader ADC Monitor (C++ Task)...");
-       // auto adc = os::mediator::access<PARAM_VAL>(AIN_AO1);
         while (true)
          {
             // Используем метод sleep из базового класса (обертка над k_msleep)
             sleep(3000);
-
-            PARAM_VAL val[4];
+            
             LOG_INF("=== [Zbus State Monitor] 32 Channels Test Pattern ===");
             
             for (int step = 0; step < 8; step++) 

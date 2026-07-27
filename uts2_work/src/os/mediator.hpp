@@ -120,15 +120,15 @@ inline message_t<T> mediator(PARAM_ID id) {
  * @param IdValue - PARAM_ID из enum
  * @param InitVal - начальное значение
  */
-#define MEDIATOR_ELEMENT_DEFINE(Type, Name, IdValue, InitVal) \
-    static PARAM_ID Name##_id_meta = IdValue; \
-    ZBUS_CHAN_DEFINE(Name##_chan, \
+#define MEDIATOR_ELEMENT_DEFINE(Type, IdValue, InitVal) \
+    static PARAM_ID _meta_##IdValue = IdValue; \
+    ZBUS_CHAN_DEFINE(_chan_##IdValue, \
                      Type, \
                      NULL, \
-                     &Name##_id_meta, \
+                     &_meta_##IdValue, \
                      ZBUS_OBSERVERS_EMPTY, \
                      ZBUS_MSG_INIT(InitVal)); \
-    os::message_t<Type> Name(&Name##_chan)
+    static os::message_t<Type> m_##IdValue(&_chan_##IdValue)
 
 
 
