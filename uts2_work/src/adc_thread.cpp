@@ -46,97 +46,36 @@ ZBUS_CHAN_DEFINE(adc_data_chan,
                  ZBUS_MSG_INIT(0) /* Инициализация нулями */
 );
 
-static const AIN_MUX_CHANNEL_NUMBER param_to_adc_map[] = {
-    [AIN_AO1]        = AO1,
-    [AIN_AO7]        = AO7,
-    [AIN_AO13]       = AO13,
-    [AIN_AVsense1]   = AVsense1,
-    [AIN_AO2]        = AO2,
-    [AIN_AO8]        = AO8,
-    [AIN_AO14]       = AO14,
-    [AIN_AVsense2]   = AVsense2,
-    [AIN_AO3]        = AO3,
-    [AIN_AO9]        = AO9,
-    [AIN_AO15]       = AO15,
-    [AIN_AVsense3]   = AVsense3,
-    [AIN_AO4]        = AO4,
-    [AIN_AO10]       = AO10,
-    [AIN_AO16]       = AO16,
-    [AIN_AVsense4]   = AVsense4,
-    [AIN_AO5]        = AO5,
-    [AIN_AO11]       = AO11,
-    [AIN_AO17]       = AO17,
-    [AIN_AVsense5]   = AVsense5,
-    [AIN_AO6]        = AO6,
-    [AIN_AO12]       = AO12,
-    [AIN_AO18]       = AO18,
-    [AIN_AVsense6]   = AVsense6,
-    [AIN_DA11_test1] = DA11_test1,
-    [AIN_DA20_test1] = DA20_test1,
-    [AIN_DA33_test1] = DA33_test1,
-    [AIN_DA44_test1] = DA44_test1,
-    [AIN_DA11_test2] = DA11_test2,
-    [AIN_DA20_test2] = DA20_test2,
-    [AIN_DA33_test2] = DA33_test2,
-    [AIN_DA44_test2] = DA44_test2,
-};
-
-static int adc_param_get(PARAM_ID id, PARAM_VAL *val)
-{
-    /* Проверяем, что запрашиваемый ID входит в диапазон наших аналоговых каналов */
-    if (id >= AIN_AO1 && id <= AIN_DA44_test2) {
-        struct adc_data_msg adc_msg;
-        
-        /* Читаем последние кэшированные данные из канала Zbus */
-        int err = zbus_chan_read(&adc_data_chan, &adc_msg, K_NO_WAIT);
-        if (err == 0) {
-            /* Находим физический канал АЦП по логическому ID */
-            AIN_MUX_CHANNEL_NUMBER adc_chan = param_to_adc_map[id];
-            
-            /* Преобразуем милливольты в Вольты и сохраняем в вещественное поле */
-            val->value.integer= adc_msg.channels_mv[adc_chan];
-        }
-        return err;
-    }
-    
-    return -ENOTSUP;
-}
-
-PARAM_ROUTE_RO(AIN_AO1,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO7,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO13,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AVsense1,   adc_param_get);
-PARAM_ROUTE_RO(AIN_AO2,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO8,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO14,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AVsense2,   adc_param_get);
-PARAM_ROUTE_RO(AIN_AO3,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO9,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO15,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AVsense3,   adc_param_get);
-PARAM_ROUTE_RO(AIN_AO4,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO10,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AO16,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AVsense4,   adc_param_get);
-PARAM_ROUTE_RO(AIN_AO5,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO11,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AO17,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AVsense5,   adc_param_get);
-PARAM_ROUTE_RO(AIN_AO6,        adc_param_get);
-PARAM_ROUTE_RO(AIN_AO12,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AO18,       adc_param_get);
-PARAM_ROUTE_RO(AIN_AVsense6,   adc_param_get);
-PARAM_ROUTE_RO(AIN_DA11_test1, adc_param_get);
-PARAM_ROUTE_RO(AIN_DA20_test1, adc_param_get);
-PARAM_ROUTE_RO(AIN_DA33_test1, adc_param_get);
-PARAM_ROUTE_RO(AIN_DA44_test1, adc_param_get);
-PARAM_ROUTE_RO(AIN_DA11_test2, adc_param_get);
-PARAM_ROUTE_RO(AIN_DA20_test2, adc_param_get);
-PARAM_ROUTE_RO(AIN_DA33_test2, adc_param_get);
-PARAM_ROUTE_RO(AIN_DA44_test2, adc_param_get);
 
 
-MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, AIN_CH1, AIN_AO1, {0});
+
+
+
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch1, AIN_AO1, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch7, AIN_AO7, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch13, AIN_AO13, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs1, AIN_AVsense1, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch2, AIN_AO2, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch8, AIN_AO8, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch14, AIN_AO14, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs2, AIN_AVsense2, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch3, AIN_AO3, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch9, AIN_AO9, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch15, AIN_AO15, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs3, AIN_AVsense3, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch4, AIN_AO4, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch10, AIN_AO10, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch16, AIN_AO16, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chs4, AIN_AVsense4, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch5, AIN_AO5, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch11, AIN_AO11, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch17, AIN_AO17, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chss5, AIN_AVsense5, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch6, AIN_AO6, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch12, AIN_AO12, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_ch18, AIN_AO18, {0});
+MEDIATOR_ELEMENT_DEFINE(PARAM_VAL, ain_chss6, AIN_AVsense6, {0});
+
 
 LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 
@@ -228,21 +167,18 @@ static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequen
                 msg.raw_temp = raw_temp;
             }
 
-            /* 
-             * ТЕСТОВЫЙ РЕЖИМ ЗАПОЛНЕНИЯ:
-             * 1-й и 3-й канал шага (индексы 0 и 2) — пишем VDDA в милливольтах
-             * 2-й и 4-й канал шага (индексы 1 и 3) — пишем Температуру в градусах
-             */
-            msg.channels_mv[step * 4 + 0] = vdda_mv;
-            msg.channels_mv[step * 4 + 1] = temp_val;
-            msg.channels_mv[step * 4 + 2] = vdda_mv;
-            msg.channels_mv[step * 4 + 3] = temp_val;
-
-            PARAM_VAL mediator_msg;
-            mediator_msg.value.integer = temp_val;
-             AIN_CH1.set(mediator_msg);
+            PARAM_VAL mediator_msg_mv;
+            mediator_msg_mv.value.integer =  vdda_mv;
+            PARAM_VAL mediator_msg_tmp;
+            mediator_msg_tmp.value.integer = temp_c;
             
-
+           
+                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 1)).set(mediator_msg_tmp);
+                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 3)).set(mediator_msg_tmp);                  
+                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 0) ).set(mediator_msg_mv);
+                    os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 2 )).set(mediator_msg_mv);
+              
+            
             /* 
              * РЕАЛЬНЫЙ КОД ДЛЯ ПРИВЕДЕНИЯ К НАПРЯЖЕНИЮ (закомментирован для тестов по запросу):
              *
@@ -257,7 +193,7 @@ static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequen
         }
 
         // Публикуем тестовый 32-канальный пакет в Zbus
-        zbus_chan_pub(&adc_data_chan, &msg, K_NO_WAIT);
+        //zbus_chan_pub(&adc_data_chan, &msg, K_NO_WAIT);
     }
 }
 

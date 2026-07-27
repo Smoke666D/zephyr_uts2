@@ -38,38 +38,30 @@ public:
      * @brief Основная логика задачи.
      * Аналог функции adc_monitor_thread_fn.
      */
-    void task_func() {
+    void task_func() 
+    {
         LOG_INF("Starting State-Reader ADC Monitor (C++ Task)...");
        // auto adc = os::mediator::access<PARAM_VAL>(AIN_AO1);
-        while (true) {
+        while (true)
+         {
             // Используем метод sleep из базового класса (обертка над k_msleep)
             sleep(3000);
 
             PARAM_VAL val[4];
             LOG_INF("=== [Zbus State Monitor] 32 Channels Test Pattern ===");
             
-            for (int step = 0; step < 8; step++) {
-                int ret = 0;
-
-                // Получаем 4 канала за итерацию
-                for(int i = 0; i < 4; i++) {
-                    ret |= param_get((PARAM_ID)param_names[step * 4 + i], &val[i]);
-                }
-
-                if (ret == 0) {
-                    uint32_t vref1 = (uint32_t)val[0].value.integer;
-                    int32_t temp1  = (int32_t)val[1].value.integer;
-                    uint32_t vref2 = (uint32_t)val[2].value.integer;
-                    int32_t temp2  = (int32_t)val[3].value.integer;
+            for (int step = 0; step < 8; step++) 
+            {
 
                     LOG_INF("Step %d | VREF: %u mV | Temp: %d C | VREF: %u mV | Temp: %d C",
-                            step, vref1, temp1, vref2, temp2);
-                } else {
-                    LOG_WRN("Step %d | Data is not ready yet.", step);
-                }
+                            step, 
+                            os::mediator((PARAM_ID)(AIN_AO1 + step * 4)).get().value.integer,
+                            os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 1)).get().value.integer,
+                            os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 2)).get().value.integer,
+                            os::mediator((PARAM_ID)(AIN_AO1 + step * 4 + 3)).get().value.integer);
+
             }
-            LOG_INF("Mediator Temp: %d C",
-                            os::mediator(AIN_AO1).get().value.integer);
+        
         }
     }
 };
