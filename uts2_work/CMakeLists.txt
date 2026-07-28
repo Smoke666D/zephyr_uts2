@@ -19,6 +19,7 @@ target_sources(app PRIVATE
         src/main.cpp 
         src/os.cpp
         src/system_bridge.c
+        src/seq_adc_processor.c
 )
 
 
