@@ -11,7 +11,7 @@ include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 
 target_sources(app PRIVATE 
         src/usb_thread.c
-        src/adc_monitor.cpp
+       
         src/ina228_stream_thread.c
         src/param_server.c 
         src/out_and_power_control.c
@@ -19,6 +19,7 @@ target_sources(app PRIVATE
         src/os.cpp
         src/system_bridge.c
         src/seq_adc_processor.c
+        src/seq_adc_shell.c
 )
 
 

@@ -5,7 +5,7 @@
 #include "seq_adc_processor.h"
 #include "system_bridge.h"
 #include "seq_mux_adc.h"
-#include "adc_thread.h"
+
 
 
 
@@ -60,6 +60,30 @@ static const struct zbus_channel * const adc_out_channels[TOTAL_CHANNELS_CNT] = 
     &adc_out_chan_28, &adc_out_chan_29, &adc_out_chan_30, &adc_out_chan_31
 };
 
+
+static const uint32_t r1_resistors[TOTAL_CHANNEL_COUNT] = {
+    10000,  10000,  10000,  10000,  // Шаг 0 (AO1, AO7, AO13, AVsense1)
+    10000,  10000,  10000,  10000,  // Шаг 1 (AO2, AO8, AO14, AVsense2)
+    10000,  10000,  10000,  10000,  // Шаг 2 (AO3 ...)
+    10000,  10000,  10000,  10000,  // Шаг 3
+    10000,  10000,  10000,  10000,  // Шаг 4
+    10000,  10000,  10000,  10000,  // Шаг 5
+    47000,  47000,  47000,  47000,  // Шаг 6 (Тестовые каналы DA11..DA44 T1)
+    100000, 100000, 100000, 100000  // Шаг 7 (Тестовые каналы DA11..DA44 T2)
+};
+
+static const uint32_t r2_resistors[TOTAL_CHANNEL_COUNT] = {
+    10000, 10000, 10000, 10000,
+    10000, 10000, 10000, 10000,
+    10000, 10000, 10000, 10000,
+    10000, 10000, 10000, 10000,
+    10000, 10000, 10000, 10000,
+    10000, 10000, 10000, 10000,
+    10000, 10000, 10000, 10000,
+    10000, 10000, 10000, 10000
+};
+
+static float coefficients[TOTAL_CHANNEL_COUNT];
 
 /* Функция-помощник для считывания сырого опорного VREFINT для конкретного шага */
 static uint32_t get_vref_raw(const struct device *dev, uint8_t step)
@@ -215,6 +239,11 @@ static int adc_processor_init(void)
     if (ret < 0) 
     {
         return ret;
+    }
+
+    // Рассчитываем коэффициенты делителей один раз
+    for (int i = 0; i < TOTAL_CHANNEL_COUNT; i++) {
+        coefficients[i] = (float)(r1_resistors[i] + r2_resistors[i]) / (float)r2_resistors[i];
     }
 
     return 0;
