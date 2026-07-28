@@ -22,6 +22,7 @@
  **************************************************************************************************/
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/zbus/zbus.h>
 
 /***************************************************************************************************
  *                                       DEFINITIONS
@@ -63,6 +64,14 @@
  **************************************************************************************************/
 
 /**
+ *  @brief Структура сообщения для zbus-канала драйвера
+ */
+typedef struct seq_mux_adc_msg 
+{
+    uint32_t data[TOTAL_CHANNELS_CNT];
+} seq_mux_adc_msg_t;
+
+/**
  *  @brief Структура API для управления драйвером seq_mux_adc
  */
 typedef struct seq_mux_adc_api 
@@ -72,6 +81,8 @@ typedef struct seq_mux_adc_api
     
     /// @brief Ожидание готовности новых данных АЦП с учетом таймаута
     int (*wait_for_data)(const struct device *_dev, k_timeout_t _timeout);
+
+    const struct zbus_channel *(*get_channel)(const struct device *_dev);
 } seq_mux_adc_api_t;
 
 /**

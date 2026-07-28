@@ -53,6 +53,7 @@ static inline void _gpio_init(void);
 static inline int  _tmr_init(TIM_TypeDef *_tmr_inst);
 static inline void _adc_init(ADC_TypeDef *_adc_inst);
 static int         _seq_mux_adc_init(const struct device *_dev);
+static const struct zbus_channel *_seq_mux_adc_get_channel_impl(const struct device *_dev);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
@@ -64,6 +65,17 @@ static uint32_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
 
 static struct k_mutex mutex_lock;
 static struct k_sem   sem_data_ready;
+
+/***************************************************************************************************
+ *                                        ZBUS CHANNELS
+ **************************************************************************************************/
+ZBUS_CHAN_DEFINE(seq_mux_adc_chan,
+                 seq_mux_adc_msg_t,
+                 NULL,                 /* Функция-валидатор не используется */
+                 NULL,                 /* Пользовательские метаданные не используются */
+                 ZBUS_OBSERVERS_EMPTY, /* Список статических наблюдателей пуст */
+                 ZBUS_MSG_INIT(0)      /* Начальное состояние буфера заполнено нулями */
+);
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
@@ -88,17 +100,34 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
 
     if (_status >= 0) 
     {
+        seq_mux_adc_msg_t msg;
         // Копирование данных из заполненного буфера в теневой
         if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_1) == 1)
         {
             memcpy(adc_shadow_buf, adc_buf_a, sizeof(adc_shadow_buf));
+            memcpy(msg.data, adc_buf_a, sizeof(msg.data));
         } 
         else 
         {
             memcpy(adc_shadow_buf, adc_buf_b, sizeof(adc_shadow_buf));
-        }
+            memcpy(msg.data, adc_buf_b, sizeof(msg.data));
+        }        
+        (void)zbus_chan_pub(&seq_mux_adc_chan, &msg, K_NO_WAIT);
         k_sem_give(&sem_data_ready);
     }
+}
+
+/**
+ *  @brief      Получение ссылки на zbus-канал драйвера
+ *
+ *  @param      _dev - Указатель на устройство
+ *
+ *  @return     const struct zbus_channel* - Указатель на zbus-канал драйвера
+ */
+static const struct zbus_channel *_seq_mux_adc_get_channel_impl(const struct device *_dev)
+{
+    ARG_UNUSED(_dev);
+    return &seq_mux_adc_chan;
 }
 
 /**
@@ -509,6 +538,7 @@ static const struct seq_mux_adc_api driver_api =
 {
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
     .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
+     .get_channel = _seq_mux_adc_get_channel_impl,
 };
 
 static const struct seq_mux_adc_config seq_config = 

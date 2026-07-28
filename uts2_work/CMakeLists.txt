@@ -18,6 +18,7 @@ target_sources(app PRIVATE
         src/out_and_power_control.c
         src/main.cpp 
         src/os.cpp
+        src/system_bridge.c
 )
 
 
