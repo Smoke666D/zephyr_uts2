@@ -2,8 +2,22 @@
 #include <zephyr/logging/log.h>
 #include "param_server.h"
 #include "system_data_bus.h"
+#include "seq_adc_processor.h"
 
 LOG_MODULE_REGISTER(adc_mon, LOG_LEVEL_INF);
+
+
+// Массив указателей на все 32 канала для быстрого доступа по индексу
+static const struct zbus_channel * const test_channels[TOTAL_CHANNELS_CNT] = {
+    &adc_out_chan_0,  &adc_out_chan_1,  &adc_out_chan_2,  &adc_out_chan_3,
+    &adc_out_chan_4,  &adc_out_chan_5,  &adc_out_chan_6,  &adc_out_chan_7,
+    &adc_out_chan_8,  &adc_out_chan_9,  &adc_out_chan_10, &adc_out_chan_11,
+    &adc_out_chan_12, &adc_out_chan_13, &adc_out_chan_14, &adc_out_chan_15,
+    &adc_out_chan_16, &adc_out_chan_17, &adc_out_chan_18, &adc_out_chan_19,
+    &adc_out_chan_20, &adc_out_chan_21, &adc_out_chan_22, &adc_out_chan_23,
+    &adc_out_chan_24, &adc_out_chan_25, &adc_out_chan_26, &adc_out_chan_27,
+    &adc_out_chan_28, &adc_out_chan_29, &adc_out_chan_30, &adc_out_chan_31
+};
 
 /**
  * @brief Класс монитора АЦП.
@@ -50,8 +64,10 @@ public:
                 int ret = 0;
 
                 // Получаем 4 канала за итерацию
-                for(int i = 0; i < 4; i++) {
-                    ret |= param_get((PARAM_ID)param_names[step * 4 + i], &val[i]);
+                for(int i = 0; i < 4; i++)
+                 {
+                    zbus_chan_read(test_channels[step * 4 + i], &val[i], K_NO_WAIT);
+                   // ret |= param_get((PARAM_ID)param_names[step * 4 + i], &val[i]);
                 }
 
                 if (ret == 0) {
