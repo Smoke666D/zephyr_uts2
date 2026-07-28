@@ -204,31 +204,7 @@ static int _power_drv_param_set(PARAM_ID id, const PARAM_VAL *val)
     return -ENOTSUP;
 }
 
-/* 1. Каналы управления (Только запись желаемого состояния) */
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL1,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL2,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL3,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL4,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL5,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL6,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL7,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL8,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL9,  _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL10, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL11, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL12, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL13, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL14, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL15, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL16, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL17, _power_drv_param_set);
-PARAM_ROUTE_WO(POWER_DRV_CTR_CHANNEL18, _power_drv_param_set);
 
-/* 2. Линии LIN (Только запись желаемого состояния подтяжки) */
-PARAM_ROUTE_WO(LIN1_PD, _power_drv_param_set);
-PARAM_ROUTE_WO(LIN2_PD, _power_drv_param_set);
-PARAM_ROUTE_WO(LIN3_PD, _power_drv_param_set);
-PARAM_ROUTE_WO(LIN4_PD, _power_drv_param_set);
 
 /**
  * @brief Функция ручной инициализации и запуска потока управления

@@ -52,7 +52,8 @@ typedef enum
 #define ADC_BUF_SIZE       (ADC_NUM_CHANNELS * ADC_SAMPLES_PER_CH)
 
 /* Структура сообщения АЦП */
-typedef struct adc_data_msg {
+typedef struct adc_data_msg 
+{
     uint32_t vdda_mv;
     int32_t raw_temp;
     uint32_t channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)

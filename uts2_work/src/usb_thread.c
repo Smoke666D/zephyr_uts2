@@ -13,22 +13,9 @@
 #include <zephyr/usb/usbd.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/console/console.h>
-#include "system_status.h"
-
-
-
-
-
-
-
-
-
 
 
 const struct device *const uart_dev = DEVICE_DT_GET_ONE(zephyr_cdc_acm_uart);
-
-
-
 static struct usbd_context *cdc_usbd;
 
 K_SEM_DEFINE(dtr_sem, 0, 1);
@@ -96,15 +83,6 @@ int usb_thread_start(void)
     // Ждем события подключения терминала к CDC и ставим таймаут на 100 мс, что бы ПК успел отработать
     k_sem_take(&dtr_sem, K_FOREVER);	
 	k_msleep(100);
-
-    // Создаем поток для работы с меню
-   // k_thread_create(&thread_data, (k_thread_stack_t *)stack, STACK_SIZE,
-     //               func, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
-   
-    //Инициализируем конечный автомат
-   //smf_set_initial(SMF_CTX(&s_obj), &menu_states[PARENT]);
-   
-  // smf_set_hooks(SMF_CTX(&s_obj), &hookss);
 
     return 0;
 }

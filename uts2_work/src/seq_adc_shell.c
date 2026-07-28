@@ -88,11 +88,11 @@ static int cmd_read_chan_by_friendly_name(const struct shell *sh, size_t argc, c
     } 
     else 
     {
-        shell_fprintf(sh, SHELL_NORMAL, "0.0000\n");
+        shell_fprintf(sh, SHELL_NORMAL, "0\n");
     }
 
     return 0;
 }
 
 // Регистрация команды в Shell
-SHELL_CMD_REGISTER(adc, NULL, "Read ADC channel by its string name", cmd_read_chan_by_friendly_name);
+SHELL_CMD_REGISTER(get_adc, NULL, "Read ADC channel by its string name", cmd_read_chan_by_friendly_name);
