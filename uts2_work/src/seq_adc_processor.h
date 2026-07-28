@@ -59,42 +59,17 @@ typedef struct adc_data_msg
     uint32_t channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
 };
 
-// Макрос внешнего объявления канала
-#define DECLARE_ADC_OUT_CHAN_EXT(idx) ZBUS_CHAN_DECLARE(adc_out_chan_##idx)
 
-// Явное объявление каналов для внешних модулей
-DECLARE_ADC_OUT_CHAN_EXT(0);
-DECLARE_ADC_OUT_CHAN_EXT(1);
-DECLARE_ADC_OUT_CHAN_EXT(2);
-DECLARE_ADC_OUT_CHAN_EXT(3);
-DECLARE_ADC_OUT_CHAN_EXT(4);
-DECLARE_ADC_OUT_CHAN_EXT(5);
-DECLARE_ADC_OUT_CHAN_EXT(6);
-DECLARE_ADC_OUT_CHAN_EXT(7);
-DECLARE_ADC_OUT_CHAN_EXT(8);
-DECLARE_ADC_OUT_CHAN_EXT(9);
-DECLARE_ADC_OUT_CHAN_EXT(10);
-DECLARE_ADC_OUT_CHAN_EXT(11);
-DECLARE_ADC_OUT_CHAN_EXT(12);
-DECLARE_ADC_OUT_CHAN_EXT(13);
-DECLARE_ADC_OUT_CHAN_EXT(14);
-DECLARE_ADC_OUT_CHAN_EXT(15);
-DECLARE_ADC_OUT_CHAN_EXT(16);
-DECLARE_ADC_OUT_CHAN_EXT(17);
-DECLARE_ADC_OUT_CHAN_EXT(18);
-DECLARE_ADC_OUT_CHAN_EXT(19);
-DECLARE_ADC_OUT_CHAN_EXT(20);
-DECLARE_ADC_OUT_CHAN_EXT(21);
-DECLARE_ADC_OUT_CHAN_EXT(22);
-DECLARE_ADC_OUT_CHAN_EXT(23);
-DECLARE_ADC_OUT_CHAN_EXT(24);
-DECLARE_ADC_OUT_CHAN_EXT(25);
-DECLARE_ADC_OUT_CHAN_EXT(26);
-DECLARE_ADC_OUT_CHAN_EXT(27);
-DECLARE_ADC_OUT_CHAN_EXT(28);
-DECLARE_ADC_OUT_CHAN_EXT(29);
-DECLARE_ADC_OUT_CHAN_EXT(30);
-DECLARE_ADC_OUT_CHAN_EXT(31);
+/**
+ *  @brief Структура сообщения с массивом обработанных данных
+ */
+typedef struct {
+    float voltages[TOTAL_CHANNELS_CNT]; // Массив из 32 напряжений
+} adc_processed_msg_t;
+
+// Объявляем единственный выходной канал обработанных данных
+ZBUS_CHAN_DECLARE(adc_processed_chan);
+
 
 #ifdef __cplusplus
 }
