@@ -20,6 +20,7 @@ target_sources(app PRIVATE
         src/system_bridge.c
         src/seq_adc_processor.c
         src/seq_adc_shell.c
+        src/out_and_power_control.c
 )
 
 

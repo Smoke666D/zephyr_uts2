@@ -3,41 +3,67 @@
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/rtio/rtio.h>
+#include <zephyr/drivers/spi.h>
 #include "system_data_bus.h"
 #include <hc595_chain.h>
-#include "global_params.h"
+
+
 #include "out_and_power_control.h"
 
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
+/* ------------------------------------------------------------------ */
+/* 1. ОБЪЯВЛЕНИЕ ПРИКЛАДНЫХ И СИСТЕМНЫХ КАНАЛОВ ZBUS                  */
+/* ------------------------------------------------------------------ */
 
-
-/* 
- * 1. Выделяем стек потока и принудительно переносим его в быструю память DTCM [1.1.4, 2.3.1].
- * Используем __dtcm_bss_section, так как неинициализированный стек относится к сегменту BSS [1.1.4].
- */
-static uint8_t __attribute__((section("DTCM"), aligned(32))) 
-    hc595_dispatcher_stack[DISPATCHER_STACK_SIZE];
-
-
-/* 
- * 2. Управляющую структуру потока оставляем в стандартной RAM (SRAM) [1.1.4].
- * Это гарантирует отсутствие конфликтов с защитой ядра и MPU [1.1.4].
- */
-static struct k_thread hc595_dispatcher_thread_data;
-
-/* 1. Объявляем подписчика Zbus для управления выходами */
-ZBUS_SUBSCRIBER_DEFINE(hc595_sub, 8);
-
-/* 2. Объявляем канал Zbus для управления выходами */
-ZBUS_CHAN_DEFINE(hc595_chan,
+/* Прикладной канал команд (принимает желаемые состояния от приложения) */
+ZBUS_CHAN_DEFINE(app_control_chan,
                  struct hc595_channels_msg,
-                 NULL,
-                 NULL,
-                 ZBUS_OBSERVERS(hc595_sub),
+                 NULL, NULL,
+                 ZBUS_OBSERVERS_EMPTY, /* Обсервером будет листенер */
                  {0}
 );
 
+/* Системный канал примененных состояний (обновляется строго после SPI-транзакции) */
+ZBUS_CHAN_DEFINE(sys_applied_chan,
+                 struct hc595_channels_msg,
+                 NULL, NULL,
+                 ZBUS_OBSERVERS_EMPTY,
+                 {0}
+);
+
+/* Прикладной канал обратной связи (диагностика, КЗ и статус) */
+ZBUS_CHAN_DEFINE(app_status_chan,
+                 struct hc595_status_msg,
+                 NULL, NULL,
+                 ZBUS_OBSERVERS_EMPTY,
+                 {0}
+);
+
+/* ------------------------------------------------------------------ */
+/* 2. НАСТРОЙКА ПОДСИСТЕМЫ RTIO ДЛЯ SPI                               */
+/* ------------------------------------------------------------------ */
+
+/* Объявляем контекст RTIO: размер очереди отправки 4, очереди завершения 4 */
+RTIO_DEFINE(spi_rtio, 4, 4);
+
+/* 
+ * Объявляем асинхронное I/O устройство (iodev) для шины SPI нашего сдвигового регистра.
+ * Связываем его с узлом "hc595_chain" из Devicetree.
+ */
+SPI_DT_IODEV_DEFINE(hc595_iodev, 
+                    DT_NODELABEL(hc595_chain), 
+                    SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB, 
+                    0);
+
+/* 
+ * Буферы в оперативной памяти для асинхронной передачи.
+ * Объявлены статической (глобальной) памятью, чтобы их жизненный цикл 
+ * не прерывался при завершении функции листенера.
+ */
+static uint8_t spi_tx_buf[5];
+static struct hc595_channels_msg last_submitted_msg;
 
 /**
  * @brief Функция расчета маски для сдвигового регистра.
@@ -47,10 +73,8 @@ static void hc595_calculate_mask(const struct hc595_channels_msg *msg, uint8_t *
     if (len < 5) {
         return;
     }
-
     memset(tx_data, 0, len);
 
-    /* Заполняем управляющие сигналы LIN (старшая тетрада первого байта) */
     tx_data[0] = ((uint8_t)msg->lin_pb[0] << 4) |
                  ((uint8_t)msg->lin_pb[1] << 5) |
                  ((uint8_t)msg->lin_pb[2] << 6) |
@@ -58,7 +82,6 @@ static void hc595_calculate_mask(const struct hc595_channels_msg *msg, uint8_t *
 
     static const uint8_t state_to_bits[] = {0, 2, 1};
 
-    /* Заполняем каналы слаботочных драйверов */
     for (int i = 0; i < LOW_CUR_DRIVER_COUNT; i++) {
         uint8_t chip_index = 4 - (i / 4);
         uint8_t bit_indx = (i % 4) * 2;
@@ -70,65 +93,55 @@ static void hc595_calculate_mask(const struct hc595_channels_msg *msg, uint8_t *
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* 3. ЛИСТЕНЕР ПРИКЛАДНОГО КАНАЛА УПРАВЛЕНИЯ                           */
+/* ------------------------------------------------------------------ */
 
-/**
- * @brief Потокобезопасная атомарная установка состояния силового ключа (Zero-Copy)
- */
-int out_and_power_set_channel(uint8_t channel_idx, LOW_CUR_DRIVER_STATE state)
+static void app_control_listener_fn(const struct zbus_channel *chan)
 {
-    if (channel_idx >= LOW_CUR_DRIVER_COUNT) {
-        return -EINVAL;
-    }
+    if (chan == &app_control_chan) {
+        struct hc595_channels_msg msg;
 
-    /* 1. Блокируем внутренний семафор (мьютекс) канала в Zbus */
-    int err = zbus_chan_claim(&hc595_chan, K_FOREVER);
-    if (err == 0) {
-        /* 2. Получаем прямой указатель на структуру сообщения в памяти Zbus */
-        struct hc595_channels_msg *msg = (struct hc595_channels_msg *)zbus_chan_msg(&hc595_chan);
-        
-        /* 3. Модифицируем нужное поле прямо на месте (Zero-Copy) */
-        msg->low_cur_driver_channels[channel_idx] = state;
-        
-        /* 4. Принудительно запускаем рассылку уведомлений подписчикам */
-        zbus_chan_notify(&hc595_chan, K_MSEC(10));
-        
-        /* 5. Освобождаем встроенный семафор канала */
-        zbus_chan_finish(&hc595_chan);
-    }
+        /* Читаем желаемые уровни */
+        int err = zbus_chan_read(&app_control_chan, &msg, K_NO_WAIT);
+        if (err != 0) {
+            return;
+        }
 
-    return err;
+        /* Рассчитываем маску для SPI в глобальный буфер отправки */
+        hc595_calculate_mask(&msg, spi_tx_buf, sizeof(spi_tx_buf));
+
+        /* Сохраняем копию сообщения для последующего подтверждения */
+        memcpy(&last_submitted_msg, &msg, sizeof(struct hc595_channels_msg));
+
+        /* Получаем свободный элемент очереди отправки RTIO */
+        struct rtio_sqe *sqe = rtio_sqe_acquire(&spi_rtio);
+        if (sqe != NULL) {
+            /* 
+             * Подготавливаем асинхронную операцию записи по SPI.
+             * В качестве userdata передаем указатель на копию отправленного пакета, 
+             * чтобы извлечь его в коллбэке завершения.
+             */
+            rtio_sqe_prep_write(sqe, &hc595_iodev, RTIO_PRIO_NORM, 
+                                spi_tx_buf, sizeof(spi_tx_buf), 
+                                (void *)&last_submitted_msg);
+
+            /* Запускаем асинхронную отправку в аппаратную очередь драйвера */
+            rtio_submit(&spi_rtio, 1);
+        } else {
+            LOG_ERR("RTIO Submission Queue Overflow! Request dropped.");
+        }
+    }
 }
 
-/**
- * @brief Потокобезопасная атомарная установка состояния линии LIN (Zero-Copy)
- */
-int out_and_power_set_lin(uint8_t lin_idx, bool active)
-{
-    if (lin_idx >= LIN_COUNT) {
-        return -EINVAL;
-    }
+/* Регистрируем листенер в Zbus */
+ZBUS_LISTENER_DEFINE(app_control_lis, app_control_listener_fn);
 
-    /* 1. Блокируем внутренний семафор канала в Zbus */
-    int err = zbus_chan_claim(&hc595_chan, K_FOREVER);
-    if (err == 0) {
-        /* 2. Получаем прямой указатель на структуру сообщения в Zbus */
-        struct hc595_channels_msg *msg = (struct hc595_channels_msg *)zbus_chan_msg(&hc595_chan);
-        
-        /* 3. Модифицируем линию LIN прямо на месте */
-        msg->lin_pb[lin_idx] = active;
-        
-        /* 4. Принудительно запускаем рассылку уведомлений подписчикам */
-        zbus_chan_notify(&hc595_chan, K_MSEC(10));
-        
-        /* 5. Освобождаем встроенный семафор канала */
-        zbus_chan_finish(&hc595_chan);
-    }
+/* ------------------------------------------------------------------ */
+/* 4. ОБРАБОТЧИК ЗАВЕРШЕНИЯ ТРАНЗАКЦИЙ (CQE PROCESSOR)                */
+/* ------------------------------------------------------------------ */
 
-    return err;
-}
-
-/* Функция потока диспетчера (коллбэк) */
-static void hc595_dispatcher_thread(void *p1, void *p2, void *p3)
+static void cqe_processor_thread(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1);
     ARG_UNUSED(p2);
@@ -137,73 +150,43 @@ static void hc595_dispatcher_thread(void *p1, void *p2, void *p3)
     const struct device *hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));
 
     if (!device_is_ready(hc595_dev)) {
-        LOG_ERR("74HC595 device not ready in dispatcher thread");
+        LOG_ERR("74HC595 hardware device not ready");
         return;
     }
 
-    /* На старте выходы аппаратно выключены */
-    hc595_chain_output_enable(hc595_dev, false);
+    /* На старте аппаратно включаем выходы (разрешение OE) */
+    hc595_chain_output_enable(hc595_dev, true);
 
-    struct hc595_channels_msg current_msg = {0};  /* Желаемое состояние из Zbus */
-    uint8_t last_tx_data[5] = {0};
-    bool first_run = true;
-    const struct zbus_channel *chan;
+    LOG_INF("RTIO Completion Queue processor started.");
 
     while (1) {
-        /* Поток засыпает и ждет публикации в канале [2, 3] */
-        int err = zbus_sub_wait(&hc595_sub, &chan, K_FOREVER);
-        if (err != 0) {
-            continue;
-        }
+        /* 
+         * Поток спит без потребления ресурсов процессора, пока транзакция выполняется.
+         * Как только DMA закончит отправку и сработает прерывание, rtio_cqe_consume 
+         * мгновенно разблокирует этот поток.
+         */
+        struct rtio_cqe *cqe = rtio_cqe_consume(&spi_rtio);
+        if (cqe != NULL) {
+            if (cqe->result == 0) {
+                /* Извлекаем пакет примененного состояния из контекста userdata */
+                struct hc595_channels_msg *applied_msg = (struct hc595_channels_msg *)cqe->userdata;
 
-        if (chan == &hc595_chan) {
-            err = zbus_chan_read(&hc595_chan, &current_msg, K_NO_WAIT);
-            if (err != 0) {
-                continue;
+                /* 
+                 * Фиксируем факт успешной записи в системный канал Zbus.
+                 * Используем K_NO_WAIT, так как находимся в контексте асинхронного обработчика [2].
+                 */
+                zbus_chan_pub(&sys_applied_chan, applied_msg, K_NO_WAIT);
+                LOG_INF("SPI transfer finished, system applied state updated.");
+            } else {
+                LOG_ERR("Asynchronous SPI write failed with code: %d", cqe->result);
             }
 
-            uint8_t tx_data[5] = {0};
-
-            hc595_calculate_mask(&current_msg, tx_data, sizeof(tx_data));
-
-            /* Отправляем по SPI только при изменении битовой маски */
-            if (first_run || memcmp(tx_data, last_tx_data, sizeof(tx_data)) != 0) {
-                err = hc595_chain_write(hc595_dev, tx_data, sizeof(tx_data));
-                if (err) {
-                    LOG_ERR("Failed to write registers: %d", err);
-                } else {
-                    memcpy(last_tx_data, tx_data, sizeof(tx_data));
-                    
-                    if (first_run) {
-                        /* После первой успешной инициализации включаем выходы */
-                        hc595_chain_output_enable(hc595_dev, true);
-                        first_run = false;
-                    }
-                }
-            }
+            /* Возвращаем обработанный элемент в пул очереди */
+            rtio_cqe_release(&spi_rtio, cqe);
         }
     }
 }
 
-
-
-
-
-
-/**
- * @brief Функция ручной инициализации и запуска потока управления
- */
-int out_and_power_control_init(void)
-{
-    /* Создаем и запускаем поток на вытесняющем приоритете 8 [2.3.1] */
-    k_thread_create(&hc595_dispatcher_thread_data,
-                    (k_thread_stack_t *)hc595_dispatcher_stack,
-                    DISPATCHER_STACK_SIZE,
-                    hc595_dispatcher_thread,
-                    NULL, NULL, NULL,
-                    K_PRIO_PREEMPT(8), 0, K_NO_WAIT);
-                    
-    LOG_INF("HC595 Dispatcher thread initialized (Stack in DTCM).");
-    return 0;
-}
-
+/* Регистрируем поток обработки прерываний RTIO */
+K_THREAD_DEFINE(cqe_proc_thread_id, 1024, cqe_processor_thread, NULL, NULL, NULL,
+                K_PRIO_PREEMPT(7), 0, 0);
