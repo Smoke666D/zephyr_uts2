@@ -3,8 +3,7 @@
     {
       "name": "primary",
       "board": "uts2_motherboard",
-      "active": "true",
-      "default-runner": "stm32cubeprogrammer"
+      "active": "true"
     }
   ],
   "zephyr-workbench.westWorkspace": "${workspaceFolder}/../../zephyr_workspace/zephyrproject",

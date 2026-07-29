@@ -70,7 +70,6 @@ typedef struct {
 ZBUS_CHAN_DECLARE(adc_processed_chan);
 
 
-
 #ifdef __cplusplus
 }
 #endif

@@ -186,23 +186,7 @@ static void hc595_dispatcher_thread(void *p1, void *p2, void *p3)
 }
 
 
-static int _power_drv_param_set(PARAM_ID id, const PARAM_VAL *val)
-{
-    // 1. Проверяем диапазон параметров управления силовыми ключами (1 - 18)
-    if (id >= POWER_DRV_CTR_CHANNEL1 && id <= POWER_DRV_CTR_CHANNEL18)
-    {
-        uint32_t channel_idx = id - POWER_DRV_CTR_CHANNEL1;
-        return out_and_power_set_channel(channel_idx, (LOW_CUR_DRIVER_STATE)val->value.integer);
-    }
-    // 2. Проверяем диапазон параметров управления линиями LIN (1 - 4)
-    else if (id >= LIN1_PD && id <= LIN4_PD)
-    {
-        uint32_t lin_idx = id - LIN1_PD;
-        return out_and_power_set_lin(lin_idx, val->value.boolean);
-    }
 
-    return -ENOTSUP;
-}
 
 
 

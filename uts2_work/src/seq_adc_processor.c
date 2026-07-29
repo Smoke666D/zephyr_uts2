@@ -72,7 +72,7 @@ static void adc_processing_handler(void *arg)
     }
  /* Извлекаем интерфейс высокоуровневого API нашего драйвера */
     struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)seq_dev->api;
-    struct adc_data_msg msg; 
+
 
     // Извлекаем сырые данные из канала драйвера АЦП
     int ret = zbus_chan_read(driver_chan, &raw_msg, K_NO_WAIT);
@@ -98,12 +98,6 @@ static void adc_processing_handler(void *arg)
             int32_t temp_c = __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
 
             uint32_t temp_val = (uint32_t)(temp_c < 0 ? -temp_c : temp_c);
-
-
-            if (step == 0) {
-                msg.vdda_mv = vdda_mv;
-                msg.raw_temp = raw_temp;
-            }
 
             /* 
              * ТЕСТОВЫЙ РЕЖИМ ЗАПОЛНЕНИЯ:
@@ -131,8 +125,6 @@ static void adc_processing_handler(void *arg)
         }
     
         (void)zbus_chan_pub(&adc_processed_chan, &processed_msg, K_NO_WAIT);
-
-
 
     // Приведение сырых отсчетов к напряжениям (для 16-битного АЦП и Vref = 3.3V)
    /* for (int i = 0; i < TOTAL_CHANNELS_CNT; i++) 
