@@ -7,58 +7,14 @@
 #include "seq_mux_adc.h"
 
 
-
-
-
-// Макрос для определения ZBus канала
-#define DEFINE_ADC_OUT_CHAN(idx) \
-    ZBUS_CHAN_DEFINE(adc_out_chan_##idx, float, NULL, NULL, ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT(0.0f))
-
-// Явное определение 32 каналов (избавляет от проблем с арифметикой макросов)
-DEFINE_ADC_OUT_CHAN(0)
-DEFINE_ADC_OUT_CHAN(1)
-DEFINE_ADC_OUT_CHAN(2)
-DEFINE_ADC_OUT_CHAN(3)
-DEFINE_ADC_OUT_CHAN(4)
-DEFINE_ADC_OUT_CHAN(5)
-DEFINE_ADC_OUT_CHAN(6)
-DEFINE_ADC_OUT_CHAN(7)
-DEFINE_ADC_OUT_CHAN(8)
-DEFINE_ADC_OUT_CHAN(9)
-DEFINE_ADC_OUT_CHAN(10)
-DEFINE_ADC_OUT_CHAN(11)
-DEFINE_ADC_OUT_CHAN(12)
-DEFINE_ADC_OUT_CHAN(13)
-DEFINE_ADC_OUT_CHAN(14)
-DEFINE_ADC_OUT_CHAN(15)
-DEFINE_ADC_OUT_CHAN(16)
-DEFINE_ADC_OUT_CHAN(17)
-DEFINE_ADC_OUT_CHAN(18)
-DEFINE_ADC_OUT_CHAN(19)
-DEFINE_ADC_OUT_CHAN(20)
-DEFINE_ADC_OUT_CHAN(21)
-DEFINE_ADC_OUT_CHAN(22)
-DEFINE_ADC_OUT_CHAN(23)
-DEFINE_ADC_OUT_CHAN(24)
-DEFINE_ADC_OUT_CHAN(25)
-DEFINE_ADC_OUT_CHAN(26)
-DEFINE_ADC_OUT_CHAN(27)
-DEFINE_ADC_OUT_CHAN(28)
-DEFINE_ADC_OUT_CHAN(29)
-DEFINE_ADC_OUT_CHAN(30)
-DEFINE_ADC_OUT_CHAN(31)
-
-// Массив указателей на все 32 канала для быстрого доступа по индексу
-static const struct zbus_channel * const adc_out_channels[TOTAL_CHANNELS_CNT] = {
-    &adc_out_chan_0,  &adc_out_chan_1,  &adc_out_chan_2,  &adc_out_chan_3,
-    &adc_out_chan_4,  &adc_out_chan_5,  &adc_out_chan_6,  &adc_out_chan_7,
-    &adc_out_chan_8,  &adc_out_chan_9,  &adc_out_chan_10, &adc_out_chan_11,
-    &adc_out_chan_12, &adc_out_chan_13, &adc_out_chan_14, &adc_out_chan_15,
-    &adc_out_chan_16, &adc_out_chan_17, &adc_out_chan_18, &adc_out_chan_19,
-    &adc_out_chan_20, &adc_out_chan_21, &adc_out_chan_22, &adc_out_chan_23,
-    &adc_out_chan_24, &adc_out_chan_25, &adc_out_chan_26, &adc_out_chan_27,
-    &adc_out_chan_28, &adc_out_chan_29, &adc_out_chan_30, &adc_out_chan_31
-};
+// Определение единого канала обработанных данных
+ZBUS_CHAN_DEFINE(adc_processed_chan,
+                 adc_processed_msg_t,
+                 NULL,                 /* Без валидатора */
+                 NULL,                 /* Без метаданных */
+                 ZBUS_OBSERVERS_EMPTY, /* Список статических наблюдателей пуст */
+                 ZBUS_MSG_INIT(0)      /* Инициализация нулями */
+);
 
 
 static const uint32_t r1_resistors[TOTAL_CHANNEL_COUNT] = {
@@ -125,6 +81,7 @@ static void adc_processing_handler(void *arg)
         return;
     }
 
+    adc_processed_msg_t processed_msg;
 
     for (int step = 0; step < 8; step++) {
             uint32_t raw_vref = get_vref_raw(seq_dev, step);
@@ -153,15 +110,12 @@ static void adc_processing_handler(void *arg)
              * 1-й и 3-й канал шага (индексы 0 и 2) — пишем VDDA в милливольтах
              * 2-й и 4-й канал шага (индексы 1 и 3) — пишем Температуру в градусах
              */
-            (void)zbus_chan_pub(adc_out_channels[step * 4 + 0], &vdda_mv, K_NO_WAIT);
-            (void)zbus_chan_pub(adc_out_channels[step * 4 + 1], &temp_val, K_NO_WAIT);
-            (void)zbus_chan_pub(adc_out_channels[step * 4 + 2], &vdda_mv, K_NO_WAIT);
-            (void)zbus_chan_pub(adc_out_channels[step * 4 + 3], &temp_val, K_NO_WAIT);
+            processed_msg.voltages[step * 4 + 0] =vdda_mv;
+            processed_msg.voltages[step * 4 + 1] =temp_val;
+            processed_msg.voltages[step * 4 + 2] =vdda_mv;
+            processed_msg.voltages[step * 4 + 3] =temp_val;
 
-           // msg.channels_mv[step * 4 + 0] = vdda_mv;
-           // msg.channels_mv[step * 4 + 1] = temp_val;
-          //  msg.channels_mv[step * 4 + 2] = vdda_mv;
-          //  msg.channels_mv[step * 4 + 3] = temp_val;
+
 
             /* 
              * РЕАЛЬНЫЙ КОД ДЛЯ ПРИВЕДЕНИЯ К НАПРЯЖЕНИЮ (закомментирован для тестов по запросу):
@@ -175,6 +129,9 @@ static void adc_processing_handler(void *arg)
              * }
              */
         }
+    
+        (void)zbus_chan_pub(&adc_processed_chan, &processed_msg, K_NO_WAIT);
+
 
 
     // Приведение сырых отсчетов к напряжениям (для 16-битного АЦП и Vref = 3.3V)
