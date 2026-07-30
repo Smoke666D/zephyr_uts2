@@ -186,10 +186,14 @@
     cs-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;      // Пин защелки Latch (ST_CP)
 
     hc595_chain: hc595-chain@0 {
-        compatible = "custom,hc595-chain";
+        compatible = "vnd,spi-device"; // стандартный виртуальный SPI-узел Zephyr
         reg = <0>;
         spi-max-frequency = <10000000>;
-        chain-length = <5>;
-        oe-gpios = <&gpioa 3 GPIO_ACTIVE_LOW>;  // Пин разрешения выходов OE (активный 0)
+    };
+};
+/ {
+    /* zephyr,user — это стандартный узел для разрозненных пользовательских GPIO [1] */
+    zephyr,user {
+        oe-gpios = <&gpioa 3 GPIO_ACTIVE_LOW>;
     };
 };

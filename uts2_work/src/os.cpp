@@ -133,22 +133,3 @@ rc timer_base::cancel() {
 
 #include <cstddef>
 
-// Если компилятор не находит определение std::align_val_t, мы можем определить его сами
-#if __cplusplus >= 201703L
-namespace std {
-    enum class align_val_t : size_t {};
-}
-
-// Заглушка для оператора delete с выравниванием (C++17)
-void operator delete(void* ptr, std::size_t size, std::align_val_t al) noexcept {
-    (void)ptr;
-    (void)size;
-    (void)al;
-    // Здесь ничего не делаем, так как статическая память не удаляется
-}
-
-void operator delete(void* ptr, std::align_val_t al) noexcept {
-    (void)ptr;
-    (void)al;
-}
-#endif

@@ -3,11 +3,16 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
-#include "global_params.h"
-#include "param_server.h"
+#include <zephyr/zbus/zbus.h>   /* Добавляем заголовок Zbus */
+#include "system_data_bus.h"   /* Структуры данных и перечисления */
+
+LOG_MODULE_REGISTER(hc595_shell, LOG_LEVEL_INF);
+
+/* 1. Объявляем внешний прикладной канал управления, созданный в out_and_power_control_rtio.c */
+ZBUS_CHAN_DECLARE(app_control_chan);
 
 /* ------------------------------------------------------------------ */
-/* 1. КОМАНДА: lin_pb_set <1-4> <ON/OFF>                              */
+/* КОМАНДА: lin_pb_set <1-4> <ON/OFF>                                 */
 /* ------------------------------------------------------------------ */
 static int cmd_lin_pb_set(const struct shell *sh, size_t argc, char **argv)
 {
@@ -35,28 +40,34 @@ static int cmd_lin_pb_set(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    /* Превращаем в ID параметра. LIN1_PD — это базовый ID */
-    PARAM_ID param_id = LIN1_PD + (channel_num - 1);
+    /* 
+     * Атомарный Zero-Copy доступ к каналу Zbus.
+     * Блокируем встроенный семафор канала [2].
+     */
+    int err = zbus_chan_claim(&app_control_chan, K_FOREVER);
+    if (err == 0) {
+        /* Получаем прямой указатель на структуру данных в памяти Zbus */
+        struct hc595_channels_msg *msg = (struct hc595_channels_msg *)zbus_chan_msg(&app_control_chan);
+        
+        /* Модифицируем конкретное поле */
+        msg->lin_pb[channel_num - 1] = active;
 
-    PARAM_VAL val;
-    val.value.boolean = active;
+        /* Принудительно запускаем рассылку уведомлений (листенер RTIO проснется сам) [2] */
+        zbus_chan_notify(&app_control_chan, K_MSEC(10));
 
-    /* Записываем через Сервер Параметров */
-    int ret = param_set(param_id, &val);
-    if (ret == 0) {
-        shell_print(sh, "LIN%ld_PD successfully set to %s", 
-                    channel_num, active ? "ON" : "OFF");
-    } else if (ret == -ENODEV) {
-        shell_error(sh, "Error: out_and_power module is not active or compiled.");
+        /* Освобождаем встроенный семафор канала */
+        zbus_chan_finish(&app_control_chan);
+
+        shell_print(sh, "LIN%ld_PD set to %s successfully.", channel_num, active ? "ON" : "OFF");
     } else {
-        shell_error(sh, "Failed to set LIN: error code %d", ret);
+        shell_error(sh, "Zbus channel claim failed: %d", err);
     }
 
-    return ret;
+    return err;
 }
 
 /* ------------------------------------------------------------------ */
-/* 2. КОМАНДА: out_set <1-18> <LOW/HIGH/INPUT>                         */
+/* КОМАНДА: out_set <1-18> <LOW/HIGH/INPUT>                           */
 /* ------------------------------------------------------------------ */
 static int cmd_out_set(const struct shell *sh, size_t argc, char **argv)
 {
@@ -86,29 +97,34 @@ static int cmd_out_set(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    /* Превращаем в ID параметра */
-    PARAM_ID param_id = POWER_DRV_CTR_CHANNEL1 + (channel_num - 1);
+    /* 
+     * Атомарный Zero-Copy доступ к каналу Zbus [2].
+     */
+    int err = zbus_chan_claim(&app_control_chan, K_FOREVER);
+    if (err == 0) {
+        struct hc595_channels_msg *msg = (struct hc595_channels_msg *)zbus_chan_msg(&app_control_chan);
+        
+        /* Модифицируем конкретный силовой канал */
+        msg->low_cur_driver_channels[channel_num - 1] = state;
 
-    PARAM_VAL val;
-    val.value.integer = (int32_t)state;
+        /* Принудительно запускаем рассылку уведомлений [2] */
+        zbus_chan_notify(&app_control_chan, K_MSEC(10));
 
-    /* Записываем через Сервер Параметров */
-    int ret = param_set(param_id, &val);
-    if (ret == 0) {
+        /* Освобождаем канал */
+        zbus_chan_finish(&app_control_chan);
+
         const char *state_str = (state == OUT_LOW) ? "LOW" : 
                                 ((state == OUT_HIGH) ? "HIGH" : "INPUT");
-        shell_print(sh, "Channel %ld successfully set to %s", channel_num, state_str);
-    } else if (ret == -ENODEV) {
-        shell_error(sh, "Error: out_and_power module is not active or compiled.");
+        shell_print(sh, "Channel %ld set to %s successfully.", channel_num, state_str);
     } else {
-        shell_error(sh, "Failed to set Channel: error code %d", ret);
+        shell_error(sh, "Zbus channel claim failed: %d", err);
     }
 
-    return ret;
+    return err;
 }
 
 /* ------------------------------------------------------------------ */
-/* РЕГИСТРАЦИЯ КОМАНД В СИСТЕМЕ SHELL ZEPHYR                          */
+/* РЕГИСТРАЦИЯ КОМАНД                                                 */
 /* ------------------------------------------------------------------ */
 
 SHELL_CMD_REGISTER(lin_pb_set, NULL, 

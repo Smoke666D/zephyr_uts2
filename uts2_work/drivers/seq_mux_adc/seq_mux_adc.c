@@ -65,6 +65,8 @@ static uint32_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
 
 static struct k_mutex mutex_lock;
 static struct k_sem   sem_data_ready;
+static struct k_msgq adc_msgq;
+static char __aligned(4) adc_msgq_buffer[4 * sizeof(seq_mux_adc_msg_t)];
 
 /***************************************************************************************************
  *                                        ZBUS CHANNELS
@@ -113,6 +115,7 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
             memcpy(msg.data, adc_buf_b, sizeof(msg.data));
         }        
         (void)zbus_chan_pub(&seq_mux_adc_chan, &msg, K_NO_WAIT);
+        (void)k_msgq_put(&adc_msgq, &msg, K_NO_WAIT);
         k_sem_give(&sem_data_ready);
     }
 }
@@ -489,6 +492,7 @@ static int _seq_mux_adc_init(const struct device *_dev)
 
     k_mutex_init(&mutex_lock);
     k_sem_init(&sem_data_ready, 0, 1);
+    k_msgq_init(&adc_msgq, adc_msgq_buffer, sizeof(seq_mux_adc_msg_t), 4);
 
     _gpio_init();
 
@@ -530,6 +534,12 @@ static int _seq_mux_adc_init(const struct device *_dev)
     return 0;
 }
 
+static struct k_msgq *_seq_mux_adc_get_queue_impl(const struct device *_dev)
+{
+    ARG_UNUSED(_dev);
+    return &adc_msgq;
+}
+
 /***************************************************************************************************
  *                                        PUBLIC FUNCTIONS
  **************************************************************************************************/
@@ -538,7 +548,8 @@ static const struct seq_mux_adc_api driver_api =
 {
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
     .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
-     .get_channel = _seq_mux_adc_get_channel_impl,
+    .get_channel = _seq_mux_adc_get_channel_impl,
+    .get_queue = _seq_mux_adc_get_queue_impl,
 };
 
 static const struct seq_mux_adc_config seq_config = 

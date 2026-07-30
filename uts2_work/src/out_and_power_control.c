@@ -3,29 +3,40 @@
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/init.h>      /* Для SYS_INIT */
 #include <zephyr/rtio/rtio.h>
 #include <zephyr/drivers/spi.h>
 #include "system_data_bus.h"
-#include <hc595_chain.h>
 
-
-#include "out_and_power_control.h"
 
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
 /* ------------------------------------------------------------------ */
-/* 1. ОБЪЯВЛЕНИЕ ПРИКЛАДНЫХ И СИСТЕМНЫХ КАНАЛОВ ZBUS                  */
+/* 1. ОБЪЯВЛЕНИЕ РЕСУРСОВ И ПИНОВ                                     */
 /* ------------------------------------------------------------------ */
 
-/* Прикладной канал команд (принимает желаемые состояния от приложения) */
+/* Пин разрешения выходов OE из узла zephyr,user [1] */
+static const struct gpio_dt_spec oe_gpio = GPIO_DT_SPEC_GET(DT_PATH(zephyr_user), oe_gpios);
+
+/* Спецификация SPI для синхронной записи при старте системы [1.2.2] */
+static const struct spi_dt_spec init_spi_spec = 
+    SPI_DT_SPEC_GET(DT_NODELABEL(hc595_chain),
+                    SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB);
+
+/* ------------------------------------------------------------------ */
+/* 2. ОБЪЯВЛЕНИЕ ПРИКЛАДНЫХ И СИСТЕМНЫХ КАНАЛОВ ZBUS                  */
+/* ------------------------------------------------------------------ */
+
+/* Прикладной канал команд */
 ZBUS_CHAN_DEFINE(app_control_chan,
                  struct hc595_channels_msg,
                  NULL, NULL,
-                 ZBUS_OBSERVERS_EMPTY, /* Обсервером будет листенер */
+                 ZBUS_OBSERVERS_EMPTY,
                  {0}
 );
 
-/* Системный канал примененных состояний (обновляется строго после SPI-транзакции) */
+/* Системный канал примененных состояний */
 ZBUS_CHAN_DEFINE(sys_applied_chan,
                  struct hc595_channels_msg,
                  NULL, NULL,
@@ -42,26 +53,17 @@ ZBUS_CHAN_DEFINE(app_status_chan,
 );
 
 /* ------------------------------------------------------------------ */
-/* 2. НАСТРОЙКА ПОДСИСТЕМЫ RTIO ДЛЯ SPI                               */
+/* 3. НАСТРОЙКА ПОДСИСТЕМЫ RTIO ДЛЯ SPI                               */
 /* ------------------------------------------------------------------ */
 
-/* Объявляем контекст RTIO: размер очереди отправки 4, очереди завершения 4 */
+/* Размер очереди отправки 4, очереди завершения 4 (не используется из-за NO_RESPONSE) */
 RTIO_DEFINE(spi_rtio, 4, 4);
 
-/* 
- * Объявляем асинхронное I/O устройство (iodev) для шины SPI нашего сдвигового регистра.
- * Связываем его с узлом "hc595_chain" из Devicetree.
- */
 SPI_DT_IODEV_DEFINE(hc595_iodev, 
                     DT_NODELABEL(hc595_chain), 
                     SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_TRANSFER_MSB, 
                     0);
 
-/* 
- * Буферы в оперативной памяти для асинхронной передачи.
- * Объявлены статической (глобальной) памятью, чтобы их жизненный цикл 
- * не прерывался при завершении функции листенера.
- */
 static uint8_t spi_tx_buf[5];
 static struct hc595_channels_msg last_submitted_msg;
 
@@ -94,7 +96,29 @@ static void hc595_calculate_mask(const struct hc595_channels_msg *msg, uint8_t *
 }
 
 /* ------------------------------------------------------------------ */
-/* 3. ЛИСТЕНЕР ПРИКЛАДНОГО КАНАЛА УПРАВЛЕНИЯ                           */
+/* 4. НАТИВНЫЙ ОБРАБОТЧИК ЗАВЕРШЕНИЯ ТРАНЗАКЦИИ (RTIO CALLBACK)       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @brief Асинхронный коллбэк. Вызывается из ISR-контекста прерывания SPI [1.2.6]
+ */
+static void spi_completion_callback(struct rtio *r, const struct rtio_sqe *sqe, int result, void *arg0)
+{
+    ARG_UNUSED(r);
+    ARG_UNUSED(sqe);
+
+    if (result == 0) {
+        struct hc595_channels_msg *applied_msg = (struct hc595_channels_msg *)arg0;
+
+        /* Фиксируем отправку в системный Zbus. Используем K_NO_WAIT для безопасного вызова из ISR [2] */
+        zbus_chan_pub(&sys_applied_chan, applied_msg, K_NO_WAIT);
+    } else {
+        /* В реальной системе здесь можно инкрементировать счетчик аппаратных сбоев SPI */
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. ЛИСТЕНЕР ПРИКЛАДНОГО КАНАЛА УПРАВЛЕНИЯ                           */
 /* ------------------------------------------------------------------ */
 
 static void app_control_listener_fn(const struct zbus_channel *chan)
@@ -102,91 +126,94 @@ static void app_control_listener_fn(const struct zbus_channel *chan)
     if (chan == &app_control_chan) {
         struct hc595_channels_msg msg;
 
-        /* Читаем желаемые уровни */
         int err = zbus_chan_read(&app_control_chan, &msg, K_NO_WAIT);
         if (err != 0) {
             return;
         }
 
-        /* Рассчитываем маску для SPI в глобальный буфер отправки */
         hc595_calculate_mask(&msg, spi_tx_buf, sizeof(spi_tx_buf));
-
-        /* Сохраняем копию сообщения для последующего подтверждения */
         memcpy(&last_submitted_msg, &msg, sizeof(struct hc595_channels_msg));
 
-        /* Получаем свободный элемент очереди отправки RTIO */
-        struct rtio_sqe *sqe = rtio_sqe_acquire(&spi_rtio);
-        if (sqe != NULL) {
-            /* 
-             * Подготавливаем асинхронную операцию записи по SPI.
-             * В качестве userdata передаем указатель на копию отправленного пакета, 
-             * чтобы извлечь его в коллбэке завершения.
-             */
-            rtio_sqe_prep_write(sqe, &hc595_iodev, RTIO_PRIO_NORM, 
-                                spi_tx_buf, sizeof(spi_tx_buf), 
-                                (void *)&last_submitted_msg);
+        /* Запрашиваем два элемента из очереди для организации цепочки */
+        struct rtio_sqe *sqe_write = rtio_sqe_acquire(&spi_rtio);
+        struct rtio_sqe *sqe_callback = rtio_sqe_acquire(&spi_rtio);
 
-            /* Запускаем асинхронную отправку в аппаратную очередь драйвера */
-            rtio_submit(&spi_rtio, 1);
+        if (sqe_write != NULL && sqe_callback != NULL) {
+            /* 1. Подготавливаем асинхронную отправку. 
+             * Флаг CHAINED связывает эту операцию со следующей [1.2.4].
+             * Флаг NO_RESPONSE отключает генерацию CQE, разгружая память линкера [1.2.3]. */
+            rtio_sqe_prep_write(sqe_write, &hc595_iodev, RTIO_PRIO_NORM, 
+                                spi_tx_buf, sizeof(spi_tx_buf), NULL);
+            sqe_write->flags |= RTIO_SQE_CHAINED | RTIO_SQE_NO_RESPONSE;
+
+            /* 2. Подготавливаем коллбэк завершения, передавая адрес сообщения */
+            rtio_sqe_prep_callback(sqe_callback, spi_completion_callback, 
+                                   (void *)&last_submitted_msg, NULL);
+            sqe_callback->flags |= RTIO_SQE_NO_RESPONSE;
+
+            /* Отправляем цепочку из 2-х задач на исполнение */
+            rtio_submit(&spi_rtio, 2);
         } else {
-            LOG_ERR("RTIO Submission Queue Overflow! Request dropped.");
+            LOG_ERR("RTIO queue overflow! Commands dropped.");
         }
     }
 }
 
-/* Регистрируем листенер в Zbus */
 ZBUS_LISTENER_DEFINE(app_control_lis, app_control_listener_fn);
 
 /* ------------------------------------------------------------------ */
-/* 4. ОБРАБОТЧИК ЗАВЕРШЕНИЯ ТРАНЗАКЦИЙ (CQE PROCESSOR)                */
+/* 6. ФУНКЦИЯ АВТОИНИЦИАЛИЗАЦИИ И СБРОСА ПРИ СТАРТЕ                   */
 /* ------------------------------------------------------------------ */
 
-static void cqe_processor_thread(void *p1, void *p2, void *p3)
+static int out_and_power_init(void)
 {
-    ARG_UNUSED(p1);
-    ARG_UNUSED(p2);
-    ARG_UNUSED(p3);
+    int err;
 
-    const struct device *hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));
-
-    if (!device_is_ready(hc595_dev)) {
-        LOG_ERR("74HC595 hardware device not ready");
-        return;
+    /* 1. Инициализируем пин Output Enable */
+    if (!gpio_is_ready_dt(&oe_gpio)) {
+        LOG_ERR("OE GPIO device is not ready!");
+        return -ENODEV;
     }
 
-    /* На старте аппаратно включаем выходы (разрешение OE) */
-    hc595_chain_output_enable(hc595_dev, true);
-
-    LOG_INF("RTIO Completion Queue processor started.");
-
-    while (1) {
-        /* 
-         * Поток спит без потребления ресурсов процессора, пока транзакция выполняется.
-         * Как только DMA закончит отправку и сработает прерывание, rtio_cqe_consume 
-         * мгновенно разблокирует этот поток.
-         */
-        struct rtio_cqe *cqe = rtio_cqe_consume(&spi_rtio);
-        if (cqe != NULL) {
-            if (cqe->result == 0) {
-                /* Извлекаем пакет примененного состояния из контекста userdata */
-                struct hc595_channels_msg *applied_msg = (struct hc595_channels_msg *)cqe->userdata;
-
-                /* 
-                 * Фиксируем факт успешной записи в системный канал Zbus.
-                 * Используем K_NO_WAIT, так как находимся в контексте асинхронного обработчика [2].
-                 */
-                zbus_chan_pub(&sys_applied_chan, applied_msg, K_NO_WAIT);
-                LOG_INF("SPI transfer finished, system applied state updated.");
-            } else {
-                LOG_ERR("Asynchronous SPI write failed with code: %d", cqe->result);
-            }
-
-            /* Возвращаем обработанный элемент в пул очереди */
-            rtio_cqe_release(&spi_rtio, cqe);
-        }
+    /* Аппаратно отключаем выходы (перевод в Hi-Z), чтобы избежать бросков */
+    err = gpio_pin_configure_dt(&oe_gpio, GPIO_OUTPUT_INACTIVE);
+    if (err) {
+        LOG_ERR("Failed to configure OE pin: %d", err);
+        return err;
     }
+
+    /* 2. Инициализируем аппаратную шину SPI */
+    if (!spi_is_ready_dt(&init_spi_spec)) {
+        LOG_ERR("SPI device not ready during system init!");
+        return -ENODEV;
+    }
+
+    /* 3. Готовим безопасную стартовую маску (все нули) */
+    uint8_t init_tx[5] = {0};
+    struct spi_buf tx_buf = { .buf = init_tx, .len = sizeof(init_tx) };
+    struct spi_buf_set tx_bufs = { .buffers = &tx_buf, .count = 1 };
+
+    /* Синхронная (блокирующая) отправка нулей при старте системы [1.2.2] */
+    err = spi_write_dt(&init_spi_spec, &tx_bufs);
+    if (err) {
+        LOG_ERR("Failed to write initial safe state: %d", err);
+        return err;
+    }
+
+    /* 4. Физически разрешаем работу выходов (прижимаем OE к земле) [1] */
+    err = gpio_pin_set_dt(&oe_gpio, 1);
+    if (err) {
+        LOG_ERR("Failed to enable OE: %d", err);
+        return err;
+    }
+
+    LOG_INF("Out & Power module successfully initialized (Outputs enabled with safe state).");
+    return 0;
 }
 
-/* Регистрируем поток обработки прерываний RTIO */
-K_THREAD_DEFINE(cqe_proc_thread_id, 1024, cqe_processor_thread, NULL, NULL, NULL,
-                K_PRIO_PREEMPT(7), 0, 0);
+/* 
+ * Автозапуск на этапе POST_KERNEL.
+ * Приоритет 85 гарантирует, что модуль запустится строго ПОСЛЕ инициализации 
+ * драйверов SPI и GPIO (приоритеты 70-80), но ДО старта прикладных потоков (90) [1.1.1, 1.1.3].
+ */
+SYS_INIT(out_and_power_init, POST_KERNEL, 85);
