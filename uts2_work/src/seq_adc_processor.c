@@ -50,6 +50,7 @@ static uint32_t get_vref_raw(const struct device *dev, uint8_t step)
     api->get_channel_value(dev, step * 4 + 1, &raw_vref);
     return raw_vref;
 }
+extern struct k_msgq drv_sensor_msgq;
 
 /**
  *  @brief      Основная рабочая функция (выполняется в потоке воркера)
@@ -82,6 +83,7 @@ static void adc_processing_handler(void *arg)
     }
 
     adc_processed_msg_t processed_msg;
+    seq_mux_adc_msg_t temp_msgq;
 
     for (int step = 0; step < 8; step++) {
             uint32_t raw_vref = get_vref_raw(seq_dev, step);
@@ -108,8 +110,10 @@ static void adc_processing_handler(void *arg)
             processed_msg.voltages[step * 4 + 1] =temp_val;
             processed_msg.voltages[step * 4 + 2] =vdda_mv;
             processed_msg.voltages[step * 4 + 3] =temp_val;
-
-
+           temp_msgq.data[step * 4 + 0] =vdda_mv;
+            temp_msgq.data[step * 4 + 1] =temp_val;
+            temp_msgq.data[step * 4 + 2] =vdda_mv;
+            temp_msgq.data[step * 4 + 3] =temp_val;
 
             /* 
              * РЕАЛЬНЫЙ КОД ДЛЯ ПРИВЕДЕНИЯ К НАПРЯЖЕНИЮ (закомментирован для тестов по запросу):
@@ -123,8 +127,8 @@ static void adc_processing_handler(void *arg)
              * }
              */
         }
-    
-        (void)zbus_chan_pub(&adc_processed_chan, &processed_msg, K_NO_WAIT);
+        (void)k_msgq_put(&drv_sensor_msgq, &temp_msgq, K_NO_WAIT);
+        //(void)zbus_chan_pub(&adc_processed_chan, &processed_msg, K_NO_WAIT);
 
     // Приведение сырых отсчетов к напряжениям (для 16-битного АЦП и Vref = 3.3V)
    /* for (int i = 0; i < TOTAL_CHANNELS_CNT; i++) 

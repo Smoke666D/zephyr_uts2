@@ -82,6 +82,7 @@ private:
         struct k_poll_event poll_events[MaxEvents]; 
         
         while (true) {
+            
             if (num_registrations_ == 0) {
                 k_msleep(1); 
                 continue;
@@ -104,6 +105,7 @@ private:
                     i--;
 
                     handle.resume();
+                    break;
                 }
             }
         }

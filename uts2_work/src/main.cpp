@@ -12,8 +12,9 @@
 #include "ina228_stream_thread.h"
 #include "coorutines.hpp"
 #include "adc_mux_processor.hpp"
+#include "seq_mux_adc.h"
 
-K_MSGQ_DEFINE(drv_sensor_msgq, sizeof(SensorRawData), 10, 4);
+K_MSGQ_DEFINE(drv_sensor_msgq, sizeof(seq_mux_adc_msg_t), 10, 4);
 
 
 SensorDispatcher g_sensor_disp("sensor_disp", os::priority::normal);
