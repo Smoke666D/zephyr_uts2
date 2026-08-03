@@ -7,14 +7,7 @@
 #include "seq_mux_adc.h"
 
 
-// Определение единого канала обработанных данных
-ZBUS_CHAN_DEFINE(adc_processed_chan,
-                 adc_processed_msg_t,
-                 NULL,                 /* Без валидатора */
-                 NULL,                 /* Без метаданных */
-                 ZBUS_OBSERVERS_EMPTY, /* Список статических наблюдателей пуст */
-                 ZBUS_MSG_INIT(0)      /* Инициализация нулями */
-);
+
 
 
 static const uint32_t r1_resistors[TOTAL_CHANNEL_COUNT] = {
@@ -128,7 +121,7 @@ static void adc_processing_handler(void *arg)
              */
         }
         (void)k_msgq_put(&drv_sensor_msgq, &temp_msgq, K_NO_WAIT);
-        //(void)zbus_chan_pub(&adc_processed_chan, &processed_msg, K_NO_WAIT);
+       
 
     // Приведение сырых отсчетов к напряжениям (для 16-битного АЦП и Vref = 3.3V)
    /* for (int i = 0; i < TOTAL_CHANNELS_CNT; i++) 

@@ -21,6 +21,16 @@ static void log_sensor_data(uint16_t adc_val) {
 
 extern struct k_msgq drv_sensor_msgq;
 
+
+// Определение единого канала обработанных данных
+ZBUS_CHAN_DEFINE(adc_processed_chan,
+                 adc_processed_msg_t,
+                 NULL,                 /* Без валидатора */
+                 NULL,                 /* Без метаданных */
+                 ZBUS_OBSERVERS_EMPTY, /* Список статических наблюдателей пуст */
+                 ZBUS_MSG_INIT(0)      /* Инициализация нулями */
+);
+
 // Реализация корутины
 os::DetachedTask<SensorDispatcher> sensor_bridge_daemon(SensorDispatcher& disp) 
 {
