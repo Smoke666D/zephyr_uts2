@@ -43,8 +43,6 @@ static void        _dma_callback(const struct device *_dev, void *_user_data,
 static int         _seq_mux_adc_get_channel_value_impl(const struct device *_dev, 
                                                        uint8_t _channel_idx, 
                                                        uint32_t *_val);
-static int         _seq_mux_adc_wait_for_data_impl(const struct device *_dev, 
-                                                   k_timeout_t _timeout);
 static void        _fill_gpio_buffer(uint32_t *_buf);
 static inline int  _dma_init(const struct seq_mux_adc_config *_config, 
                              ADC_TypeDef *_adc_inst, 
@@ -64,7 +62,6 @@ static uint32_t adc_buf_b[TOTAL_CHANNELS_CNT] __nocache;
 static uint32_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
 
 static struct k_mutex mutex_lock;
-static struct k_sem   sem_data_ready;
 static struct k_msgq adc_msgq;
 static char __aligned(4) adc_msgq_buffer[4 * sizeof(seq_mux_adc_msg_t)];
 
@@ -116,7 +113,7 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
         }        
         (void)zbus_chan_pub(&seq_mux_adc_chan, &msg, K_NO_WAIT);
         (void)k_msgq_put(&adc_msgq, &msg, K_NO_WAIT);
-        k_sem_give(&sem_data_ready);
+
     }
 }
 
@@ -170,22 +167,7 @@ static int _seq_mux_adc_get_channel_value_impl(const struct device *_dev,
     return 0;
 }
 
-/**
- *  @brief      Ожидание готовности новых данных АЦП
- *  @details    Ожидает освобождение семафора готовности данных 
- *              в течение заданного таймаута.
- *
- *  @param      _dev     - Указатель на устройство
- *  @param      _timeout - Время ожидания
- *
- *  @return     int - Ноль при успехе, код ошибки при таймауте
- */
-static int _seq_mux_adc_wait_for_data_impl(const struct device *_dev, 
-                                           k_timeout_t _timeout)
-{
-    ARG_UNUSED(_dev);
-    return k_sem_take(&sem_data_ready, _timeout);
-}
+
 
 /**
  *  @brief      Заполнение буфера значений для BSRR GPIO
@@ -491,7 +473,6 @@ static int _seq_mux_adc_init(const struct device *_dev)
     TIM_TypeDef *tmr_inst = (TIM_TypeDef *)SEQ_TIM_BASE;
 
     k_mutex_init(&mutex_lock);
-    k_sem_init(&sem_data_ready, 0, 1);
     k_msgq_init(&adc_msgq, adc_msgq_buffer, sizeof(seq_mux_adc_msg_t), 4);
 
     _gpio_init();
@@ -547,7 +528,6 @@ static struct k_msgq *_seq_mux_adc_get_queue_impl(const struct device *_dev)
 static const struct seq_mux_adc_api driver_api = 
 {
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
-    .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
     .get_channel = _seq_mux_adc_get_channel_impl,
     .get_queue = _seq_mux_adc_get_queue_impl,
 };

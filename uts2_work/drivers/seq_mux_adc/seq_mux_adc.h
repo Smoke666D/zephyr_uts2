@@ -79,9 +79,6 @@ typedef struct seq_mux_adc_api
     /// @brief Получение значения АЦП для указанного канала (0..31)
     int (*get_channel_value)(const struct device *_dev, uint8_t _channel_idx, uint32_t *_val);
     
-    /// @brief Ожидание готовности новых данных АЦП с учетом таймаута
-    int (*wait_for_data)(const struct device *_dev, k_timeout_t _timeout);
-
     const struct zbus_channel *(*get_channel)(const struct device *_dev);
 
     struct k_msgq *(*get_queue)(const struct device *_dev);

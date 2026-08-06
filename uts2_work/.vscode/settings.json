@@ -12,5 +12,6 @@
   "zephyr-workbench.sdk": "global",
   "zephyr-workbench.intellisense.provider": "cpptools",
   "cmake.configureOnOpen": false,
-  "cmake.enableAutomaticKitScan": false
+  "cmake.enableAutomaticKitScan": false,
+  "terminal.integrated.stickyScroll.enabled": false
 }
