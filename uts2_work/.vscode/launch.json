@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Zephyr Workbench Debug [primary]",
+      "type": "cortex-debug",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/build/primary/zephyr/zephyr.elf",
+      "svdFile": "C:\\ST\\STM32CubeCLT_1.22.0\\STMicroelectronics_CMSIS_SVD\\STM32H723.svd",
+      "gdbPath": "${config:zephyr-workbench.sdk}\\gnu\\arm-zephyr-eabi\\bin\\arm-zephyr-eabi-gdb-py.exe",
+      "armToolchainPath": "${config:zephyr-workbench.sdk}\\gnu\\arm-zephyr-eabi\\bin",
+      "toolchainPrefix": "arm-zephyr-eabi",
+      "runToEntryPoint": "main",
+      "servertype": "jlink",
+      "interface": "swd",
+      "device": "STM32H723VG",
+      "serverpath": "c:\\Program Files\\SEGGER\\JLink_V954\\JLinkGDBServerCL.exe"
+    }
+  ]
+}

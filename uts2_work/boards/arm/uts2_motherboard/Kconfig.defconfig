@@ -1,0 +1,10 @@
+
+
+if BOARD_UTS2_MOTHERBOARD
+
+config BOARD
+   default "uts2_motherboard"
+
+
+
+endif
