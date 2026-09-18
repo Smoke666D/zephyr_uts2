@@ -19,6 +19,7 @@
 
 	chosen {
 		zephyr,console = &usart1;
+		zephyr,shell-uart = &usart1;
 		zephyr,dtcm = &dtcm;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;	
@@ -85,6 +86,7 @@
 	div-p = <2>;
 	div-q = <2>;
 	div-r = <2>;
+	fracn = <3072>; 
 	clocks = <&clk_hse>;
 	status = "okay";
 };
@@ -93,7 +95,7 @@
 
 &rcc {
 	clocks = <&pll>;
-	clock-frequency = <272000000>;
+	clock-frequency = <275000000>;
 	d1cpre = <1>;
 	hpre = <2>;    /* HCLK: 275   MHz */
 	d1ppre = <2>;  /* APB1: 137.5 MHz */
@@ -123,6 +125,48 @@
     pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
     pinctrl-names = "default";
     current-speed = <115200>;
+	tx-rx-swap;
     status = "okay";
 };
 
+/ {
+    aliases {
+        fram0 = &fram_chip;
+    };
+};
+
+/* Перенаправляем пины для SPI4 на порт E */
+&pinctrl {
+    spi4_sck_pe2: spi4_sck_pe2 {
+        pinmux = <STM32_PINMUX('E', 2, AF5)>; /* AF5 для SPI4 на STM32H7 */
+        bias-pull-down;
+    };
+
+    spi4_miso_pe5: spi4_miso_pe5 {
+        pinmux = <STM32_PINMUX('E', 5, AF5)>;
+        bias-pull-down;
+    };
+
+    spi4_mosi_pe6: spi4_mosi_pe6 {
+        pinmux = <STM32_PINMUX('E', 6, AF5)>;
+        bias-pull-down;
+    };
+};
+
+/* Включаем и настраиваем SPI4 */
+&spi4 {
+    pinctrl-0 = <&spi4_sck_pe2 &spi4_miso_pe5 &spi4_mosi_pe6>;
+	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>; // Назначаем PE4 как софтовый CS*/
+    pinctrl-names = "default";
+    status = "okay";
+
+    /* Опционально: если используете аппаратный CS на PE4 (AF5) */
+    /* pinctrl-0 также должна включать пин CS, либо задаем его через cs-gpios */
+    
+    fram_chip: mb85rs64@0 {
+        compatible = "fujitsu,mb85rsxx";
+        reg = <0>;             
+        spi-max-frequency = <8000000>; 
+        size = <8192>;        
+    };
+};

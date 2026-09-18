@@ -17,6 +17,7 @@ target_sources(app PRIVATE
        # src/param_server.c 
        # src/out_and_power_control.c
         src/main.cpp 
+        src/settings.c
       #  src/os.cpp
 )
 
