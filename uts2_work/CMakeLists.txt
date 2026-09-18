@@ -7,18 +7,25 @@ project(uts2_work)
 
 include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 
+target_include_directories(app PRIVATE 
+    src 
+    src/drivers
+)
 
+file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
+    "src/drivers/*.c"    
+)
 
 target_sources(app PRIVATE 
-       # src/usb_thread.c
        # src/adc_thread.cpp
        # src/adc_monitor.cpp
        src/ina228_stream_thread.c
        # src/param_server.c 
        # src/out_and_power_control.c
-        src/main.cpp 
+        src/main.c
         src/settings.c
       #  src/os.cpp
+      ${APP_SOURCES} 
 )
 
 

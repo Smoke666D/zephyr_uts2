@@ -116,6 +116,11 @@ typedef enum
     POWER_DRV_STS_CHANNEL18,   
     POWER_DRV_STS_ALARM,
     LIN_PD_STS_ALARM,
+    LED1,
+    LED2,
+    LED3,
+    BUTTON1,
+    BUTTON2,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     PARAM_TOTAL_COUNT
 } PARAM_ID;
