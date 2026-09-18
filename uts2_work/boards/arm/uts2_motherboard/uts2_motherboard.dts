@@ -57,7 +57,7 @@
 };
 
 &clk_hse {
-    status = "disabled";
+    status ="okay";
     clock-frequency = <32000000>; /* 32 MHz */
     /* Если у вас по схеме подан генератор (меандр), а не пассивный кварц, раскомментируйте строчку ниже: */
     /* hse-bypass; */
@@ -80,26 +80,27 @@
 
 
 &pll {
-	div-m = <4>;
-	mul-n = <32>;
+	div-m = <2>;
+	mul-n = <34>;
 	div-p = <2>;
 	div-q = <2>;
 	div-r = <2>;
 	clocks = <&clk_hse>;
-	status = "disabled";
+	status = "okay";
 };
 
 
 
 &rcc {
-	clocks = <&clk_hsi>;
-	clock-frequency = <64000000>;
+	clocks = <&pll>;
+	clock-frequency = <272000000>;
 	d1cpre = <1>;
 	hpre = <2>;    /* HCLK: 275   MHz */
 	d1ppre = <2>;  /* APB1: 137.5 MHz */
 	d2ppre1 = <2>; /* APB2: 137.5 MHz */
 	d2ppre2 = <2>; /* APB3: 137.5 MHz */
 	d3ppre = <2>;  /* APB4: 137.5 MHz */
+	
 };
 
 &pwr {
