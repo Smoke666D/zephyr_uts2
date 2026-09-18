@@ -10,7 +10,10 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/spi.h>
+#include "usb_thread.h"
+
 #include "settings.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -19,7 +22,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "ina228_stream_thread.h"
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   500
+#define SLEEP_TIME_MS   2000
 
 #define LED0_NODE DT_ALIAS(led1)
 
@@ -102,24 +105,108 @@ static void FRAM_Test(void)
     }
 }
 
+/* Структура для хранения информации о датчике */
+struct ina_sensor_desc {
+    const char *name;
+    const struct device *dev;
+};
 
+
+
+/* Массив всех ваших 8 датчиков по нодлейблам из DTS */
+static const struct ina_sensor_desc ina_sensors[] = {
+    { "BRD_LOW",   DEVICE_DT_GET(DT_NODELABEL(cur_sens_brd_low)) },
+    { "BRD_HIGH",  DEVICE_DT_GET(DT_NODELABEL(cur_sens_brd_high)) },
+    { "VDUT2",     DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdut2)) },
+    { "VDUT3",     DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdut3)) },
+    { "VIN",       DEVICE_DT_GET(DT_NODELABEL(cur_sens_vin)) },
+    { "3_3_DCDC",  DEVICE_DT_GET(DT_NODELABEL(cur_sens_3_3_dcdc)) },
+    { "VDOUT_PWR", DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdout_pwr)) },
+    { "5VD",       DEVICE_DT_GET(DT_NODELABEL(cur_sens_5vd)) },
+};
+
+#define SENSORS_COUNT ARRAY_SIZE(ina_sensors)
+
+static int init_all_sensors(void)
+{
+    int ready_count = 0;
+
+    printk("\n=== Проверка инициализации датчиков INA228 ===\n");
+    for (size_t i = 0; i < SENSORS_COUNT; i++) {
+        if (!device_is_ready(ina_sensors[i].dev)) {
+            printk("[ERR] Датчик '%s' НЕ готов (нет связи по I2C)!\n", ina_sensors[i].name);
+        } else {
+            printk("[ OK] Датчик '%s' готов.\n", ina_sensors[i].name);
+            ready_count++;
+        }
+    }
+    printk("Готово: %d из %d датчиков\n\n", ready_count, SENSORS_COUNT);
+
+    return ready_count;
+}
+
+/* Функция опроса и вывода данных со всех датчиков */
+void poll_all_sensors(void)
+{
+    struct sensor_value v_bus;
+    struct sensor_value current;
+    struct sensor_value power;
+    int ret;
+
+    printk("----------------------------------------------------------------------\n");
+    printk("| %-12s | %-12s | %-14s | %-14s |\n", "Sensor", "Vbus (V)", "Current (mA)", "Power (mW)");
+    printk("----------------------------------------------------------------------\n");
+
+    for (size_t i = 0; i < SENSORS_COUNT; i++) {
+        const struct device *dev = ina_sensors[i].dev;
+
+        if (!device_is_ready(dev)) {
+            printk("| %-12s |   [ДАТЧИК НЕ ДОСТУПЕН]                            |\n", 
+                   ina_sensors[i].name);
+            continue;
+        }
+
+        /* 1. Запрашиваем новую выборку данных у микросхемы */
+        ret = sensor_sample_fetch(dev);
+        if (ret != 0) {
+            printk("| %-12s |   [ОШИБКА I2C: %d]                                 |\n", 
+                   ina_sensors[i].name, ret);
+            continue;
+        }
+
+        /* 2. Извлекаем значения каналов */
+        sensor_channel_get(dev, SENSOR_CHAN_VOLTAGE, &v_bus);
+        sensor_channel_get(dev, SENSOR_CHAN_CURRENT, &current);
+        sensor_channel_get(dev, SENSOR_CHAN_POWER, &power);
+
+        /* Переводим в double (требуется CONFIG_CBPRINTF_FP_SUPPORT=y) */
+        double v = sensor_value_to_double(&v_bus);
+        double i_ma = sensor_value_to_double(&current) * 1000.0; /* переводим А в мА */
+        double p_mw = sensor_value_to_double(&power) * 1000.0;   /* переводим Вт в мВт */
+
+        printk("| %-12s | %10.3f V | %11.3f mA | %11.3f mW |\n",
+               ina_sensors[i].name, v, i_ma, p_mw);
+    }
+    printk("----------------------------------------------------------------------\n\n");
+}
 
 int main(void)
 {
 
-	LOG_INF("SYSTETM START 1");
-	char *msg = "Hello via raw UART PA9!\r\n";
+	LOG_INF("SYSTETM START 2");	
 	int ret;
 	
 
 	if (gpio_is_ready_dt(&led)) {
 		gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
 	}
+	//init_usb_console();
 
 	FRAM_Test();
 
+	init_all_sensors();
     //settings_fram_init();
-
+   
     while (1) 
 	{
         if (gpio_is_ready_dt(&led)) 
@@ -127,7 +214,7 @@ int main(void)
             gpio_pin_toggle_dt(&led);
         }
         k_msleep(SLEEP_TIME_MS);
-		
+		poll_all_sensors();
     }
 	
 	return 0;
