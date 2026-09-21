@@ -1,13 +1,19 @@
-#pragma once
+#ifndef LED_H
+#define LED_H
 
-#include <stdbool.h>
-#include <zephyr/zbus/zbus.h>
+#include <zephyr/kernel.h>
 
-/* Полное описание структуры */
-typedef struct {
-    bool led1_state;
-    bool led2_state;
-    bool led3_state;
-} led_state_t;
+/* Структура состояния светодиодов */
 
-ZBUS_CHAN_DECLARE(led_chan);
+/* Обычная структура без typedef */
+struct led_state_msg {
+    bool led1;
+    bool led2;
+    bool led3;
+};
+/**
+ * @brief Синхронная установка состояния светодиодов через ZBUS и воркер.
+ */
+int led_manager_set_states_sync(bool l1, bool l2, bool l3, k_timeout_t timeout);
+
+#endif /* LED_H */

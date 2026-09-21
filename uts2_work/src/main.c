@@ -12,7 +12,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/spi.h>
-#include "usb_thread.h"
+#include "led.h"
 
 #include "settings.h"
 
@@ -22,7 +22,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "ina228_stream_thread.h"
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   2000
+#define SLEEP_TIME_MS   1000
 
 #define LED0_NODE DT_ALIAS(led1)
 
@@ -197,10 +197,7 @@ int main(void)
 	int ret;
 	
 
-	if (gpio_is_ready_dt(&led)) {
-		gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-	}
-	//init_usb_console();
+
 
 	FRAM_Test();
 
@@ -209,10 +206,9 @@ int main(void)
    
     while (1) 
 	{
-        if (gpio_is_ready_dt(&led)) 
-		{
-            gpio_pin_toggle_dt(&led);
-        }
+        led_manager_set_states_sync(true, false, false, K_MSEC(100));
+        k_msleep(SLEEP_TIME_MS);
+        led_manager_set_states_sync(false, true, false, K_MSEC(100));
         k_msleep(SLEEP_TIME_MS);
 		poll_all_sensors();
     }
