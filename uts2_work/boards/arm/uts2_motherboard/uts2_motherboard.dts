@@ -257,3 +257,85 @@ zephyr_udc0: &usbotg_hs {
         compatible = "zephyr,cdc-acm-uart";
     };
 };
+
+&i2c1 {
+    status = "okay";
+    pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb7>; /* Проверь точные имена pinctrl для твоей платы, но логика такая */
+    pinctrl-names = "default";
+    clock-frequency = <I2C_BITRATE_FAST>; /* 400 kHz */
+
+
+ 	eeprom_1: eeprom@50 {
+        compatible = "atmel,at24";
+        reg = <0x51>;
+        size = <256>;          /* 2 Кбит = 256 байт */
+        pagesize = <16>;       /* Размер страницы записи 16 байт */
+        address-width = <8>;   /* 8-битная адресация внутри чипа */
+        timeout = <5>;
+        status = "okay";
+    };
+
+    /* Вторая EEPROM (адрес 0x52, A1=VDD, A0=GND) */
+    eeprom_2: eeprom@52 {
+        compatible = "atmel,at24";
+        reg = <0x52>;
+        size = <256>;
+        pagesize = <16>;
+        address-width = <8>;
+        timeout = <5>;
+        status = "okay";
+    };
+
+    /* 6-я микросхема PCF8575RGER (A0=VDD, A1=GND, A2=GND) -> адрес 0x21 */
+    pcf8575_6: pcf857x@21 {
+        compatible = "nxp,pcf857x";
+        status = "okay";
+        reg = <0x21>;
+        gpio-controller;
+        #gpio-cells = <2>;
+        ngpios = <16>;
+    };
+    
+    /* Если 7-я микросхема (все адреса на GND, адрес 0x20) тоже там, можешь сразу прописать и её: */
+    pcf8575_7: pcf857x@20 {
+        compatible = "nxp,pcf857x";
+        status = "okay";
+        reg = <0x20>;
+        gpio-controller;
+        #gpio-cells = <2>;
+        ngpios = <16>;
+    };
+
+	tmp112_gnd: tmp112@48 {
+        compatible = "ti,tmp112";
+        reg = <0x48>;
+        status = "okay";
+    };
+
+    /* Второй TMP112A (ADD0 = VDD) -> адрес 0x49 */
+    tmp112_vdd: tmp112@49 {
+        compatible = "ti,tmp112";
+        reg = <0x49>;
+        status = "okay";
+    };
+	    /* Первый BH1750 (ADDR = GND) -> адрес 0x23 */
+    bh1750_gnd: bh1750@23 {
+        compatible = "rohm,bh1750";
+        reg = <0x23>;
+        status = "okay";
+    };
+
+    /* Второй BH1750 (ADDR = VDD) -> адрес 0x5C (или 0x38, если уточнишь по сканеру) */
+    bh1750_vdd: bh1750@5c {
+        compatible = "rohm,bh1750";
+        reg = <0x5c>;
+        status = "okay";
+    };
+	  
+  ads1115: ads1115@4a {
+        compatible = "ti,ads1115";
+        reg = <0x4a>;
+        #io-channel-cells = <1>;
+        status = "okay";
+    };
+};

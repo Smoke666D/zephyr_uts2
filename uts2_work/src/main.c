@@ -13,6 +13,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/spi.h>
 #include "led.h"
+#include <zephyr/drivers/eeprom.h>
 
 #include "settings.h"
 
@@ -190,27 +191,193 @@ void poll_all_sensors(void)
     printk("----------------------------------------------------------------------\n\n");
 }
 
+
+#define EEPROM_1_NODE DT_NODELABEL(eeprom_1)
+#define EEPROM_2_NODE DT_NODELABEL(eeprom_2)
+
+ const struct device *dev1 = DEVICE_DT_GET(EEPROM_1_NODE);
+const struct device *dev2 = DEVICE_DT_GET(EEPROM_2_NODE);
+
+#define TMP112_GND_NODE DT_NODELABEL(tmp112_gnd)
+#define TMP112_VDD_NODE DT_NODELABEL(tmp112_vdd)
+
+const struct device *dev_gnd = DEVICE_DT_GET(TMP112_GND_NODE);
+const struct device *dev_vdd = DEVICE_DT_GET(TMP112_VDD_NODE);
+
+#define BH1750_GND_NODE DT_NODELABEL(bh1750_gnd)
+#define BH1750_VDD_NODE DT_NODELABEL(bh1750_vdd)
+
+const struct device *dev_gnd1 = DEVICE_DT_GET(BH1750_GND_NODE);
+const struct device *dev_vdd1 = DEVICE_DT_GET(BH1750_VDD_NODE);
+
+void EEPROM_Test()
+{
+/* Проверяем доступность первой */
+    if (!device_is_ready(dev1)) {
+        LOG_ERR("EEPROM 1 (0x50) device is not ready!");
+        
+    }
+    LOG_INF("EEPROM 1 (0x50) is ready.");
+
+    /* Проверяем доступность второй */
+    if (!device_is_ready(dev2)) {
+        LOG_ERR("EEPROM 2 (0x52) device is not ready!");
+        
+    }
+    LOG_INF("EEPROM 2 (0x52) is ready.");
+
+    char msg1[] = "Chip #1: EEPROM 0x50 OK";
+    char msg2[] = "Chip #2: EEPROM 0x52 OK";
+    
+    char buf1[35] = {0};
+    char buf2[35] = {0};
+    off_t offset = 0;
+
+    /* --- Тестируем первую микросхему (0x50) --- */
+    if (eeprom_write(dev1, offset, msg1, sizeof(msg1)) < 0) {
+        LOG_ERR("Failed to write to EEPROM 1");
+    } else {
+        LOG_INF("EEPROM 1 write: '%s'", msg1);
+    }
+
+    k_msleep(10); // Время на внутреннюю запись цикла EEPROM
+
+    if (eeprom_read(dev1, offset, buf1, sizeof(msg1)) < 0) {
+        LOG_ERR("Failed to read from EEPROM 1");
+    } else {
+        LOG_INF("EEPROM 1 read:  '%s'", buf1);
+    }
+
+    /* --- Тестируем вторую микросхему (0x52) --- */
+    if (eeprom_write(dev2, offset, msg2, sizeof(msg2)) < 0) {
+        LOG_ERR("Failed to write to EEPROM 2");
+    } else {
+        LOG_INF("EEPROM 2 write: '%s'", msg2);
+    }
+
+    k_msleep(10);
+
+    if (eeprom_read(dev2, offset, buf2, sizeof(msg2)) < 0) {
+        LOG_ERR("Failed to read from EEPROM 2");
+    } else {
+        LOG_INF("EEPROM 2 read:  '%s'", buf2);
+    }
+
+    
+}
+
+#define ADS1115_NODE DT_NODELABEL(ads1115)
+
+
 int main(void)
 {
 
 	LOG_INF("SYSTETM START 2");	
 	int ret;
-	
+	if (!device_is_ready(dev_gnd)) {
+        LOG_ERR("TMP112 (0x48, ADD0=GND) is not ready!");
+        return 0;
+    }
+    LOG_INF("TMP112 (0x48) is ready.");
+
+    if (!device_is_ready(dev_vdd)) {
+        LOG_ERR("TMP112 (0x49, ADD0=VDD) is not ready!");
+        return 0;
+    }
+    LOG_INF("TMP112 (0x49) is ready.");
+
+ 
+ LOG_INF("Starting ADS1115 (addr 0x4A, ADDR->SDA) test...");
+
+    const struct device *dev = DEVICE_DT_GET(ADS1115_NODE);
+
+    if (!device_is_ready(dev)) {
+        LOG_ERR("ADS1115 device is not ready!");
+       
+    }
+
+    LOG_INF("ADS1115 is ready. Reading AIN0 channel...");
 
 
+
+
+    EEPROM_Test();
+     if (!device_is_ready(dev_gnd1)) {
+        LOG_ERR("BH1750 (0x23, ADDR=GND) is not ready!");
+       // return 0;
+    }
+    LOG_INF("BH1750 (0x23) is ready.");
+
+    if (!device_is_ready(dev_vdd1)) {
+        LOG_ERR("BH1750 (ADDR=VDD) is not ready!");
+        //return 0;
+    }
+    LOG_INF("BH1750 (VDD) is ready.");
 
 	FRAM_Test();
 
 	init_all_sensors();
     //settings_fram_init();
-   
+   int current_led = 0;
     while (1) 
 	{
-        led_manager_set_states_sync(true, false, false, K_MSEC(100));
+         struct sensor_value voltage;
+            struct sensor_value temp_gnd, temp_vdd;
+
+      struct sensor_value lux_gnd, lux_vdd;
+
+
+       if (sensor_sample_fetch(dev) < 0) {
+            LOG_ERR("Failed to fetch sample from ADS1115");
+        } else {
+            /* Читаем напряжение (драйвер обычно переводит сырые значения АЦП в вольты) */
+            sensor_channel_get(dev, SENSOR_CHAN_VOLTAGE, &voltage);
+
+            LOG_INF("AIN0 Voltage: %d.%06d V", voltage.val1, voltage.val2);
+        }
+/* Читаем датчик 1 (ADDR = GND) */
+       /* if (sensor_sample_fetch(dev_gnd1) == 0) {
+            sensor_channel_get(dev_gnd1, SENSOR_CHAN_LIGHT, &lux_gnd);
+            LOG_INF("Light (ADDR = GND, 0x23): %d.%02d lx", 
+                     lux_gnd.val1, lux_gnd.val2 / 10000);
+        } else {
+            LOG_ERR("Failed to fetch sample from BH1750 (0x23)");
+        }
+
+        /* Читаем датчик 2 (ADDR = VDD) */
+       /* if (sensor_sample_fetch(dev_vdd1) == 0) {
+            sensor_channel_get(dev_vdd1, SENSOR_CHAN_LIGHT, &lux_vdd);
+            LOG_INF("Light (ADDR = VDD): %d.%02d lx", 
+                     lux_vdd.val1, lux_vdd.val2 / 10000);
+        } else {
+            LOG_ERR("Failed to fetch sample from BH1750 (VDD)");
+        }*/
+
+
+        led_manager_set_states_sync(false, false, true, K_MSEC(100));
         k_msleep(SLEEP_TIME_MS);
         led_manager_set_states_sync(false, true, false, K_MSEC(100));
         k_msleep(SLEEP_TIME_MS);
 		poll_all_sensors();
+
+
+        /*if (sensor_sample_fetch(dev_gnd) == 0) {
+            sensor_channel_get(dev_gnd, SENSOR_CHAN_AMBIENT_TEMP, &temp_gnd);
+            LOG_INF("Temp (ADD0 = GND, 0x48): %d.%02d °C", 
+                     temp_gnd.val1, temp_gnd.val2 / 10000); // val2 хранится в микро-единицах
+        } else {
+            LOG_ERR("Failed to fetch sample from TMP112 (0x48)");
+        }
+
+        /* Читаем датчик 2 (ADD0 = VDD) */
+/*        if (sensor_sample_fetch(dev_vdd) == 0) {
+            sensor_channel_get(dev_vdd, SENSOR_CHAN_AMBIENT_TEMP, &temp_vdd);
+            LOG_INF("Temp (ADD0 = VDD, 0x49): %d.%02d °C", 
+                     temp_vdd.val1, temp_vdd.val2 / 10000);
+        } else {
+            LOG_ERR("Failed to fetch sample from TMP112 (0x49)");
+        }
+            */
     }
 	
 	return 0;
