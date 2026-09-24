@@ -138,8 +138,8 @@ typedef struct {
 /* Определение структуры обработчика маршрута */
 struct param_handler {
     PARAM_ID param_id;
-    int (*set)(PARAM_ID id, const PARAM_VAL *val);
-    int (*get)(PARAM_ID id, PARAM_VAL *val);
+    int (*set)(PARAM_ID id, const PARAM_VAL *val, bool is_sync);
+    int (*get)(PARAM_ID id, PARAM_VAL *val, bool is_sync);
 };
 
 /* 

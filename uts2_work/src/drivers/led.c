@@ -4,6 +4,7 @@
 #include <zephyr/zbus/zbus.h>
 #include "led.h"
 #include "app_worker.h"
+#include "param_server.h"
 
 LOG_MODULE_REGISTER(led_manager, LOG_LEVEL_INF);
 
@@ -54,12 +55,16 @@ static void led_hardware_update_handler(struct k_work *work)
 {
     struct led_work_ctx *ctx = CONTAINER_OF(work, struct led_work_ctx, work);
 
-    gpio_pin_set_dt(&green_spec,  ctx->state.led1 ? 1 : 0);
-    gpio_pin_set_dt(&yellow_spec, ctx->state.led2 ? 1 : 0);
-    gpio_pin_set_dt(&red_spec,    ctx->state.led3 ? 1 : 0);
+    if (ctx->state.update_mask & 0x01)
+    gpio_pin_set_dt(&green_spec,  ctx->state.led[0] ? 1 : 0);
+if (ctx->state.update_mask & 0x02)
+    gpio_pin_set_dt(&yellow_spec, ctx->state.led[1] ? 1 : 0);
+if (ctx->state.update_mask & 0x04)
+    gpio_pin_set_dt(&red_spec,    ctx->state.led[2] ? 1 : 0);
 
-    k_msleep(40);
-    k_sem_give(&ctx->done_sem);
+  
+        k_sem_give(&ctx->done_sem);
+    
 }
 
 /* 4. Теперь определяем канал ZBUS, ссылаясь на уже созданный 'led_listener' */
@@ -68,7 +73,7 @@ ZBUS_CHAN_DEFINE(led_state_channel,
                  NULL,
                  NULL,
                  ZBUS_OBSERVERS(led_listener),
-                 ZBUS_MSG_INIT(.led1 = false, .led2 = false, .led3 = false)
+                 ZBUS_MSG_INIT(0)
 );
 
 /* 5. Инициализация железа через SYS_INIT */
@@ -98,25 +103,33 @@ static int led_manager_system_init(void)
     return 0;
 }
 
-int led_manager_set_states_sync(bool l1, bool l2, bool l3, k_timeout_t timeout)
-{
-    struct led_state_msg new_state = { .led1 = l1, .led2 = l2, .led3 = l3 };
-
-    k_sem_init(&led_task.done_sem, 0, 1);
-
-    int err = zbus_chan_pub(&led_state_channel, &new_state, K_NO_WAIT);
-    if (err) {
-        LOG_ERR("Ошибка публикации в ZBUS: %d", err);
-        return err;
-    }
-
-    err = k_sem_take(&led_task.done_sem, timeout);
-    if (err == -EAGAIN) {
-        LOG_WRN("Таймаут синхронизации светодиодов!");
-        return -ETIMEDOUT;
-    }
-
-    return 0;
-}
 
 SYS_INIT(led_manager_system_init, APPLICATION, 40);
+
+
+static int _led_set(PARAM_ID _id, const PARAM_VAL *_val,  bool is_sync)
+{
+    if (true
+        && _id >= LED1
+        && _id <= LED3
+    )
+    {
+        struct led_state_msg new_state;
+        new_state.led[_id - LED1] = _val->value.boolean;
+        new_state.update_mask = 0x01 << (_id - LED1);
+        
+        k_sem_init(&led_task.done_sem, 0, 1);
+       
+        zbus_chan_pub(&led_state_channel, &new_state, K_NO_WAIT);
+        if (is_sync == true)
+        {
+            k_sem_take(&led_task.done_sem, K_MSEC(100));
+        }
+
+    }
+
+}
+
+PARAM_ROUTE_WO(LED1,   _led_set);
+PARAM_ROUTE_WO(LED2,   _led_set);
+PARAM_ROUTE_WO(LED3,   _led_set);

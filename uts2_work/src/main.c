@@ -18,6 +18,7 @@
 #include "driver_ads1115.h"
 
 #include "settings.h"
+#include "param_server.h"
 #include "driver_ads1115.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -396,10 +397,15 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
         LOG_INF("AD5243 Ch1 -> %d",i);
         i=i+10;
         if (i >=255)  i = 0;
+
+        PARAM_VAL val;
+        val.value.boolean = false;
+        param_set(LED1, &val, false);
         
-        led_manager_set_states_sync(false, false, true, K_MSEC(100));
+        
         k_msleep(SLEEP_TIME_MS);
-        led_manager_set_states_sync(false, true, false, K_MSEC(100));
+         val.value.boolean = true;
+        param_set(LED1, &val, false);
        k_msleep(SLEEP_TIME_MS);
 		//poll_all_sensors();
 

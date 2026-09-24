@@ -28,7 +28,7 @@ static int param_cache_init(void)
 SYS_INIT(param_cache_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
 
 
-int param_set(PARAM_ID id, const PARAM_VAL *val)
+int param_set(PARAM_ID id, const PARAM_VAL *val, bool is_async)
 {
     if (id >= PARAM_TOTAL_COUNT) {
         return -EINVAL;
@@ -41,7 +41,7 @@ int param_set(PARAM_ID id, const PARAM_VAL *val)
     const struct param_handler *handler = cache[id];
     if (handler != NULL) {
         if (handler->set != NULL) {
-            return handler->set(id, val);
+            return handler->set(id, val,is_async);
         }
         return -EACCES; /* Запись в параметр Read-Only запрещена */
     }
@@ -49,7 +49,7 @@ int param_set(PARAM_ID id, const PARAM_VAL *val)
     return -ENODEV; /* Модуль обслуживания параметра не скомпилирован */
 }
 
-int param_get(PARAM_ID id, PARAM_VAL *val)
+int param_get(PARAM_ID id, PARAM_VAL *val, bool is_async)
 {
     if (id >= PARAM_TOTAL_COUNT) {
         return -EINVAL;
@@ -62,7 +62,7 @@ int param_get(PARAM_ID id, PARAM_VAL *val)
     const struct param_handler *handler = cache[id];
     if (handler != NULL) {
         if (handler->get != NULL) {
-            return handler->get(id, val);
+            return handler->get(id, val,is_async);
         }
         return -EACCES; /* Чтение параметра Write-Only запрещено */
     }
