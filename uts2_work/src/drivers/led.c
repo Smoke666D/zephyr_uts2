@@ -54,11 +54,6 @@ static void led_hardware_update_handler(struct k_work *work)
 {
     struct led_work_ctx *ctx = CONTAINER_OF(work, struct led_work_ctx, work);
 
-    LOG_INF("ФИЗИЧЕСКОЕ ПЕРЕКЛЮЧЕНИЕ LED:");
-    LOG_INF("  Green (LD1)  -> %s", ctx->state.led1 ? "ON" : "OFF");
-    LOG_INF("  Yellow (LD2) -> %s", ctx->state.led2 ? "ON" : "OFF");
-    LOG_INF("  Red (LD3)    -> %s", ctx->state.led3 ? "ON" : "OFF");
-
     gpio_pin_set_dt(&green_spec,  ctx->state.led1 ? 1 : 0);
     gpio_pin_set_dt(&yellow_spec, ctx->state.led2 ? 1 : 0);
     gpio_pin_set_dt(&red_spec,    ctx->state.led3 ? 1 : 0);

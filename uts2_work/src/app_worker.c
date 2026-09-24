@@ -13,7 +13,7 @@ K_THREAD_STACK_DEFINE(worker_stack, WORKER_STACK_SIZE);
 
 static int app_worker_system_init(void)
 {
-    LOG_INF("Автоматическая инициализация воркера...");
+   
 
     k_work_queue_init(&app_work_q);
     k_work_queue_start(&app_work_q, 
@@ -30,4 +30,4 @@ void app_worker_submit(struct k_work *work)
     k_work_submit_to_queue(&app_work_q, work);
 }
 
-SYS_INIT(app_worker_system_init, APPLICATION, 50);
+SYS_INIT(app_worker_system_init, POST_KERNEL, 50);

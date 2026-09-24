@@ -1,0 +1,18 @@
+description: Custom ADS1115 ADC driver with interrupt and SPS configuration
+compatible: "vnd,ads1115"
+
+# Наследуем базовые правила I2C-устройства
+include: [i2c-device.yaml]
+
+properties:
+  reg:
+    required: true
+  ads-rdy:
+    type: phandle-array
+    required: true
+    description: Ready/Interrupt GPIO pin
+    specifier-space: gpio
+  ads-sps:
+    type: int
+    required: true
+    description: Samples per second
