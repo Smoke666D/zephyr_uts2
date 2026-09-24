@@ -268,22 +268,61 @@ void EEPROM_Test()
 
     
 }
-#define I2C2_NODE DT_NODELABEL(i2c1)
+#define I2C1_NODE DT_NODELABEL(i2c1)
 
 
+#define AD5243_DEFAULT_ADDR 0x2F 
+
+typedef enum {
+    AD5243_CHANNEL_1 = 0,
+    AD5243_CHANNEL_2 = 1
+} ad5243_channel_t;
+
+
+int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
+{
+    const struct device *i2c_dev = DEVICE_DT_GET(I2C1_NODE);
+    if (!device_is_ready(i2c_dev)) {
+        LOG_ERR("I2C1 bus not ready for AD5243!");
+        return -ENODEV;
+    }
+
+    struct i2c_dt_spec spec = {
+        .bus = i2c_dev,
+        .addr = AD5243_DEFAULT_ADDR
+    };
+
+    uint8_t tx_data[2];
+
+    /* 
+     * Формируем инструкцию:
+     * Для канала 1: старший бит = 0 -> инструкция 0x00
+     * Для канала 2: старший бит = 1 -> инструкция 0x80
+     */
+    if (channel == AD5243_CHANNEL_1) {
+        tx_data[0] = 0x00; // Выбор канала 1 (W1)
+    } else {
+        tx_data[0] = 0x80; // Выбор канала 2 (W2)
+    }
+
+    tx_data[1] = value; // Значение положения движка (0..255)
+
+    int ret = i2c_write_dt(&spec, tx_data, sizeof(tx_data));
+    if (ret < 0) {
+        LOG_ERR("Failed to set AD5243 wiper: %d", ret);
+        return ret;
+    }
+
+    LOG_DBG("AD5243 Ch %d set to wiper pos: %d", channel + 1, value);
+    return 0;
+}
 
 
 
 int main(void)
 {
+	LOG_INF("SYSTETM START 2");	
 
-
- 
-
-    
-
-    
-	LOG_INF("SYSTETM START W");	
 /*	int ret;
 	if (!device_is_ready(dev_gnd)) {
         LOG_ERR("TMP112 (0x48, ADD0=GND) is not ready!");
@@ -318,6 +357,7 @@ int main(void)
 	init_all_sensors();
     //settings_fram_init();
    int current_led = 0;*/
+    int i = 0;
     while (1) 
 	{
        
@@ -352,8 +392,11 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
         } else {
             LOG_ERR("Failed to fetch sample from BH1750 (VDD)");
         }*/
-
-
+        ad5243_set_wiper(AD5243_CHANNEL_2, i);
+        LOG_INF("AD5243 Ch1 -> %d",i);
+        i=i+10;
+        if (i >=255)  i = 0;
+        
         led_manager_set_states_sync(false, false, true, K_MSEC(100));
         k_msleep(SLEEP_TIME_MS);
         led_manager_set_states_sync(false, true, false, K_MSEC(100));

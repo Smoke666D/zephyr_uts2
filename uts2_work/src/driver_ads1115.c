@@ -5,7 +5,6 @@
 #include <zephyr/logging/log.h>
 
 
-
 LOG_MODULE_REGISTER(ads_driver, LOG_LEVEL_INF);
 
 #define ADS_NODE DT_NODELABEL(ads1115_custom)
@@ -27,6 +26,7 @@ static uint8_t current_channel = 0;
 static uint8_t dr_config_bits = 0xE0; // Дефолт 860 SPS
 
 static struct ads1115_snapshot current_snapshot = {
+
     .voltages_mv = {0},
     .channel_ready = {false}
 };
@@ -46,6 +46,7 @@ static void ads_work_handler(struct k_work *work)
     uint8_t read_buf[2];
     uint8_t pointer_reg = 0x00;
 
+
     int ret = i2c_write_read_dt(&ads_spec, &pointer_reg, 1, read_buf, 2);
     if (ret < 0) {
         LOG_ERR("I2C read failed: %d", ret);
@@ -54,6 +55,7 @@ static void ads_work_handler(struct k_work *work)
 
     int16_t raw_value = (int16_t)((read_buf[0] << 8) | read_buf[1]);
     float voltage_mv = (float)raw_value * 0.125f;
+
 
    if (current_channel == 0)
     {
@@ -73,14 +75,17 @@ static void ads_work_handler(struct k_work *work)
     zbus_chan_pub(&ads_channel, &current_snapshot, K_NO_WAIT);
 
    
+
     // Переключаем канал
     current_channel = (current_channel + 1) % 4;
 
-    uint8_t mux_bits = 0x80 + (current_channel << 4);
+    uint8_t mux_bits = 0x80 + ((current_channel | 0x4) << 4);
     uint8_t config_cmd[3] = { 
         0x01,              
         mux_bits | 0x03,   
         dr_config_bits     
+
+
     };
     
     i2c_write_dt(&ads_spec, config_cmd, sizeof(config_cmd));
@@ -88,7 +93,7 @@ static void ads_work_handler(struct k_work *work)
 
 static void ads_isr_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
-      LOG_INF("int");
+
     if (!k_work_is_pending(&ads_work)) {
         app_worker_submit(&ads_work);
     }
@@ -96,6 +101,7 @@ static void ads_isr_handler(const struct device *dev, struct gpio_callback *cb, 
 
 static int ads1115_driver_init(void)
 {
+
     if (!device_is_ready(ads_spec.bus)) {
         LOG_ERR("I2C bus for ADS1115 is not ready!");
         return -ENODEV;
@@ -121,25 +127,31 @@ static int ads1115_driver_init(void)
     
 
     // ВАЖНО: Задаем пороги компаратора для активации пина ALERT/RDY (Conversion Ready)
+
+   
     uint8_t lo_thresh[3] = { 0x02, 0x00, 0x00 };
     uint8_t hi_thresh[3] = { 0x03, 0x80, 0x00 };
     i2c_write_dt(&ads_spec, lo_thresh, 3);
     i2c_write_dt(&ads_spec, hi_thresh, 3);
 
+
     k_work_init(&ads_work, ads_work_handler);
 
     // Настраиваем прерывание
+
     gpio_pin_configure_dt(&int_pin, GPIO_INPUT);
     gpio_pin_interrupt_configure_dt(&int_pin, GPIO_INT_EDGE_FALLING);
 
     gpio_init_callback(&int_cb_data, ads_isr_handler, BIT(int_pin.pin));
     gpio_add_callback(int_pin.port, &int_cb_data);
 
+
     // Стартуем первый замер на канале 0 со скоростью из DTS
     uint8_t config_cmd[3] = { 0x01, 0x83, dr_config_bits }; 
     i2c_write_dt(&ads_spec, config_cmd, sizeof(config_cmd));
 
     LOG_INF("ADS1115 Custom-YAML Driver initialized! (Addr: 0x%02X)", ads_spec.addr);
+
     return 0;
 }
 
