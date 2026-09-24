@@ -14,8 +14,11 @@
 #include <zephyr/drivers/spi.h>
 #include "led.h"
 #include <zephyr/drivers/eeprom.h>
+#include <zephyr/drivers/i2c.h>
+#include "driver_ads1115.h"
 
 #include "settings.h"
+#include "driver_ads1115.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "usb_thread.h"
@@ -265,15 +268,23 @@ void EEPROM_Test()
 
     
 }
+#define I2C2_NODE DT_NODELABEL(i2c1)
 
-#define ADS1115_NODE DT_NODELABEL(ads1115)
+
+
 
 
 int main(void)
 {
 
+
+ 
+
+    
+
+    
 	LOG_INF("SYSTETM START 2");	
-	int ret;
+/*	int ret;
 	if (!device_is_ready(dev_gnd)) {
         LOG_ERR("TMP112 (0x48, ADD0=GND) is not ready!");
         return 0;
@@ -287,18 +298,6 @@ int main(void)
     LOG_INF("TMP112 (0x49) is ready.");
 
  
- LOG_INF("Starting ADS1115 (addr 0x4A, ADDR->SDA) test...");
-
-    const struct device *dev = DEVICE_DT_GET(ADS1115_NODE);
-
-    if (!device_is_ready(dev)) {
-        LOG_ERR("ADS1115 device is not ready!");
-       
-    }
-
-    LOG_INF("ADS1115 is ready. Reading AIN0 channel...");
-
-
 
 
     EEPROM_Test();
@@ -318,23 +317,24 @@ int main(void)
 
 	init_all_sensors();
     //settings_fram_init();
-   int current_led = 0;
+   int current_led = 0;*/
     while (1) 
 	{
-         struct sensor_value voltage;
-            struct sensor_value temp_gnd, temp_vdd;
+       
+      struct ads1115_snapshot snapshot;
+if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
+            LOG_INF("=== ADS1115 SNAPSHOT ===");
+            LOG_INF("AIN0: %.2f mV (ready: %d)", snapshot.voltages_mv[0], snapshot.channel_ready[0]);
+            LOG_INF("AIN1: %.2f mV (ready: %d)", snapshot.voltages_mv[1], snapshot.channel_ready[1]);
+            LOG_INF("AIN2: %.2f mV (ready: %d)", snapshot.voltages_mv[2], snapshot.channel_ready[2]);
+            LOG_INF("AIN3: %.2f mV (ready: %d)", snapshot.voltages_mv[3], snapshot.channel_ready[3]);
+        } else {
+            LOG_WRN("No data in Zbus channel yet.");
+        }
 
       struct sensor_value lux_gnd, lux_vdd;
 
-
-       if (sensor_sample_fetch(dev) < 0) {
-            LOG_ERR("Failed to fetch sample from ADS1115");
-        } else {
-            /* Читаем напряжение (драйвер обычно переводит сырые значения АЦП в вольты) */
-            sensor_channel_get(dev, SENSOR_CHAN_VOLTAGE, &voltage);
-
-            LOG_INF("AIN0 Voltage: %d.%06d V", voltage.val1, voltage.val2);
-        }
+ 
 /* Читаем датчик 1 (ADDR = GND) */
        /* if (sensor_sample_fetch(dev_gnd1) == 0) {
             sensor_channel_get(dev_gnd1, SENSOR_CHAN_LIGHT, &lux_gnd);
@@ -357,8 +357,8 @@ int main(void)
         led_manager_set_states_sync(false, false, true, K_MSEC(100));
         k_msleep(SLEEP_TIME_MS);
         led_manager_set_states_sync(false, true, false, K_MSEC(100));
-        k_msleep(SLEEP_TIME_MS);
-		poll_all_sensors();
+       k_msleep(SLEEP_TIME_MS);
+		//poll_all_sensors();
 
 
         /*if (sensor_sample_fetch(dev_gnd) == 0) {
@@ -378,7 +378,7 @@ int main(void)
             LOG_ERR("Failed to fetch sample from TMP112 (0x49)");
         }
             */
-    }
+   }
 	
 	return 0;
 }
