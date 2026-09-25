@@ -21,6 +21,7 @@
 #include "settings.h"
 #include "system_bus_model.h"
 #include "driver_ads1115.h"
+#include "sensor_poll.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "usb_thread.h"
@@ -399,7 +400,7 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
         {
             LOG_INF("AD5243 Ch1 error");
         }
-         SYSTEM_BUS_SET(LED1, (bool)false);            
+        // SYSTEM_BUS_SET(LED1, (bool)false);            
         SYSTEM_BUS_SET(LED3, (bool)true);                
         SYSTEM_BUS_SET(LED2, (bool)false);                
         //param_set(LED3, &val, false);                
@@ -407,8 +408,35 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
         SYSTEM_BUS_SET(LED3, (bool)false);                
         SYSTEM_BUS_SET(LED2, (bool)true);                
         k_msleep(SLEEP_TIME_MS);
-		//poll_all_sensors();
 
+             float temp_gnd = 0.0f, temp_vdd = 0.0f;
+        float light_gnd = 0.0f, light_vdd = 0.0f;
+
+        LOG_INF("--- Текущие значения датчиков (из кэша) ---");
+
+        if (app_worker_get_sensor_float(0, &temp_gnd)) {
+            LOG_INF("TMP112 (GND): %.2f °C", (double)temp_gnd);
+        } else {
+            LOG_WRN("TMP112 (GND): нет данных");
+        }
+
+        if (app_worker_get_sensor_float(1, &temp_vdd)) {
+            LOG_INF("TMP112 (VDD): %.2f °C", (double)temp_vdd);
+        } else {
+            LOG_WRN("TMP112 (VDD): нет данных");
+        }
+
+        if (app_worker_get_sensor_float(2, &light_gnd)) {
+            LOG_INF("BH1750 (GND): %.2f lx", (double)light_gnd);
+        } else {
+            LOG_WRN("BH1750 (GND): нет данных");
+        }
+
+        if (app_worker_get_sensor_float(3, &light_vdd)) {
+            LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
+        } else {
+            LOG_WRN("BH1750 (VDD): нет данных");
+        }
 
         /*if (sensor_sample_fetch(dev_gnd) == 0) {
             sensor_channel_get(dev_gnd, SENSOR_CHAN_AMBIENT_TEMP, &temp_gnd);

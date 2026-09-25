@@ -25,6 +25,11 @@ static int app_worker_system_init(void)
     return 0;
 }
 
+void app_worker_reschedule_submit(struct k_work_delayable *delayed_work, k_timeout_t delay)
+{
+    k_work_reschedule_for_queue(&app_work_q, delayed_work, delay);
+}
+
 void app_worker_submit(struct k_work *work)
 {
     k_work_submit_to_queue(&app_work_q, work);

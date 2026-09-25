@@ -25,6 +25,37 @@
 		zephyr,flash = &flash0;	
 	    zephyr,code-partition = &flash0;
 	};
+    
+    my_sequencer: my_sequencer {
+        compatible = "custom,seq-mux-adc";
+        
+        /* 
+         * Передаем ссылки на аппаратные блоки таймера и АЦП.
+         * Это избавляет наш Си-код драйвера от хардкода.
+         */
+        adc-dev = <&adc1>;
+        timer-dev = <&timers3>;
+
+        /* 
+         * Настройка каналов DMA:
+         * 1. DMA1 Stream 0: Переключение пинов мультиплексора (Слот 27, TIM3_UP)
+         * 2. DMA1 Stream 1: Опрос АЦП3 в циклическом режиме по кругу (Слот 115, ADC3)
+         */
+        dmas = <&dmamux1 0 23 0>,
+               <&dmamux1 1 9 0>;
+        dma-names = "seq_dma", "adc_dma";
+
+        /* Ссылка на аппаратный pinctrl управляющих пинов */
+        mux-gpios = <&gpiob 0 GPIO_ACTIVE_HIGH>,
+                    <&gpiob 13 GPIO_ACTIVE_HIGH>,
+                    <&gpiob 14 GPIO_ACTIVE_HIGH>;
+
+        adc-duration-us = <100000>;     /* T1: время АЦП */
+        switch-duration-us = <100000>;  /* T2: время переключения */ 
+
+        status = "disabled";
+    };
+
 
 	leds: leds {
 		compatible = "gpio-leds";
@@ -51,6 +82,64 @@
 		led1 = &yellow_led;
 		led2 = &red_led;		
 	};
+};
+
+&backup_sram {
+	status = "okay";
+};
+
+&pinctrl {
+    /* Создаем отдельный узел для каждого пина */
+    mux1_adc_vsense: mux1_adc_vsense {
+        pinmux = <STM32_PINMUX('A', 0, ANALOG)>;
+    };
+    mux2_adc_vsense: mux2_adc_vsense {
+        pinmux = <STM32_PINMUX('A', 1, ANALOG)>;
+    };
+    mux3_adc_vsense: mux3_adc_vsense {
+        pinmux = <STM32_PINMUX('A', 2, ANALOG)>;
+    };
+    mux4_adc_vsense: mux4_adc_vsense {
+        pinmux = <STM32_PINMUX('A', 3, ANALOG)>;
+    };
+    mux5_adc_vsense: mux5_adc_vsense {
+        pinmux = <STM32_PINMUX('A', 4, ANALOG)>;
+    };
+};
+
+/* Ссылка на таймер и его дочерний счетчик раскрывается автоматически */
+&timers3 {
+    status = "okay";
+    st,prescaler = <10000>; 
+    counter {
+        status = "okay";
+    };
+};
+
+&gpioa {
+    status = "okay";
+};
+
+/* Включаем АЦП3 в дереве устройств */
+&adc1 {
+    status = "okay";
+    st,adc-clock-source = "SYNC";
+    st,adc-prescaler = <4>;
+    pinctrl-0 = <&mux1_adc_vsense &mux2_adc_vsense &mux3_adc_vsense &mux4_adc_vsense &mux5_adc_vsense>;
+    pinctrl-names = "default";
+};
+
+&dma1 {
+    status = "okay";
+};
+
+
+&dmamux1 {
+    status = "okay";
+};
+
+&sram4  {
+    status = "okay";
 };
 
 &pwr {

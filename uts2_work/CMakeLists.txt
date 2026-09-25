@@ -32,6 +32,7 @@ target_sources(app PRIVATE
        # src/out_and_power_control.c
         src/main.c
         src/settings.c
+        src/sensor_poll.c
       #  src/os.cpp
       ${APP_SOURCES} 
 )
