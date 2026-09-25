@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
@@ -16,7 +17,7 @@
 #include <zephyr/drivers/eeprom.h>
 #include <zephyr/drivers/i2c.h>
 #include "driver_ads1115.h"
-
+#include "ad5243.h"
 #include "settings.h"
 #include "system_bus_model.h"
 #include "driver_ads1115.h"
@@ -29,11 +30,11 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
 
-#define LED0_NODE DT_ALIAS(led1)
+
 
 #define SPI4_NODE DT_NODELABEL(spi4)
 
-static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+
 const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
 
@@ -270,7 +271,7 @@ void EEPROM_Test()
     
 }
 #define I2C1_NODE DT_NODELABEL(i2c1)
-
+/*
 
 #define AD5243_DEFAULT_ADDR 0x2F 
 
@@ -295,11 +296,6 @@ int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
 
     uint8_t tx_data[2];
 
-    /* 
-     * Формируем инструкцию:
-     * Для канала 1: старший бит = 0 -> инструкция 0x00
-     * Для канала 2: старший бит = 1 -> инструкция 0x80
-     */
     if (channel == AD5243_CHANNEL_1) {
         tx_data[0] = 0x00; // Выбор канала 1 (W1)
     } else {
@@ -318,12 +314,12 @@ int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
     return 0;
 }
 
-
+*/
 
 int main(void)
 {
 	LOG_INF("SYSTETM START 2");	
-
+    ad5243_init(DEVICE_DT_GET(I2C1_NODE), 0, 0);
 /*	int ret;
 	if (!device_is_ready(dev_gnd)) {
         LOG_ERR("TMP112 (0x48, ADD0=GND) is not ready!");
@@ -393,12 +389,17 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
         } else {
             LOG_ERR("Failed to fetch sample from BH1750 (VDD)");
         }*/
-        ad5243_set_wiper(AD5243_CHANNEL_2, i);
-        LOG_INF("AD5243 Ch1 -> %d",i);
-        i=i+10;
-        if (i >=255)  i = 0;
-
-        // SYSTEM_BUS_SET(LED1, (bool)true);            
+        if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
+        {
+            LOG_INF("AD5243 Ch1 -> %d",i);
+            i=i+10;
+            if (i >=255)  i = 0;
+        }
+        else 
+        {
+            LOG_INF("AD5243 Ch1 error");
+        }
+         SYSTEM_BUS_SET(LED1, (bool)false);            
         SYSTEM_BUS_SET(LED3, (bool)true);                
         SYSTEM_BUS_SET(LED2, (bool)false);                
         //param_set(LED3, &val, false);                
