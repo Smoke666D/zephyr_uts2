@@ -4,7 +4,7 @@
 #include <zephyr/zbus/zbus.h>
 #include "led.h"
 #include "app_worker.h"
-#include "param_server.h"
+#include "system_bus_model.h"
 
 LOG_MODULE_REGISTER(led_manager, LOG_LEVEL_INF);
 
@@ -26,13 +26,16 @@ static const struct gpio_dt_spec green_spec  = GPIO_DT_SPEC_GET(GREEN_LED_NODE, 
 static const struct gpio_dt_spec yellow_spec = GPIO_DT_SPEC_GET(YELLOW_LED_NODE, gpios);
 static const struct gpio_dt_spec red_spec    = GPIO_DT_SPEC_GET(RED_LED_NODE, gpios);
 
-struct led_work_ctx {
-    struct k_work work;
-    struct led_state_msg state;
-    struct k_sem done_sem;
-};
+typedef struct 
+{ 
+    bool     led_state[32];
+} led_command_t;
 
-static struct led_work_ctx led_task;
+
+
+K_MSGQ_DEFINE(led_queue, sizeof(led_command_t), 4, 4);
+
+static struct k_work led_task;
 
 /* 1. Сначала объявляем callback-функцию слушателя */
 static void led_zbus_listener_callback(const struct zbus_channel *chan)
@@ -40,10 +43,13 @@ static void led_zbus_listener_callback(const struct zbus_channel *chan)
     /* Объявление канала будет ниже, но сам указатель chan уже известен */
     extern const struct zbus_channel led_state_channel;
     
-    if (chan == &led_state_channel) {
-        const struct led_state_msg *msg = zbus_chan_msg(chan);
-        led_task.state = *msg;
-        app_worker_submit(&led_task.work);
+    if (chan == &led_state_channel)
+    {
+        const BOOLEAN_ARRAY_CHANNEL_t *msg = zbus_chan_const_msg(chan);
+        led_command_t _msg;
+        memcpy(&_msg.led_state,&msg->value,sizeof(led_command_t));
+        k_msgq_put(&led_queue, &_msg, K_NO_WAIT);
+        app_worker_submit(&led_task);
     }
 }
 
@@ -52,24 +58,19 @@ ZBUS_LISTENER_DEFINE(led_listener, led_zbus_listener_callback);
 
 /* 3. Обработчик воркера (физическое переключение пинов) */
 static void led_hardware_update_handler(struct k_work *work)
-{
-    struct led_work_ctx *ctx = CONTAINER_OF(work, struct led_work_ctx, work);
-
-    if (ctx->state.update_mask & 0x01)
-    gpio_pin_set_dt(&green_spec,  ctx->state.led[0] ? 1 : 0);
-if (ctx->state.update_mask & 0x02)
-    gpio_pin_set_dt(&yellow_spec, ctx->state.led[1] ? 1 : 0);
-if (ctx->state.update_mask & 0x04)
-    gpio_pin_set_dt(&red_spec,    ctx->state.led[2] ? 1 : 0);
-
-  
-        k_sem_give(&ctx->done_sem);
-    
+{    
+    bool led_state[32];
+    while (k_msgq_get(&led_queue, led_state, K_NO_WAIT) == 0)
+    {
+        gpio_pin_set_dt(&green_spec,  led_state[0] ? 1 : 0);
+        gpio_pin_set_dt(&yellow_spec, led_state[1] ? 1 : 0);
+        gpio_pin_set_dt(&red_spec,    led_state[2] ? 1 : 0);            
+    }
 }
 
 /* 4. Теперь определяем канал ZBUS, ссылаясь на уже созданный 'led_listener' */
 ZBUS_CHAN_DEFINE(led_state_channel,
-                 struct led_state_msg,
+                 BOOLEAN_ARRAY_CHANNEL_t,
                  NULL,
                  NULL,
                  ZBUS_OBSERVERS(led_listener),
@@ -97,7 +98,7 @@ static int led_manager_system_init(void)
     ret = gpio_pin_configure_dt(&red_spec, GPIO_OUTPUT_INACTIVE);
     if (ret < 0) return ret;
 
-    k_work_init(&led_task.work, led_hardware_update_handler);
+    k_work_init(&led_task, led_hardware_update_handler);
 
     LOG_INF("Светодиоды успешно инициализированы.");
     return 0;
@@ -107,7 +108,7 @@ static int led_manager_system_init(void)
 SYS_INIT(led_manager_system_init, APPLICATION, 40);
 
 
-static int _led_set(PARAM_ID _id, const PARAM_VAL *_val,  bool is_sync)
+/*static int _led_set(PARAM_ID _id, const PARAM_VAL *_val,  bool is_sync)
 {
     if (true
         && _id >= LED1
@@ -128,8 +129,8 @@ static int _led_set(PARAM_ID _id, const PARAM_VAL *_val,  bool is_sync)
 
     }
 
-}
+}*/
 
-PARAM_ROUTE_WO(LED1,   _led_set);
-PARAM_ROUTE_WO(LED2,   _led_set);
-PARAM_ROUTE_WO(LED3,   _led_set);
+PARAM_ROUTE_DEFINE(LED1,&led_state_channel,0,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(LED2,&led_state_channel,1,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(LED3,&led_state_channel,2,ARRAY_DATA);

@@ -27,7 +27,8 @@ target_sources(app PRIVATE
        #src/ina228_stream_thread.c
        src/app_worker.c
        src/driver_ads1115.c
-       src/param_server.c 
+       #src/param_server.c 
+       src/system_bus_model.c
        # src/out_and_power_control.c
         src/main.c
         src/settings.c

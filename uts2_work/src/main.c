@@ -18,7 +18,7 @@
 #include "driver_ads1115.h"
 
 #include "settings.h"
-#include "param_server.h"
+#include "system_bus_model.h"
 #include "driver_ads1115.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -398,15 +398,14 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
         i=i+10;
         if (i >=255)  i = 0;
 
-        PARAM_VAL val;
-        val.value.boolean = false;
-        param_set(LED1, &val, false);
-        
-        
+        // SYSTEM_BUS_SET(LED1, (bool)true);            
+        SYSTEM_BUS_SET(LED3, (bool)true);                
+        SYSTEM_BUS_SET(LED2, (bool)false);                
+        //param_set(LED3, &val, false);                
         k_msleep(SLEEP_TIME_MS);
-         val.value.boolean = true;
-        param_set(LED1, &val, false);
-       k_msleep(SLEEP_TIME_MS);
+        SYSTEM_BUS_SET(LED3, (bool)false);                
+        SYSTEM_BUS_SET(LED2, (bool)true);                
+        k_msleep(SLEEP_TIME_MS);
 		//poll_all_sensors();
 
 
