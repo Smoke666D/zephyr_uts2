@@ -20,8 +20,8 @@
 #include "ad5243.h"
 #include "settings.h"
 #include "system_bus_model.h"
-#include "driver_ads1115.h"
-#include "sensor_poll.h"
+
+
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "usb_thread.h"
@@ -204,17 +204,7 @@ void poll_all_sensors(void)
  const struct device *dev1 = DEVICE_DT_GET(EEPROM_1_NODE);
 const struct device *dev2 = DEVICE_DT_GET(EEPROM_2_NODE);
 
-#define TMP112_GND_NODE DT_NODELABEL(tmp112_gnd)
-#define TMP112_VDD_NODE DT_NODELABEL(tmp112_vdd)
 
-const struct device *dev_gnd = DEVICE_DT_GET(TMP112_GND_NODE);
-const struct device *dev_vdd = DEVICE_DT_GET(TMP112_VDD_NODE);
-
-#define BH1750_GND_NODE DT_NODELABEL(bh1750_gnd)
-#define BH1750_VDD_NODE DT_NODELABEL(bh1750_vdd)
-
-const struct device *dev_gnd1 = DEVICE_DT_GET(BH1750_GND_NODE);
-const struct device *dev_vdd1 = DEVICE_DT_GET(BH1750_VDD_NODE);
 
 void EEPROM_Test()
 {
@@ -271,84 +261,15 @@ void EEPROM_Test()
 
     
 }
-#define I2C1_NODE DT_NODELABEL(i2c1)
-/*
-
-#define AD5243_DEFAULT_ADDR 0x2F 
-
-typedef enum {
-    AD5243_CHANNEL_1 = 0,
-    AD5243_CHANNEL_2 = 1
-} ad5243_channel_t;
 
 
-int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
-{
-    const struct device *i2c_dev = DEVICE_DT_GET(I2C1_NODE);
-    if (!device_is_ready(i2c_dev)) {
-        LOG_ERR("I2C1 bus not ready for AD5243!");
-        return -ENODEV;
-    }
-
-    struct i2c_dt_spec spec = {
-        .bus = i2c_dev,
-        .addr = AD5243_DEFAULT_ADDR
-    };
-
-    uint8_t tx_data[2];
-
-    if (channel == AD5243_CHANNEL_1) {
-        tx_data[0] = 0x00; // Выбор канала 1 (W1)
-    } else {
-        tx_data[0] = 0x80; // Выбор канала 2 (W2)
-    }
-
-    tx_data[1] = value; // Значение положения движка (0..255)
-
-    int ret = i2c_write_dt(&spec, tx_data, sizeof(tx_data));
-    if (ret < 0) {
-        LOG_ERR("Failed to set AD5243 wiper: %d", ret);
-        return ret;
-    }
-
-    LOG_DBG("AD5243 Ch %d set to wiper pos: %d", channel + 1, value);
-    return 0;
-}
-
-*/
 
 int main(void)
 {
 	LOG_INF("SYSTETM START 2");	
-    ad5243_init(DEVICE_DT_GET(I2C1_NODE), 0, 0);
+  
 /*	int ret;
-	if (!device_is_ready(dev_gnd)) {
-        LOG_ERR("TMP112 (0x48, ADD0=GND) is not ready!");
-        return 0;
-    }
-    LOG_INF("TMP112 (0x48) is ready.");
-
-    if (!device_is_ready(dev_vdd)) {
-        LOG_ERR("TMP112 (0x49, ADD0=VDD) is not ready!");
-        return 0;
-    }
-    LOG_INF("TMP112 (0x49) is ready.");
-
- 
-
-
     EEPROM_Test();
-     if (!device_is_ready(dev_gnd1)) {
-        LOG_ERR("BH1750 (0x23, ADDR=GND) is not ready!");
-       // return 0;
-    }
-    LOG_INF("BH1750 (0x23) is ready.");
-
-    if (!device_is_ready(dev_vdd1)) {
-        LOG_ERR("BH1750 (ADDR=VDD) is not ready!");
-        //return 0;
-    }
-    LOG_INF("BH1750 (VDD) is ready.");
 
 	FRAM_Test();
 
@@ -370,26 +291,8 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
             LOG_WRN("No data in Zbus channel yet.");
         }
 
-      struct sensor_value lux_gnd, lux_vdd;
+     
 
- 
-/* Читаем датчик 1 (ADDR = GND) */
-       /* if (sensor_sample_fetch(dev_gnd1) == 0) {
-            sensor_channel_get(dev_gnd1, SENSOR_CHAN_LIGHT, &lux_gnd);
-            LOG_INF("Light (ADDR = GND, 0x23): %d.%02d lx", 
-                     lux_gnd.val1, lux_gnd.val2 / 10000);
-        } else {
-            LOG_ERR("Failed to fetch sample from BH1750 (0x23)");
-        }
-
-        /* Читаем датчик 2 (ADDR = VDD) */
-       /* if (sensor_sample_fetch(dev_vdd1) == 0) {
-            sensor_channel_get(dev_vdd1, SENSOR_CHAN_LIGHT, &lux_vdd);
-            LOG_INF("Light (ADDR = VDD): %d.%02d lx", 
-                     lux_vdd.val1, lux_vdd.val2 / 10000);
-        } else {
-            LOG_ERR("Failed to fetch sample from BH1750 (VDD)");
-        }*/
         if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
         {
             LOG_INF("AD5243 Ch1 -> %d",i);
@@ -409,52 +312,34 @@ if (zbus_chan_read(&ads_channel, &snapshot, K_NO_WAIT) == 0) {
         SYSTEM_BUS_SET(LED2, (bool)true);                
         k_msleep(SLEEP_TIME_MS);
 
-             float temp_gnd = 0.0f, temp_vdd = 0.0f;
+        float temp_gnd = 0.0f, temp_vdd = 0.0f;
         float light_gnd = 0.0f, light_vdd = 0.0f;
 
         LOG_INF("--- Текущие значения датчиков (из кэша) ---");
 
-        if (app_worker_get_sensor_float(0, &temp_gnd)) {
-            LOG_INF("TMP112 (GND): %.2f °C", (double)temp_gnd);
-        } else {
+        SYSTEM_BUS_GET(I2C1_TEMP1, &temp_gnd);
+        if isnan(temp_gnd)
             LOG_WRN("TMP112 (GND): нет данных");
-        }
+        else
+            LOG_INF("TMP112 (GND): %.2f °C", (double)temp_gnd);
 
-        if (app_worker_get_sensor_float(1, &temp_vdd)) {
+        SYSTEM_BUS_GET(I2C1_TEMP2, &temp_vdd);
+        if isnan(temp_vdd) 
             LOG_INF("TMP112 (VDD): %.2f °C", (double)temp_vdd);
-        } else {
+         else 
             LOG_WRN("TMP112 (VDD): нет данных");
-        }
-
-        if (app_worker_get_sensor_float(2, &light_gnd)) {
+        
+        SYSTEM_BUS_GET(I2C1_LUX1,  &light_gnd);
+        if isnan(light_gnd)
             LOG_INF("BH1750 (GND): %.2f lx", (double)light_gnd);
-        } else {
+        else 
             LOG_WRN("BH1750 (GND): нет данных");
-        }
 
-        if (app_worker_get_sensor_float(3, &light_vdd)) {
+        SYSTEM_BUS_GET(I2C1_LUX2,  &light_vdd);
+        if isnan(light_vdd) 
             LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
-        } else {
+         else 
             LOG_WRN("BH1750 (VDD): нет данных");
-        }
-
-        /*if (sensor_sample_fetch(dev_gnd) == 0) {
-            sensor_channel_get(dev_gnd, SENSOR_CHAN_AMBIENT_TEMP, &temp_gnd);
-            LOG_INF("Temp (ADD0 = GND, 0x48): %d.%02d °C", 
-                     temp_gnd.val1, temp_gnd.val2 / 10000); // val2 хранится в микро-единицах
-        } else {
-            LOG_ERR("Failed to fetch sample from TMP112 (0x48)");
-        }
-
-        /* Читаем датчик 2 (ADD0 = VDD) */
-/*        if (sensor_sample_fetch(dev_vdd) == 0) {
-            sensor_channel_get(dev_vdd, SENSOR_CHAN_AMBIENT_TEMP, &temp_vdd);
-            LOG_INF("Temp (ADD0 = VDD, 0x49): %d.%02d °C", 
-                     temp_vdd.val1, temp_vdd.val2 / 10000);
-        } else {
-            LOG_ERR("Failed to fetch sample from TMP112 (0x49)");
-        }
-            */
    }
 	
 	return 0;
