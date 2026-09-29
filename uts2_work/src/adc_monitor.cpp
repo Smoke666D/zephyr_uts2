@@ -1,7 +1,7 @@
 #include "os.h"
 #include <zephyr/logging/log.h>
-#include "param_server.h"
-#include "system_data_bus.h"
+
+#include "system_bus_model.h"
 
 LOG_MODULE_REGISTER(adc_mon, LOG_LEVEL_INF);
 
@@ -43,14 +43,14 @@ public:
             // Используем метод sleep из базового класса (обертка над k_msleep)
             sleep(3000);
 
-            PARAM_VAL val[4];
-            LOG_INF("=== [Zbus State Monitor] 32 Channels Test Pattern ===");
+           // PARAM_VAL val[4];
+           // LOG_INF("=== [Zbus State Monitor] 32 Channels Test Pattern ===");
             
             for (int step = 0; step < 8; step++) {
                 int ret = 0;
 
                 // Получаем 4 канала за итерацию
-                for(int i = 0; i < 4; i++) {
+          /*      for(int i = 0; i < 4; i++) {
                     ret |= param_get((PARAM_ID)param_names[step * 4 + i], &val[i]);
                 }
 
@@ -66,7 +66,7 @@ public:
                     LOG_WRN("Step %d | Data is not ready yet.", step);
                 }
             }
-        }
+        }*/
     }
 };
 

@@ -6,7 +6,7 @@ extern "C" {
 #define AIN_TASK_STACK_SIZE 2024
 #define AIN_TASK_PRIORITY 10
 
-
+#include "stdint.h"
 
 typedef enum
 {
@@ -53,8 +53,6 @@ typedef enum
 
 /* Структура сообщения АЦП */
 typedef struct adc_data_msg {
-    uint32_t vdda_mv;
-    int32_t raw_temp;
     uint32_t channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
 };
 

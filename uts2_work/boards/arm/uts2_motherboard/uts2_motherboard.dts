@@ -33,7 +33,7 @@
          * Передаем ссылки на аппаратные блоки таймера и АЦП.
          * Это избавляет наш Си-код драйвера от хардкода.
          */
-        adc-dev = <&adc1>;
+        adc-dev = <&adc3>;
         timer-dev = <&timers3>;
 
         /* 
@@ -42,18 +42,18 @@
          * 2. DMA1 Stream 1: Опрос АЦП3 в циклическом режиме по кругу (Слот 115, ADC3)
          */
         dmas = <&dmamux1 0 23 0>,
-               <&dmamux1 1 9 0>;
+               <&dmamux1 1 115 0>;
         dma-names = "seq_dma", "adc_dma";
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
-        mux-gpios = <&gpiob 0 GPIO_ACTIVE_HIGH>,
-                    <&gpiob 13 GPIO_ACTIVE_HIGH>,
-                    <&gpiob 14 GPIO_ACTIVE_HIGH>;
+        mux-gpios = <&gpioe 12 GPIO_ACTIVE_HIGH>,
+                    <&gpioe 13 GPIO_ACTIVE_HIGH>,
+                    <&gpioe 14 GPIO_ACTIVE_HIGH>;
 
         adc-duration-us = <100000>;     /* T1: время АЦП */
         switch-duration-us = <100000>;  /* T2: время переключения */ 
 
-        status = "disabled";
+        status = "okay";
     };
 
 
@@ -121,12 +121,14 @@
 };
 
 /* Включаем АЦП3 в дереве устройств */
-&adc1 {
+
+
+&adc3 {
     status = "okay";
     st,adc-clock-source = "SYNC";
-    st,adc-prescaler = <4>;
     pinctrl-0 = <&mux1_adc_vsense &mux2_adc_vsense &mux3_adc_vsense &mux4_adc_vsense &mux5_adc_vsense>;
     pinctrl-names = "default";
+    st,adc-prescaler = <4>;
 };
 
 &dma1 {
@@ -175,20 +177,28 @@
 
 &pll {
 	div-m = <2>;
-	mul-n = <34>;
+	mul-n = <48>;
 	div-p = <2>;
 	div-q = <2>;
 	div-r = <2>;
-	fracn = <3072>; 
+	fracn = <0>; 
 	clocks = <&clk_hse>;
 	status = "okay";
 };
 
-
+&pll2 {
+	div-m = <2>;
+	mul-n = <12>;
+	div-p = <2>;
+	div-q = <2>;
+	div-r = <2>;
+	clocks = <&clk_hse>;
+	status = "okay";
+};
 
 &rcc {
 	clocks = <&pll>;
-	clock-frequency = <275000000>;
+	clock-frequency = <384000000>;
 	d1cpre = <1>;
 	hpre = <2>;    /* HCLK: 275   MHz */
 	d1ppre = <2>;  /* APB1: 137.5 MHz */

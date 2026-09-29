@@ -8,7 +8,38 @@ extern "C" {
 #include <zephyr/zbus/zbus.h>
 
 typedef enum
-{
+{   AIN_AO1,
+    AIN_AO7,
+    AIN_AO13,
+    AIN_AVsense1,
+    AIN_AO2,
+    AIN_AO8,
+    AIN_AO14,
+    AIN_AVsense2,    
+    AIN_AO3,
+    AIN_AO9,
+    AIN_AO15,
+    AIN_AVsense3,        
+    AIN_AO4,
+    AIN_AO10,
+    AIN_AO16,
+    AIN_AVsense4,
+    AIN_AO5,
+    AIN_AO11,
+    AIN_AO17,
+    AIN_AVsense5,
+    AIN_AO6,                    
+    AIN_AO12,                
+    AIN_AO18,
+    AIN_AVsense6,
+    AIN_DA11_test1,
+    AIN_DA20_test1,
+    AIN_DA33_test1,
+    AIN_DA44_test1,
+    AIN_DA11_test2,
+    AIN_DA20_test2,
+    AIN_DA33_test2,
+    AIN_DA44_test2, 
     LED1,
     LED2,
     LED3,
@@ -99,7 +130,7 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val);
     bool:     bus_get_bool, \
     int:      bus_get_u32,  \
     unsigned: bus_get_u32,  \
-    float:    bus_get_real \     
+    float:    bus_get_real  \
 )((id), (val))
     
 #ifdef __cplusplus

@@ -355,11 +355,7 @@ int main(void)
         }
 
 
-      struct sensor_value lux_gnd, lux_vdd;
-
- 
-
-
+  
 
         if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
         {
@@ -412,7 +408,16 @@ int main(void)
         else
             LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
                  
-        
+        uint32_t ain1,ain2,ain3,ain4;
+        SYSTEM_BUS_GET( AIN_AO1,  &ain1);
+        SYSTEM_BUS_GET(AIN_AO7,  &ain2);
+        SYSTEM_BUS_GET(AIN_AO13,  &ain3);
+        SYSTEM_BUS_GET(AIN_AVsense1,  &ain4);
+        LOG_INF("A1 LINE(VDD): %d", ain1);
+        LOG_INF("A2 LINE(VDD): %d", ain2);
+        LOG_INF("A3 LINE(VDD): %d", ain3);
+        LOG_INF("A4 LINE(VDD): %d", ain4);
+ 
    }
 	
 	return 0;

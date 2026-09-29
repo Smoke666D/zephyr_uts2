@@ -391,11 +391,11 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
         k_busy_wait(20);
     }
 
-#if DT_SAME_NODE(SEQ_ADC_NODE, DT_NODELABEL(adc3))
+//#if DT_SAME_NODE(SEQ_ADC_NODE, DT_NODELABEL(adc3))
     ADC_Common_TypeDef *adc_common = ADC3_COMMON;
-#else
-    ADC_Common_TypeDef *adc_common = ADC12_COMMON;
-#endif
+//#else
+//    ADC_Common_TypeDef *adc_common = ADC12_COMMON;
+//#endif
 
     LL_ADC_SetCommonClock(adc_common, LL_ADC_CLOCK_ASYNC_DIV2);
     LL_ADC_SetCommonPathInternalCh(
@@ -427,6 +427,13 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
                                 LL_ADC_SINGLE_ENDED);
     LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_VREFINT, 
                                 LL_ADC_SINGLE_ENDED);
+
+
+ if (LL_ADC_IsEnabled(_adc_inst) == 1)
+    {
+        LL_ADC_Disable(_adc_inst);
+        while (LL_ADC_IsEnabled(_adc_inst) == 1);
+    }
 
     LL_ADC_StartCalibration(_adc_inst, LL_ADC_CALIB_OFFSET, 
                             LL_ADC_SINGLE_ENDED);

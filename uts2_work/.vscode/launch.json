@@ -3,19 +3,15 @@
   "configurations": [
     {
       "name": "Zephyr Workbench Debug [primary]",
-      "type": "cortex-debug",
+      "type": "zephyr-workbench",
       "request": "launch",
       "cwd": "${workspaceFolder}",
-      "executable": "${workspaceFolder}/build/primary/zephyr/zephyr.elf",
-      "svdFile": "C:\\ST\\STM32CubeCLT_1.22.0\\STMicroelectronics_CMSIS_SVD\\STM32H723.svd",
-      "gdbPath": "${config:zephyr-workbench.sdk}\\gnu\\arm-zephyr-eabi\\bin\\arm-zephyr-eabi-gdb-py.exe",
-      "armToolchainPath": "${config:zephyr-workbench.sdk}\\gnu\\arm-zephyr-eabi\\bin",
-      "toolchainPrefix": "arm-zephyr-eabi",
-      "runToEntryPoint": "main",
-      "servertype": "jlink",
-      "interface": "swd",
-      "device": "STM32H723VG",
-      "serverpath": "c:\\Program Files\\SEGGER\\JLink_V954\\JLinkGDBServerCL.exe"
+      "program": "${workspaceFolder}/build/primary/zephyr/zephyr.elf",
+      "svdPath": "C:\\ST\\STM32CubeCLT_1.22.0\\STMicroelectronics_CMSIS_SVD\\STM32H723.svd",
+      "miDebuggerPath": "${config:zephyr-workbench.sdk}\\gnu\\arm-zephyr-eabi\\bin\\arm-zephyr-eabi-gdb-py.exe",
+      "debugServerArgs": "debugserver --build-dir \"${workspaceFolder}/build/primary\" --runner jlink --gdb-port 2331",
+      "gdbTarget": "localhost:2331",
+      "gdbMode": "program"
     }
   ]
 }
