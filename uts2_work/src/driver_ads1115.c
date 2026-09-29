@@ -1,9 +1,11 @@
-#include "driver_ads1115.h"
+
 #include "app_worker.h"
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/logging/log.h>
+#include "system_bus_model.h"
 
+#define ADS1115_DEFAULT_ADDR 0x4B
 
 LOG_MODULE_REGISTER(ads_driver, LOG_LEVEL_INF);
 
@@ -25,21 +27,15 @@ static struct k_work ads_work;
 static uint8_t current_channel = 0;
 static uint8_t dr_config_bits = 0xE0; // Дефолт 860 SPS
 
-static struct ads1115_snapshot current_snapshot = {
-
-    .voltages_mv = {0},
-    .channel_ready = {false}
-};
+FLOAT_ARRAY_CHANNEL_4_t current_snapshot;
 
 ZBUS_CHAN_DEFINE(ads_channel,
-                 struct ads1115_snapshot,
+                 FLOAT_ARRAY_CHANNEL_4_t,
                  NULL,
                  NULL,
                  ZBUS_OBSERVERS_EMPTY,
-                 ZBUS_MSG_INIT(
-                     .voltages_mv = {0.0f, 0.0f, 0.0f, 0.0f},
-                     .channel_ready = {false, false, false, false}
-                 ));
+                 ZBUS_MSG_INIT(0)
+                );
 
 static void ads_work_handler(struct k_work *work)
 {
@@ -64,14 +60,14 @@ static void ads_work_handler(struct k_work *work)
         
         // Вычисляем относительный уровень мощности (условные dBm или dB)
         float power_db = (voltage_mv - intercept_mv) / slope_mv_per_db;
-        current_snapshot.voltages_mv[current_channel] = power_db;
+        current_snapshot.value[current_channel] = power_db;
     }
     else 
     {
-        current_snapshot.voltages_mv[current_channel] = voltage_mv;
+        current_snapshot.value[current_channel] = voltage_mv;
     }
     
-    current_snapshot.channel_ready[current_channel] = true;
+   
     zbus_chan_pub(&ads_channel, &current_snapshot, K_NO_WAIT);
 
    
@@ -84,7 +80,6 @@ static void ads_work_handler(struct k_work *work)
         0x01,              
         mux_bits | 0x03,   
         dr_config_bits     
-
 
     };
     
@@ -156,3 +151,10 @@ static int ads1115_driver_init(void)
 }
 
 SYS_INIT(ads1115_driver_init, APPLICATION, 90);
+
+
+
+PARAM_ROUTE_DEFINE(RF_POWER,&ads_channel,0,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(NTC,&ads_channel,1,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EXT_VSENSE,&ads_channel,2,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(BRD_DETECT,&ads_channel,3,ARRAY_DATA);

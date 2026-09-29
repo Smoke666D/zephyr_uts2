@@ -13,11 +13,13 @@ include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 target_include_directories(app PRIVATE 
     src 
     src/drivers
+    src/logic_signal
  #   src/lua
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
-    "src/drivers/*.c"    
+    "src/drivers/*.c"  
+    "src/logic_signal/*.c"  
 #"src/lua/*.c"    
 )
 
@@ -32,7 +34,6 @@ target_sources(app PRIVATE
        # src/out_and_power_control.c
         src/main.c
         src/settings.c
-        src/sensor_poll.c
       #  src/os.cpp
       ${APP_SOURCES} 
 )

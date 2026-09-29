@@ -14,6 +14,14 @@ typedef enum
     LED3,
     BUTTON1,
     BUTTON2,
+    I2C1_TEMP1,
+    I2C1_TEMP2,
+    I2C1_LUX1,
+    I2C1_LUX2,
+    RF_POWER,
+    NTC,
+    EXT_VSENSE,
+    BRD_DETECT,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;
@@ -44,6 +52,11 @@ typedef struct
     bool  value[32];    
 } BOOLEAN_ARRAY_CHANNEL_t;
 
+
+typedef struct 
+{
+    float  value[4];    
+} FLOAT_ARRAY_CHANNEL_4_t;
 
 struct system_bus_handler
 {
@@ -77,6 +90,17 @@ struct system_bus_handler
         float:      bus_set_real(id, val) \
     )
 
+int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
+int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
+int bus_get_real(SYSTEM_BUS_ID id, float * _val);
+
+// 2. Пишем макрос, который смотрит на тип указателя `val`
+#define SYSTEM_BUS_GET(id, val) _Generic(*(val), \
+    bool:     bus_get_bool, \
+    int:      bus_get_u32,  \
+    unsigned: bus_get_u32,  \
+    float:    bus_get_real \     
+)((id), (val))
     
 #ifdef __cplusplus
 }
