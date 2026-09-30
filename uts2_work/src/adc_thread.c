@@ -9,25 +9,25 @@
 
 
 static const uint32_t r1_resistors[TOTAL_CHANNEL_COUNT] = {
-    10000,  10000,  10000,  10000,  // Шаг 0 (AO1, AO7, AO13, AVsense1)
-    10000,  10000,  10000,  10000,  // Шаг 1 (AO2, AO8, AO14, AVsense2)
-    10000,  10000,  10000,  10000,  // Шаг 2 (AO3 ...)
-    10000,  10000,  10000,  10000,  // Шаг 3
-    10000,  10000,  10000,  10000,  // Шаг 4
-    10000,  10000,  10000,  10000,  // Шаг 5
-    0,  0,  0,  0,  // Шаг 6 (Тестовые каналы DA11..DA44 T1)
-    0, 0, 0, 0  // Шаг 7 (Тестовые каналы DA11..DA44 T2)
+    10000,  10000,  10000,  10000, 10000, // Шаг 0 (AO1, AO7, AO13, AVsense1)
+    10000,  10000,  10000,  10000,  10000,// Шаг 1 (AO2, AO8, AO14, AVsense2)
+    10000,  10000,  10000,  10000,  10000,// Шаг 2 (AO3 ...)
+    10000,  10000,  10000,  10000, 10000,  // Шаг 3
+    10000,  10000,  10000,  10000, 0,  // Шаг 4
+    10000,  10000,  10000,  10000,  0,// Шаг 5
+    0,  0,  0,  0, 0, // Шаг 6 (Тестовые каналы DA11..DA44 T1)
+    0, 0, 0, 0,0  // Шаг 7 (Тестовые каналы DA11..DA44 T2)
 };
 
 static const uint32_t r2_resistors[TOTAL_CHANNEL_COUNT] = {
-    69000, 69000, 69000, 10000,
-    69000, 69000, 69000, 10000,
-    69000, 69000, 69000, 10000,
-    69000, 69000, 69000, 10000,
-    69000, 69000, 69000, 10000,
-    69000, 69000, 69000, 10000,
-    1, 1, 1, 1,
-    1, 1, 1, 1
+    69000, 69000, 69000, 10000, 69000,
+    69000, 69000, 69000, 10000, 69000,
+    69000, 69000, 69000, 10000,69000,
+    69000, 69000, 69000, 10000,69000,
+    69000, 69000, 69000, 10000,1,
+    69000, 69000, 69000, 10000,1,
+    1, 1, 1, 1,1,
+    1, 1, 1, 1,1
 };
 
 static float coefficients[TOTAL_CHANNEL_COUNT];
@@ -45,54 +45,10 @@ ZBUS_CHAN_DEFINE(adc_data_chan,
                  ZBUS_MSG_INIT(0) /* Инициализация нулями */
 );
 
-static const AIN_MUX_CHANNEL_NUMBER param_to_adc_map[] = {
-    [AIN_AO1]        = AO1,
-    [AIN_AO7]        = AO7,
-    [AIN_AO13]       = AO13,
-    [AIN_AVsense1]   = AVsense1,
-    [AIN_AO2]        = AO2,
-    [AIN_AO8]        = AO8,
-    [AIN_AO14]       = AO14,
-    [AIN_AVsense2]   = AVsense2,
-    [AIN_AO3]        = AO3,
-    [AIN_AO9]        = AO9,
-    [AIN_AO15]       = AO15,
-    [AIN_AVsense3]   = AVsense3,
-    [AIN_AO4]        = AO4,
-    [AIN_AO10]       = AO10,
-    [AIN_AO16]       = AO16,
-    [AIN_AVsense4]   = AVsense4,
-    [AIN_AO5]        = AO5,
-    [AIN_AO11]       = AO11,
-    [AIN_AO17]       = AO17,
-    [AIN_AVsense5]   = AVsense5,
-    [AIN_AO6]        = AO6,
-    [AIN_AO12]       = AO12,
-    [AIN_AO18]       = AO18,
-    [AIN_AVsense6]   = AVsense6,
-    [AIN_DA11_test1] = DA11_test1,
-    [AIN_DA20_test1] = DA20_test1,
-    [AIN_DA33_test1] = DA33_test1,
-    [AIN_DA44_test1] = DA44_test1,
-    [AIN_DA11_test2] = DA11_test2,
-    [AIN_DA20_test2] = DA20_test2,
-    [AIN_DA33_test2] = DA33_test2,
-    [AIN_DA44_test2] = DA44_test2,
-};
-
-
-
-
-
-
-
 
 LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 
 /* Получаем указатель на наш прибор из дерева устройств */
-
-
-
 
 
 /* Функция-помощник для считывания сырого опорного VREFINT для конкретного шага */
@@ -147,39 +103,11 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
         }
 
         // Выполняем тестовое заполнение буфера
-        for (int step = 0; step < 8; step++) {
-           // uint32_t raw_vref = get_vref_raw(seq_dev, step);
-           // uint32_t raw_temp = 0;
-           // api->get_channel_value(seq_dev, step * 4 + 0, &raw_temp); // Датчик температуры — на 1 канале шага (индекс step * 4 + 0)
-
-            // Защита от деления на ноль при неготовности данных
-            //if (raw_vref == 0 || raw_temp == 0) {
-            //    continue;
-           // }
-
-            // Вычисляем VDDA (VREF) и Температуру для текущего шага мультиплексора
-           // uint32_t vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
-            //int32_t temp_c = __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
-
-            //uint32_t temp_val = (uint32_t)(temp_c < 0 ? -temp_c : temp_c);
-
-
-     
-            /* 
-             * ТЕСТОВЫЙ РЕЖИМ ЗАПОЛНЕНИЯ:
-             * 1-й и 3-й канал шага (индексы 0 и 2) — пишем VDDA в милливольтах
-             * 2-й и 4-й канал шага (индексы 1 и 3) — пишем Температуру в градусах
-             */
-           // msg.channels_mv[step * 4 + 0] = vdda_mv;
-          //  msg.channels_mv[step * 4 + 1] = temp_val;
-           // msg.channels_mv[step * 4 + 2] = vdda_mv;
-           // msg.channels_mv[step * 4 + 3] = temp_val;
-
-             
-             //РЕАЛЬНЫЙ КОД ДЛЯ ПРИВЕДЕНИЯ К НАПРЯЖЕНИЮ (закомментирован для тестов по запросу):
+        for (int step = 0; step < ADC_SAMPLES_PER_CH; step++) {
+           
             
-              for (int ch = 0; ch < 4; ch++) {
-                 uint8_t ch_idx = step * 4 + ch;
+              for (int ch = 0; ch < ADC_NUM_CHANNELS; ch++) {
+                 uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
                   uint32_t raw_val = 0;
                   api->get_channel_value(seq_dev, ch_idx, &raw_val);
                   float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
@@ -204,41 +132,48 @@ K_THREAD_DEFINE(my_thread_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry,
 
 
 
-      
 
 
 PARAM_ROUTE_DEFINE(AIN_AO1,&adc_data_chan,0,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(AIN_AO7,&adc_data_chan,1,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(AIN_AO13,&adc_data_chan,2,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(AIN_AVsense1,&adc_data_chan,3,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO2,&adc_data_chan,4,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO8,&adc_data_chan,5,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO14,&adc_data_chan,6,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense2,&adc_data_chan,7,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO3,&adc_data_chan,8,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO9,&adc_data_chan,9,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO15,&adc_data_chan,10,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense3,&adc_data_chan,11,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO4,&adc_data_chan,12,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO10,&adc_data_chan,13,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO16,&adc_data_chan,14,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense4,&adc_data_chan,15,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO5,&adc_data_chan,16,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO11,&adc_data_chan,17,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO17,&adc_data_chan,18,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense5,&adc_data_chan,19,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO6,&adc_data_chan,20,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO12,&adc_data_chan,21,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO18,&adc_data_chan,22,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense6,&adc_data_chan,23,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA11_test1,&adc_data_chan,24,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA20_test1,&adc_data_chan,25,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA33_test1,&adc_data_chan,26,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA44_test1,&adc_data_chan,27,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA11_test2,&adc_data_chan,28,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA20_test2,&adc_data_chan,29,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA33_test2,&adc_data_chan,30,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA44_test2,&adc_data_chan,31,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(LIN_AO1,&adc_data_chan,4,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO2,&adc_data_chan,5,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO8,&adc_data_chan,6,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO14,&adc_data_chan,7,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense2,&adc_data_chan,8,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(LIN_AO2,&adc_data_chan,9,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO3,&adc_data_chan,10,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO9,&adc_data_chan,11,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO15,&adc_data_chan,12,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense3,&adc_data_chan,13,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(LIN_AO3,&adc_data_chan,14,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO4,&adc_data_chan,15,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO10,&adc_data_chan,16,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO16,&adc_data_chan,17,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense4,&adc_data_chan,18,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(LIN_AO4,&adc_data_chan,19,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO5,&adc_data_chan,20,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO11,&adc_data_chan,21,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO17,&adc_data_chan,22,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense5,&adc_data_chan,23,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(DA41_GND1,&adc_data_chan,24,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO6,&adc_data_chan,25,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO12,&adc_data_chan,26,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO18,&adc_data_chan,27,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense6,&adc_data_chan,28,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(DA41_GND2,&adc_data_chan,29,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA11_test1,&adc_data_chan,30,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA20_test1,&adc_data_chan,31,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA33_test1,&adc_data_chan,32,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA44_test1,&adc_data_chan,33,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA41_test1,&adc_data_chan,34,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA11_test2,&adc_data_chan,35,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA20_test2,&adc_data_chan,36,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA33_test2,&adc_data_chan,37,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA44_test2,&adc_data_chan,38,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA41_test2,&adc_data_chan,39,ARRAY_DATA);
  
  
  

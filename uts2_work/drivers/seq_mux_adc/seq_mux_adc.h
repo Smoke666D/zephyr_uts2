@@ -43,7 +43,7 @@
 #define SEQ_GPIO_BSRR_ADDR     (MUX_PIN_0_PORT_BASE + 0x18)
 
 #define COMBINATIONS_CNT       8
-#define ADC_CHANNELS_CNT       4
+#define ADC_CHANNELS_CNT       5
 #define TOTAL_CHANNELS_CNT     (COMBINATIONS_CNT * ADC_CHANNELS_CNT)
 
 /* Временные параметры из DTS */

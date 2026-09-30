@@ -320,17 +320,12 @@ int main(void)
 	LOG_INF("SYSTETM START 3");	
     ad5243_init(DEVICE_DT_GET(I2C1_NODE), 0, 0);
 /*	int ret;
-
- 
-
-
     EEPROM_Test();
-
 	FRAM_Test();
-
 	init_all_sensors();
     //settings_fram_init();
-   int current_led = 0;*/
+
+    */
     int i = 0;
     while (1) 
 	{
@@ -355,8 +350,6 @@ int main(void)
         }
 
 
-  
-
         if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
         {
             LOG_INF("AD5243 Ch1 -> %d",i);
@@ -368,12 +361,12 @@ int main(void)
             LOG_INF("AD5243 Ch1 error");
         }
        // SYSTEM_BUS_SET(LED1, (bool)false);            
-      //  SYSTEM_BUS_SET(LED3, (bool)true);                
-      //  SYSTEM_BUS_SET(LED2, (bool)false);                
+        SYSTEM_BUS_SET(LED3, (bool)true);                
+        SYSTEM_BUS_SET(LED2, (bool)false);                
         //param_set(LED3, &val, false);                
         k_msleep(SLEEP_TIME_MS);
-      //  SYSTEM_BUS_SET(LED3, (bool)false);                
-      //  SYSTEM_BUS_SET(LED2, (bool)true);                
+        SYSTEM_BUS_SET(LED3, (bool)false);                
+        SYSTEM_BUS_SET(LED2, (bool)true);                
         k_msleep(SLEEP_TIME_MS);
 
          float temp_gnd = 0.0f, temp_vdd = 0.0f;
@@ -408,61 +401,57 @@ int main(void)
         else
             LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
                  
-        float ain1,ain2,ain3,ain4;
-
- 
-  
-      
-
-
-
-
+        float ain1,ain2,ain3,ain4,ain5;
 
         SYSTEM_BUS_GET( AIN_AO1,  &ain1);
         SYSTEM_BUS_GET(AIN_AO7,  &ain2);
         SYSTEM_BUS_GET(AIN_AO13,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense1,  &ain4);
-        LOG_INF("STEP1: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
+        SYSTEM_BUS_GET(AIN_AVsense1, &ain4);
+        SYSTEM_BUS_GET(LIN_AO1, &ain5);
+        LOG_INF("STEP1: %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
         SYSTEM_BUS_GET( AIN_AO2,  &ain1);
         SYSTEM_BUS_GET(AIN_AO8,  &ain2);
         SYSTEM_BUS_GET(AIN_AO14,  &ain3);
         SYSTEM_BUS_GET(AIN_AVsense2,  &ain4);
-        LOG_INF("STEP2: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
+        SYSTEM_BUS_GET(LIN_AO2, &ain5);
+        LOG_INF("STEP2: %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
         SYSTEM_BUS_GET( AIN_AO3,  &ain1);
         SYSTEM_BUS_GET(AIN_AO9,  &ain2);
         SYSTEM_BUS_GET(AIN_AO15,  &ain3);
         SYSTEM_BUS_GET(AIN_AVsense3,  &ain4);
-        LOG_INF("STEP3: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
+        SYSTEM_BUS_GET(LIN_AO3, &ain5);
+        LOG_INF("STEP3:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
         SYSTEM_BUS_GET(AIN_AO4,  &ain1);
         SYSTEM_BUS_GET(AIN_AO10,  &ain2);
         SYSTEM_BUS_GET(AIN_AO16,  &ain3);
         SYSTEM_BUS_GET(AIN_AVsense4,  &ain4);
-        LOG_INF("STEP4: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
+        SYSTEM_BUS_GET(LIN_AO4, &ain5);
+        LOG_INF("STEP4: %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
          SYSTEM_BUS_GET(AIN_AO5,  &ain1);
         SYSTEM_BUS_GET(AIN_AO11,  &ain2);
         SYSTEM_BUS_GET(AIN_AO17,  &ain3);
         SYSTEM_BUS_GET(AIN_AVsense5,  &ain4);
-        LOG_INF("STEP5: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
+        SYSTEM_BUS_GET(DA41_GND1, &ain5);
+        LOG_INF("STEP5:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
         SYSTEM_BUS_GET(AIN_AO6,  &ain1);
         SYSTEM_BUS_GET(AIN_AO12,  &ain2);
         SYSTEM_BUS_GET(AIN_AO18,  &ain3);
         SYSTEM_BUS_GET(AIN_AVsense6,  &ain4);
-        LOG_INF("STEP6: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
+        SYSTEM_BUS_GET(DA41_GND2, &ain5);
+        LOG_INF("STEP6:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
         SYSTEM_BUS_GET(AIN_DA11_test1,  &ain1);
         SYSTEM_BUS_GET(AIN_DA20_test1,  &ain2);
         SYSTEM_BUS_GET(AIN_DA33_test1,  &ain3);
         SYSTEM_BUS_GET(AIN_DA44_test1,  &ain4);
-        LOG_INF("STEP7: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
-
+        SYSTEM_BUS_GET(AIN_DA41_test1,  &ain5);
+        LOG_INF("STEP7:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
         SYSTEM_BUS_GET(AIN_DA11_test2,  &ain1);
         SYSTEM_BUS_GET(AIN_DA20_test2,  &ain2);
         SYSTEM_BUS_GET(AIN_DA33_test2,  &ain3);
         SYSTEM_BUS_GET(AIN_DA44_test2,  &ain4);
-        LOG_INF("STEP8: %.2f %.2f %.2f %.2f", ain1,ain2,ain3,ain4);
+        SYSTEM_BUS_GET(AIN_DA41_test2,  &ain5);
+        LOG_INF("STEP8:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
 
-        //LOG_INF("A2 LINE(VDD): %.2f", ain2);
-        //LOG_INF("A3 LINE(VDD): %.2f", ain3);
-        //LOG_INF("A4 LINE(VDD): %.2f", ain4);
  
    }
 	

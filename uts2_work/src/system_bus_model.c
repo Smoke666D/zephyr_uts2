@@ -153,7 +153,7 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val)
     }
 
     size_t msg_size = zbus_chan_msg_size(handler->channel);
-    uint8_t raw_msg_buffer[136]; 
+    uint8_t raw_msg_buffer[160]; 
     if (msg_size > sizeof(raw_msg_buffer)) {
             return -ENOMEM; 
     }
