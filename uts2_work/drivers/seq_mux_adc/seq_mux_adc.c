@@ -168,17 +168,20 @@ static void _fill_gpio_buffer(uint32_t *_buf)
 
     for (int_fast32_t i = 0; i < COMBINATIONS_CNT; i++) 
     {
-        uint_fast8_t state = (i + 1) % COMBINATIONS_CNT;
+        // Начинаем с 0 и идем по кругу (0, 1, 2, 3, 4, 5, 6, 7)
+        uint_fast8_t state = i % COMBINATIONS_CNT; 
         uint32_t     bsrr_val = 0;
         
         for (int_fast32_t bit = 0; bit < 3; bit++) 
         {
             if (state & (1 << bit)) 
             {
+                // Если бит равен 1 — ставим пин в HIGH (младшие 16 бит BSRR)
                 bsrr_val |= (1 << pins[bit]);
             } 
             else 
             {
+                // Если бит равен 0 — сбрасываем пин в LOW (старшие 16 бит BSRR, смещение +16)
                 bsrr_val |= (1 << (pins[bit] + 16));
             }
         }
@@ -313,17 +316,19 @@ static inline void _gpio_init(void)
     LL_GPIO_ResetOutputPin(port1, 1 << MUX_PIN_1_NUM);
     LL_GPIO_ResetOutputPin(port2, 1 << MUX_PIN_2_NUM);
 
-LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOA);
-     LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_0, LL_GPIO_MODE_ANALOG);
+    LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOA);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_0, LL_GPIO_MODE_ANALOG);
     LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_1, LL_GPIO_MODE_ANALOG);
     LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_2, LL_GPIO_MODE_ANALOG);
     LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_3, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_4, LL_GPIO_MODE_ANALOG);
     
     // Отключаем подтяжки (Pull-up / Pull-down), чтобы не портить аналоговый сигнал
     LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_0, LL_GPIO_PULL_NO);
     LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_1, LL_GPIO_PULL_NO);
     LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_2, LL_GPIO_PULL_NO);
     LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_3, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_4, LL_GPIO_PULL_NO);
 }
 
 /**
@@ -444,27 +449,7 @@ LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_17, LL_ADC_SINGLE_ENDED);
 LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_14, LL_ADC_SINGLE_ENDED);
 LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_15, LL_ADC_SINGLE_ENDED);
 
-   /* LL_ADC_REG_SetSequencerLength(_adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_2RANKS);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_1, 
-                                 LL_ADC_CHANNEL_TEMPSENSOR);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_2, 
-                                 LL_ADC_CHANNEL_VREFINT);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_3, 
-                                 LL_ADC_CHANNEL_TEMPSENSOR);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_4, 
-                                 LL_ADC_CHANNEL_VREFINT);
 
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_TEMPSENSOR);
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_VREFINT);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_TEMPSENSOR, 
-                                  LL_ADC_SAMPLINGTIME_810CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_VREFINT, 
-                                  LL_ADC_SAMPLINGTIME_810CYCLES_5);
-    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_TEMPSENSOR, 
-                                LL_ADC_SINGLE_ENDED);
-    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_VREFINT, 
-                                LL_ADC_SINGLE_ENDED);
-*/
 
  if (LL_ADC_IsEnabled(_adc_inst) == 1)
     {
