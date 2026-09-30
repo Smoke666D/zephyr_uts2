@@ -53,7 +53,7 @@ typedef enum
 
 /* Структура сообщения АЦП */
 typedef struct adc_data_msg {
-    uint32_t channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
+    float channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
 };
 
 

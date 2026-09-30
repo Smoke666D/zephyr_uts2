@@ -312,6 +312,18 @@ static inline void _gpio_init(void)
     LL_GPIO_ResetOutputPin(port0, 1 << MUX_PIN_0_NUM);
     LL_GPIO_ResetOutputPin(port1, 1 << MUX_PIN_1_NUM);
     LL_GPIO_ResetOutputPin(port2, 1 << MUX_PIN_2_NUM);
+
+LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOA);
+     LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_0, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_1, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_2, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_3, LL_GPIO_MODE_ANALOG);
+    
+    // Отключаем подтяжки (Pull-up / Pull-down), чтобы не портить аналоговый сигнал
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_0, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_1, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_2, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_3, LL_GPIO_PULL_NO);
 }
 
 /**
@@ -408,6 +420,10 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
     
     LL_ADC_REG_SetDataTransferMode(_adc_inst, LL_ADC_REG_DMA_TRANSFER_UNLIMITED);
 
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_16);
+LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_17);
+LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_14);  // обратите внимание: у вас PA2 это INP4!
+LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_15);
 
   LL_ADC_REG_SetSequencerLength(_adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_4RANKS);
 
@@ -417,10 +433,10 @@ LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_3, LL_ADC_CHANNEL_14);
 LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_4, LL_ADC_CHANNEL_15);
 
 // 7. Настройка времени выборки (Sampling Time) для каждого канала
-LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_16, LL_ADC_SAMPLINGTIME_810CYCLES_5);
-LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_17, LL_ADC_SAMPLINGTIME_810CYCLES_5);
-LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_14, LL_ADC_SAMPLINGTIME_810CYCLES_5);
-LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_15, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_16, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_17, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_14, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_15, LL_ADC_SAMPLINGTIME_64CYCLES_5);
 
 // 8. Установка режима Single-ended для всех четырех каналов
 LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_16, LL_ADC_SINGLE_ENDED);

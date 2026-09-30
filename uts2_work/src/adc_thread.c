@@ -15,8 +15,8 @@ static const uint32_t r1_resistors[TOTAL_CHANNEL_COUNT] = {
     10000,  10000,  10000,  10000,  // Шаг 3
     10000,  10000,  10000,  10000,  // Шаг 4
     10000,  10000,  10000,  10000,  // Шаг 5
-    47000,  47000,  47000,  47000,  // Шаг 6 (Тестовые каналы DA11..DA44 T1)
-    100000, 100000, 100000, 100000  // Шаг 7 (Тестовые каналы DA11..DA44 T2)
+    10000,  10000,  10000,  10000,  // Шаг 6 (Тестовые каналы DA11..DA44 T1)
+    20000, 20000, 20000, 20000  // Шаг 7 (Тестовые каналы DA11..DA44 T2)
 };
 
 static const uint32_t r2_resistors[TOTAL_CHANNEL_COUNT] = {
@@ -26,7 +26,7 @@ static const uint32_t r2_resistors[TOTAL_CHANNEL_COUNT] = {
     10000, 10000, 10000, 10000,
     10000, 10000, 10000, 10000,
     10000, 10000, 10000, 10000,
-    10000, 10000, 10000, 10000,
+    20000, 20000, 20000, 20000,
     10000, 10000, 10000, 10000
 };
 
@@ -112,7 +112,7 @@ static void _adc_init()
 {
     // Рассчитываем коэффициенты делителей один раз
     for (int i = 0; i < TOTAL_CHANNEL_COUNT; i++) {
-        coefficients[i] = (float)(r1_resistors[i] + r2_resistors[i]) / (float)r2_resistors[i];
+        coefficients[i] =  (float)r2_resistors[i]  /(float)(r1_resistors[i] + r2_resistors[i]);
     }
 }
 
@@ -182,8 +182,8 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
                  uint8_t ch_idx = step * 4 + ch;
                   uint32_t raw_val = 0;
                   api->get_channel_value(seq_dev, ch_idx, &raw_val);
-                  float v_pin_mv = (float)(raw_val * 3.3) / 4095.0f;
-                 msg.channels_mv[ch_idx] = (uint32_t)(v_pin_mv * coefficients[ch_idx]);
+                  float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
+                 msg.channels_mv[ch_idx] =(v_pin_mv *1);//coefficients[ch_idx]);
              }
              
         }
@@ -207,38 +207,38 @@ K_THREAD_DEFINE(my_thread_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry,
       
 
 
-PARAM_ROUTE_DEFINE(AIN_AO1,&adc_data_chan,0,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO7,&adc_data_chan,1,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO13,&adc_data_chan,2,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense1,&adc_data_chan,3,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO2,&adc_data_chan,4,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO8,&adc_data_chan,5,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO14,&adc_data_chan,6,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense2,&adc_data_chan,7,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO3,&adc_data_chan,8,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO9,&adc_data_chan,9,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO15,&adc_data_chan,10,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense3,&adc_data_chan,11,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO4,&adc_data_chan,12,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO10,&adc_data_chan,13,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO16,&adc_data_chan,14,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense4,&adc_data_chan,15,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO5,&adc_data_chan,16,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO11,&adc_data_chan,17,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO17,&adc_data_chan,18,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense5,&adc_data_chan,19,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO6,&adc_data_chan,20,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO12,&adc_data_chan,21,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AO18,&adc_data_chan,22,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_AVsense6,&adc_data_chan,23,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA11_test1,&adc_data_chan,24,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA20_test1,&adc_data_chan,25,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA33_test1,&adc_data_chan,26,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA44_test1,&adc_data_chan,27,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA11_test2,&adc_data_chan,28,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA20_test2,&adc_data_chan,29,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA33_test2,&adc_data_chan,30,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(AIN_DA44_test2,&adc_data_chan,31,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO1,&adc_data_chan,27,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO7,&adc_data_chan,28,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO13,&adc_data_chan,30,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense1,&adc_data_chan,31,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO2,&adc_data_chan,0,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO8,&adc_data_chan,1,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO14,&adc_data_chan,2,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense2,&adc_data_chan,3,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO3,&adc_data_chan,4,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO9,&adc_data_chan,5,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO15,&adc_data_chan,6,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense3,&adc_data_chan,7,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO4,&adc_data_chan,8,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO10,&adc_data_chan,9,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO16,&adc_data_chan,10,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense4,&adc_data_chan,11,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO5,&adc_data_chan,12,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO11,&adc_data_chan,13,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO17,&adc_data_chan,14,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense5,&adc_data_chan,15,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO6,&adc_data_chan,16,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO12,&adc_data_chan,17,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AO18,&adc_data_chan,18,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_AVsense6,&adc_data_chan,19,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA11_test1,&adc_data_chan,20,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA20_test1,&adc_data_chan,21,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA33_test1,&adc_data_chan,22,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA44_test1,&adc_data_chan,23,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA11_test2,&adc_data_chan,24,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA20_test2,&adc_data_chan,25,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA33_test2,&adc_data_chan,26,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(AIN_DA44_test2,&adc_data_chan,27,ARRAY_DATA); 
  
  
  
