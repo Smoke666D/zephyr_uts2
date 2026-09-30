@@ -148,20 +148,20 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
 
         // Выполняем тестовое заполнение буфера
         for (int step = 0; step < 8; step++) {
-            uint32_t raw_vref = get_vref_raw(seq_dev, step);
-            uint32_t raw_temp = 0;
-            api->get_channel_value(seq_dev, step * 4 + 0, &raw_temp); // Датчик температуры — на 1 канале шага (индекс step * 4 + 0)
+           // uint32_t raw_vref = get_vref_raw(seq_dev, step);
+           // uint32_t raw_temp = 0;
+           // api->get_channel_value(seq_dev, step * 4 + 0, &raw_temp); // Датчик температуры — на 1 канале шага (индекс step * 4 + 0)
 
             // Защита от деления на ноль при неготовности данных
-            if (raw_vref == 0 || raw_temp == 0) {
-                continue;
-            }
+            //if (raw_vref == 0 || raw_temp == 0) {
+            //    continue;
+           // }
 
             // Вычисляем VDDA (VREF) и Температуру для текущего шага мультиплексора
-            uint32_t vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
-            int32_t temp_c = __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
+           // uint32_t vdda_mv = __LL_ADC_CALC_VREFANALOG_VOLTAGE(raw_vref, LL_ADC_RESOLUTION_12B);
+            //int32_t temp_c = __LL_ADC_CALC_TEMPERATURE(vdda_mv, raw_temp, LL_ADC_RESOLUTION_12B);
 
-            uint32_t temp_val = (uint32_t)(temp_c < 0 ? -temp_c : temp_c);
+            //uint32_t temp_val = (uint32_t)(temp_c < 0 ? -temp_c : temp_c);
 
 
      
@@ -170,22 +170,22 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
              * 1-й и 3-й канал шага (индексы 0 и 2) — пишем VDDA в милливольтах
              * 2-й и 4-й канал шага (индексы 1 и 3) — пишем Температуру в градусах
              */
-            msg.channels_mv[step * 4 + 0] = vdda_mv;
-            msg.channels_mv[step * 4 + 1] = temp_val;
-            msg.channels_mv[step * 4 + 2] = vdda_mv;
-            msg.channels_mv[step * 4 + 3] = temp_val;
+           // msg.channels_mv[step * 4 + 0] = vdda_mv;
+          //  msg.channels_mv[step * 4 + 1] = temp_val;
+           // msg.channels_mv[step * 4 + 2] = vdda_mv;
+           // msg.channels_mv[step * 4 + 3] = temp_val;
 
-            /* 
-             * РЕАЛЬНЫЙ КОД ДЛЯ ПРИВЕДЕНИЯ К НАПРЯЖЕНИЮ (закомментирован для тестов по запросу):
-             *
-             * for (int ch = 0; ch < 4; ch++) {
-             *     uint8_t ch_idx = step * 4 + ch;
-             *     uint32_t raw_val = 0;
-             *     api->get_channel_value(seq_dev, ch_idx, &raw_val);
-             *     float v_pin_mv = (float)(raw_val * vdda_mv) / 4095.0f;
-             *     msg.channels_mv[ch_idx] = (uint32_t)(v_pin_mv * coefficients[ch_idx]);
-             * }
-             */
+             
+             //РЕАЛЬНЫЙ КОД ДЛЯ ПРИВЕДЕНИЯ К НАПРЯЖЕНИЮ (закомментирован для тестов по запросу):
+            
+              for (int ch = 0; ch < 4; ch++) {
+                 uint8_t ch_idx = step * 4 + ch;
+                  uint32_t raw_val = 0;
+                  api->get_channel_value(seq_dev, ch_idx, &raw_val);
+                  float v_pin_mv = (float)(raw_val * 3.3) / 4095.0f;
+                 msg.channels_mv[ch_idx] = (uint32_t)(v_pin_mv * coefficients[ch_idx]);
+             }
+             
         }
 
         // Публикуем тестовый 32-канальный пакет в Zbus

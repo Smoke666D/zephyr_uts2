@@ -33,7 +33,7 @@
          * Передаем ссылки на аппаратные блоки таймера и АЦП.
          * Это избавляет наш Си-код драйвера от хардкода.
          */
-        adc-dev = <&adc3>;
+        adc-dev = <&adc1>;
         timer-dev = <&timers3>;
 
         /* 
@@ -42,7 +42,7 @@
          * 2. DMA1 Stream 1: Опрос АЦП3 в циклическом режиме по кругу (Слот 115, ADC3)
          */
         dmas = <&dmamux1 0 23 0>,
-               <&dmamux1 1 115 0>;
+               <&dmamux1 1 9 0>;
         dma-names = "seq_dma", "adc_dma";
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
@@ -123,13 +123,8 @@
 /* Включаем АЦП3 в дереве устройств */
 
 
-&adc3 {
-    status = "okay";
-    st,adc-clock-source = "SYNC";
-    pinctrl-0 = <&mux1_adc_vsense &mux2_adc_vsense &mux3_adc_vsense &mux4_adc_vsense &mux5_adc_vsense>;
-    pinctrl-names = "default";
-    st,adc-prescaler = <4>;
-};
+
+
 
 &dma1 {
     status = "okay";

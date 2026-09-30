@@ -391,23 +391,44 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
         k_busy_wait(20);
     }
 
-//#if DT_SAME_NODE(SEQ_ADC_NODE, DT_NODELABEL(adc3))
+#if DT_SAME_NODE(SEQ_ADC_NODE, DT_NODELABEL(adc3))
     ADC_Common_TypeDef *adc_common = ADC3_COMMON;
-//#else
-//    ADC_Common_TypeDef *adc_common = ADC12_COMMON;
-//#endif
+#else
+    ADC_Common_TypeDef *adc_common = ADC12_COMMON;
+#endif
 
     LL_ADC_SetCommonClock(adc_common, LL_ADC_CLOCK_ASYNC_DIV2);
-    LL_ADC_SetCommonPathInternalCh(
+   /* LL_ADC_SetCommonPathInternalCh(
         adc_common, 
         LL_ADC_PATH_INTERNAL_TEMPSENSOR | LL_ADC_PATH_INTERNAL_VREFINT
-    );
+    );*/
     
     LL_ADC_REG_SetTriggerSource(_adc_inst, LL_ADC_REG_TRIG_EXT_TIM3_TRGO);
     LL_ADC_REG_SetTriggerEdge(_adc_inst, LL_ADC_REG_TRIG_EXT_RISING);
     
     LL_ADC_REG_SetDataTransferMode(_adc_inst, LL_ADC_REG_DMA_TRANSFER_UNLIMITED);
-    LL_ADC_REG_SetSequencerLength(_adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_2RANKS);
+
+
+  LL_ADC_REG_SetSequencerLength(_adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_4RANKS);
+
+LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_1, LL_ADC_CHANNEL_16);
+LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_2, LL_ADC_CHANNEL_17);
+LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_3, LL_ADC_CHANNEL_14);
+LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_4, LL_ADC_CHANNEL_15);
+
+// 7. Настройка времени выборки (Sampling Time) для каждого канала
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_16, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_17, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_14, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_15, LL_ADC_SAMPLINGTIME_810CYCLES_5);
+
+// 8. Установка режима Single-ended для всех четырех каналов
+LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_16, LL_ADC_SINGLE_ENDED);
+LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_17, LL_ADC_SINGLE_ENDED);
+LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_14, LL_ADC_SINGLE_ENDED);
+LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_15, LL_ADC_SINGLE_ENDED);
+
+   /* LL_ADC_REG_SetSequencerLength(_adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_2RANKS);
     LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_1, 
                                  LL_ADC_CHANNEL_TEMPSENSOR);
     LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_2, 
@@ -427,7 +448,7 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
                                 LL_ADC_SINGLE_ENDED);
     LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_VREFINT, 
                                 LL_ADC_SINGLE_ENDED);
-
+*/
 
  if (LL_ADC_IsEnabled(_adc_inst) == 1)
     {

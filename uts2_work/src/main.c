@@ -317,7 +317,7 @@ int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
 
 int main(void)
 {
-	LOG_INF("SYSTETM START 2");	
+	LOG_INF("SYSTETM START 3");	
     ad5243_init(DEVICE_DT_GET(I2C1_NODE), 0, 0);
 /*	int ret;
 
@@ -367,7 +367,7 @@ int main(void)
         {
             LOG_INF("AD5243 Ch1 error");
         }
-        //SYSTEM_BUS_SET(LED1, (bool)false);            
+       // SYSTEM_BUS_SET(LED1, (bool)false);            
         SYSTEM_BUS_SET(LED3, (bool)true);                
         SYSTEM_BUS_SET(LED2, (bool)false);                
         //param_set(LED3, &val, false);                
