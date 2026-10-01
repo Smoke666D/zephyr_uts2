@@ -14,27 +14,20 @@ extern "C" {
 
 #define DISPATCHER_STACK_SIZE 2048
 
-typedef enum 
+typedef enum
 {
-    AO1,
-    AO2,
-    AO3,
-    AO4,
-    AO5,
-    AO6,
-    AO7,
-    AO8,
-    AO9,
-    AO10,
-    AO11,
-    AO12,
-    AO13,
-    AO14,
-    AO15,
-    AO16,
-    AO17,
-    AO18
-} AIN_MUX_CHANNEL_NUMBER;
+    STATE_IN = 0,
+    STATE_LOW = 1,
+    STATE_HIGH = 2,
+} LOW_CUR_OUT_STATE_t;
+
+#define LOW_CUR_DRIVER_COUNT 18
+#define LIN_CONTROL_CNT  4
+#define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
+
+typedef struct hc595_channels_msg {
+    float channels_mv[CHANNEL_DATA_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
+};
 
 #ifdef __cplusplus
 }

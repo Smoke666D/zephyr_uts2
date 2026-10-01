@@ -166,7 +166,7 @@ static int _hc595_chain_init(const struct device *_dev)
         }
 
         // Настройка вывода как выход в неактивное логическое состояние (Hi-Z)
-        err = gpio_pin_configure_dt(&config->oe_gpio, GPIO_OUTPUT_INACTIVE);
+        err = gpio_pin_configure_dt(&config->oe_gpio, GPIO_OUTPUT_ACTIVE);
         if (err) 
         {
             LOG_ERR("Не удалось настроить GPIO для OE: %d", err);

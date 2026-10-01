@@ -25,15 +25,14 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
 
 target_sources(app PRIVATE 
      src/adc_thread.c
-
        #src/ina228_stream_thread.c
        src/app_worker.c
        #src/param_server.c 
        src/system_bus_model.c
-       # src/out_and_power_control.c
+       src/out_and_power_control.c
         src/main.c
         src/settings.c
-      #  src/os.cpp
+   
       ${APP_SOURCES} 
 )
 
@@ -41,4 +40,4 @@ target_sources(app PRIVATE
 
 add_subdirectory(drivers/seq_mux_adc)
 add_subdirectory(drivers/scan_cont_adc)
-add_subdirectory_ifdef(CONFIG_CUSTOM_SEQ_MUX_ADC drivers/hc_595_chain)
+add_subdirectory(drivers/hc_595_chain)

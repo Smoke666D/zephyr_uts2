@@ -361,11 +361,11 @@ int main(void)
             LOG_INF("AD5243 Ch1 error");
         }
        // SYSTEM_BUS_SET(LED1, (bool)false);            
-        SYSTEM_BUS_SET(LED3, (bool)true);                
+       // SYSTEM_BUS_SET(LED3, (bool)true);                
         SYSTEM_BUS_SET(LED2, (bool)false);                
         //param_set(LED3, &val, false);                
         k_msleep(SLEEP_TIME_MS);
-        SYSTEM_BUS_SET(LED3, (bool)false);                
+      //  SYSTEM_BUS_SET(LED3, (bool)false);                
         SYSTEM_BUS_SET(LED2, (bool)true);                
         k_msleep(SLEEP_TIME_MS);
 

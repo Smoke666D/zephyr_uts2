@@ -204,7 +204,7 @@
 	div-m = <2>;
 	mul-n = <48>;
 	div-p = <2>;
-	div-q = <2>;
+	div-q = <8>;
 	div-r = <2>;
 	fracn = <0>; 
 	clocks = <&clk_hse>;
@@ -486,3 +486,17 @@ zephyr_udc0: &usbotg_hs {
     };
 };
 
+&spi2 {
+    status = "okay";
+    pinctrl-0 = <&spi2_sck_pb13 &spi2_mosi_pb15>;
+    pinctrl-names = "default";
+    cs-gpios = <&gpiob 9 GPIO_ACTIVE_LOW>;      // Пин защелки Latch (ST_CP)
+
+    hc595_chain: hc595-chain@0 {
+        compatible = "custom,hc595-chain";
+        reg = <0>;
+        spi-max-frequency = <400000>;
+        chain-length = <5>;
+        oe-gpios = <&gpiob 14 GPIO_ACTIVE_LOW>;  // Пин разрешения выходов OE (активный 0)
+    };
+};

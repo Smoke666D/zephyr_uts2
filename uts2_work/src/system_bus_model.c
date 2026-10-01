@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <stdbool.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/iterable_sections.h>
@@ -76,9 +77,29 @@ static inline const struct system_bus_handler * _get_valid_handler(SYSTEM_BUS_ID
     return -ENOTSUP; /* Тип данных не поддерживается этой функцией */
 }
 
- int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
+int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
 {
-return 0;
+     const struct system_bus_handler *handler = _get_valid_handler(id);
+    if (handler == NULL)
+    {
+        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
+    }
+
+    if (handler->channel_type == ARRAY_DATA)
+    {            
+        // Захватываем данные канала
+        if (zbus_chan_claim(handler->channel, K_MSEC(50)) == 0)
+        {
+            uint32_t *msg = (uint32_t *)zbus_chan_msg(handler->channel);                
+            msg[handler->system_index] = _val;
+            zbus_chan_finish(handler->channel);
+            zbus_chan_notify(handler->channel, K_NO_WAIT); 
+            return 0;
+        }
+        return -EBUSY; // Если не удалось захватить канал по тайм-ауту
+    }         
+
+    return -ENOTSUP; /* Тип данных не поддерживается этой функцией */
 }
 
  int bus_set_real(SYSTEM_BUS_ID id, float _val)
