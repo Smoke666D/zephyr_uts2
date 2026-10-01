@@ -26,6 +26,29 @@
 	    zephyr,code-partition = &flash0;
 	};
     
+     scan_adc: scan_adc {
+        compatible = "custom,scan-cont-adc";
+        
+        /* 
+         * Передаем ссылки на аппаратные блоки таймера и АЦП.
+         * Это избавляет наш Си-код драйвера от хардкода.
+         */
+        adc-dev = <&adc2>;
+        timer-dev = <&timers3>;
+
+        channel-count = <8>;
+        dmas = 
+               <&dmamux1 2 10 0>;              
+        dma-names = "adc_dma";
+
+        /* Ссылка на аппаратный pinctrl управляющих пинов */
+
+        adc-duration-us = <1000>;     /* T1: время АЦП */
+        switch-duration-us = <1000>;  /* T2: время переключения */ 
+
+        status = "okay";
+    };   
+
     my_sequencer: my_sequencer {
         compatible = "custom,seq-mux-adc";
         
@@ -42,7 +65,7 @@
          * 2. DMA1 Stream 1: Опрос АЦП3 в циклическом режиме по кругу (Слот 115, ADC3)
          */
         dmas = <&dmamux1 0 23 0>,
-               <&dmamux1 1 9 0>;
+               <&dmamux1 1 9  0>;              
         dma-names = "seq_dma", "adc_dma";
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
@@ -120,6 +143,13 @@
     status = "okay";
 };
 
+&gpiob {
+    status = "okay";
+};
+
+&gpioc {
+    status = "okay";
+};
 /* Включаем АЦП3 в дереве устройств */
 
 

@@ -29,7 +29,7 @@
 #include <stm32_ll_gpio.h>
 #include <stm32_ll_dma.h>
 
-#include "seq_mux_adc.h"
+#include "scan_cont_adc.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -45,11 +45,9 @@ static int         _seq_mux_adc_get_channel_value_impl(const struct device *_dev
                                                        uint32_t *_val);
 static int         _seq_mux_adc_wait_for_data_impl(const struct device *_dev, 
                                                    k_timeout_t _timeout);
-static void        _fill_gpio_buffer(uint32_t *_buf);
-static inline int  _dma_init(const struct seq_mux_adc_config *_config, 
+static inline int  _dma_init(const struct scan_cont_adc_config *_config, 
                              ADC_TypeDef *_adc_inst, 
                              const struct device *_dev);
-static inline void _gpio_init(void);
 static inline int  _tmr_init(TIM_TypeDef *_tmr_inst);
 static inline void _adc_init(ADC_TypeDef *_adc_inst);
 static int         _seq_mux_adc_init(const struct device *_dev);
@@ -57,10 +55,9 @@ static int         _seq_mux_adc_init(const struct device *_dev);
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-static uint32_t gpio_raw_buf[COMBINATIONS_CNT] __attribute__((section("SRAM4")));
-static uint32_t adc_buf_a[TOTAL_CHANNELS_CNT] __nocache;
-static uint32_t adc_buf_b[TOTAL_CHANNELS_CNT] __nocache;
-static uint32_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
+static uint32_t adc_buf_a[ADC_CHANNELS_CNT] __nocache;
+static uint32_t adc_buf_b[ADC_CHANNELS_CNT] __nocache;
+static uint32_t adc_shadow_buf[ADC_CHANNELS_CNT];
 
 
 static struct k_mutex mutex_lock;
@@ -90,7 +87,7 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
     if (_status >= 0) 
     {
         // Копирование данных из заполненного буфера в теневой
-        if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_1) == 1)
+        if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_2) == 1)
         {
             memcpy(adc_shadow_buf, adc_buf_a, sizeof(adc_shadow_buf));
         } 
@@ -120,7 +117,7 @@ static int _seq_mux_adc_get_channel_value_impl(const struct device *_dev,
     int ret;
 
     if (false
-        || _channel_idx >= TOTAL_CHANNELS_CNT
+        || _channel_idx >= ADC_CHANNELS_CNT
         || _val == NULL
        ) 
     {
@@ -156,39 +153,7 @@ static int _seq_mux_adc_wait_for_data_impl(const struct device *_dev,
     return k_sem_take(&sem_data_ready, _timeout);
 }
 
-/**
- *  @brief      Заполнение буфера значений для BSRR GPIO
- *  @details    Формирует маску переключения выводов мультиплексора 
- *              для каждого состояния.
- *
- *  @param      _buf - Указатель на буфер для заполнения
- */
-static void _fill_gpio_buffer(uint32_t *_buf)
-{
-    const uint32_t pins[3] = {MUX_PIN_0_NUM, MUX_PIN_1_NUM, MUX_PIN_2_NUM};
 
-    for (int_fast32_t i = 0; i < COMBINATIONS_CNT; i++) 
-    {
-        // Начинаем с 0 и идем по кругу (0, 1, 2, 3, 4, 5, 6, 7)
-        uint_fast8_t state = i % COMBINATIONS_CNT; 
-        uint32_t     bsrr_val = 0;
-        
-        for (int_fast32_t bit = 0; bit < 3; bit++) 
-        {
-            if (state & (1 << bit)) 
-            {
-                // Если бит равен 1 — ставим пин в HIGH (младшие 16 бит BSRR)
-                bsrr_val |= (1 << pins[bit]);
-            } 
-            else 
-            {
-                // Если бит равен 0 — сбрасываем пин в LOW (старшие 16 бит BSRR, смещение +16)
-                bsrr_val |= (1 << (pins[bit] + 16));
-            }
-        }
-        _buf[i] = bsrr_val;
-    }
-}
 
 /**
  *  @brief      Инициализация каналов DMA для GPIO и АЦП
@@ -201,7 +166,7 @@ static void _fill_gpio_buffer(uint32_t *_buf)
  *
  *  @return     int - Ноль при успехе, код ошибки при сбое
  */
-static inline int _dma_init(const struct seq_mux_adc_config *_config, 
+static inline int _dma_init(const struct scan_cont_adc_config *_config, 
                             ADC_TypeDef *_adc_inst, 
                             const struct device *_dev)
 {
@@ -212,41 +177,12 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
         return -ENODEV;
     }
 
-    struct dma_block_config gpio_block_cfg = 
-    {
-        .source_address   = (uint32_t)gpio_raw_buf,
-        .dest_address     = SEQ_GPIO_BSRR_ADDR,
-        .block_size       = COMBINATIONS_CNT * sizeof(uint32_t),
-        .source_addr_adj  = DMA_ADDR_ADJ_INCREMENT,
-        .dest_addr_adj    = DMA_ADDR_ADJ_NO_CHANGE,
-        .source_reload_en = 1,
-        .dest_reload_en   = 1,
-    };
-
-    struct dma_config gpio_dma_cfg = 
-    {
-        .dma_slot            = _config->gpio_dma_slot,
-        .channel_direction   = MEMORY_TO_PERIPHERAL,
-        .source_data_size    = 4,
-        .dest_data_size      = 4,
-        .source_burst_length = 4,
-        .dest_burst_length   = 4,
-        .channel_priority    = 2, // Высокий приоритет DMA
-        .block_count         = 1,
-        .head_block          = &gpio_block_cfg,
-    };
-
-    ret = dma_config(_config->dma_dev, _config->gpio_dma_channel, &gpio_dma_cfg);
-    if (ret < 0) 
-    {
-        return ret;
-    }
 
     struct dma_block_config adc_block_cfg = 
     {
         .source_address   = (uint32_t)&(_adc_inst->DR),
         .dest_address     = (uint32_t)adc_buf_a,
-        .block_size       = TOTAL_CHANNELS_CNT * sizeof(uint32_t),
+        .block_size       = ADC_CHANNELS_CNT  * sizeof(uint32_t),
         .source_addr_adj  = DMA_ADDR_ADJ_NO_CHANGE,
         .dest_addr_adj    = DMA_ADDR_ADJ_INCREMENT,
         .source_reload_en = 1,
@@ -275,8 +211,8 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
         return ret;
     }
 
-    LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_1, (uint32_t)adc_buf_b);
-    LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_1);
+    LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_2, (uint32_t)adc_buf_b);
+    LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_2);
 
     return 0;
 }
@@ -290,51 +226,29 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
  */
 static inline void _gpio_init(void)
 {
-    // Настройка вывода MUX_A0
-    GPIO_TypeDef *port0 = (GPIO_TypeDef *)MUX_PIN_0_PORT_BASE;
-    LL_GPIO_SetPinMode(port0, 1 << MUX_PIN_0_NUM, LL_GPIO_MODE_OUTPUT);
-    LL_GPIO_SetPinOutputType(port0, 1 << MUX_PIN_0_NUM, LL_GPIO_OUTPUT_PUSHPULL);
-    LL_GPIO_SetPinSpeed(port0, 1 << MUX_PIN_0_NUM, LL_GPIO_SPEED_FREQ_VERY_HIGH);
-    LL_GPIO_SetPinPull(port0, 1 << MUX_PIN_0_NUM, LL_GPIO_PULL_NO);
-    LL_GPIO_ResetOutputPin(port0, 1 << MUX_PIN_0_NUM);
-
-    // Настройка вывода MUX_A1
-    GPIO_TypeDef *port1 = (GPIO_TypeDef *)MUX_PIN_1_PORT_BASE;
-    LL_GPIO_SetPinMode(port1, 1 << MUX_PIN_1_NUM, LL_GPIO_MODE_OUTPUT);
-    LL_GPIO_SetPinOutputType(port1, 1 << MUX_PIN_1_NUM, LL_GPIO_OUTPUT_PUSHPULL);
-    LL_GPIO_SetPinSpeed(port1, 1 << MUX_PIN_1_NUM, LL_GPIO_SPEED_FREQ_VERY_HIGH);
-    LL_GPIO_SetPinPull(port1, 1 << MUX_PIN_1_NUM, LL_GPIO_PULL_NO);
-    LL_GPIO_ResetOutputPin(port1, 1 << MUX_PIN_1_NUM);
-
-    // Настройка вывода MUX_A2
-    GPIO_TypeDef *port2 = (GPIO_TypeDef *)MUX_PIN_2_PORT_BASE;
-    LL_GPIO_SetPinMode(port2, 1 << MUX_PIN_2_NUM, LL_GPIO_MODE_OUTPUT);
-    LL_GPIO_SetPinOutputType(port2, 1 << MUX_PIN_2_NUM, LL_GPIO_OUTPUT_PUSHPULL);
-    LL_GPIO_SetPinSpeed(port2, 1 << MUX_PIN_2_NUM, LL_GPIO_SPEED_FREQ_VERY_HIGH);
-    LL_GPIO_SetPinPull(port2, 1 << MUX_PIN_2_NUM, LL_GPIO_PULL_NO);
-    LL_GPIO_ResetOutputPin(port2, 1 << MUX_PIN_2_NUM);
-
-    // Гарантированный сброс всех управляющих ножек перед стартом
-    LL_GPIO_ResetOutputPin(port0, 1 << MUX_PIN_0_NUM);
-    LL_GPIO_ResetOutputPin(port1, 1 << MUX_PIN_1_NUM);
-    LL_GPIO_ResetOutputPin(port2, 1 << MUX_PIN_2_NUM);
 
     LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOA);    
     LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOB);
     LL_AHB4_GRP1_EnableClock(LL_AHB4_GRP1_PERIPH_GPIOC);
-    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_0, LL_GPIO_MODE_ANALOG);
-    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_1, LL_GPIO_MODE_ANALOG);
-    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_2, LL_GPIO_MODE_ANALOG);
-    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_3, LL_GPIO_MODE_ANALOG);
-    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_4, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_6, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_7, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOB, LL_GPIO_PIN_0, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOB, LL_GPIO_PIN_1, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_0, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_1, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_4, LL_GPIO_MODE_ANALOG);
+    LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_5, LL_GPIO_MODE_ANALOG);
 
     
     // Отключаем подтяжки (Pull-up / Pull-down), чтобы не портить аналоговый сигнал
-    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_0, LL_GPIO_PULL_NO);
-    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_1, LL_GPIO_PULL_NO);
-    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_2, LL_GPIO_PULL_NO);
-    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_3, LL_GPIO_PULL_NO);
-    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_4, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_6, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_7, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOB, LL_GPIO_PIN_0, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOB, LL_GPIO_PIN_1, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOC, LL_GPIO_PIN_0, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOC, LL_GPIO_PIN_1, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOC, LL_GPIO_PIN_4, LL_GPIO_PULL_NO);
+    LL_GPIO_SetPinPull(GPIOC, LL_GPIO_PIN_5, LL_GPIO_PULL_NO);
 
 }
 
@@ -432,36 +346,50 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
     
     LL_ADC_REG_SetDataTransferMode(_adc_inst, LL_ADC_REG_DMA_TRANSFER_UNLIMITED);
 
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_16);
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_17);
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_14);  // обратите внимание: у вас PA2 это INP4!
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_15);
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_18);
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_3);
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_7);
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_9);  // обратите внимание: у вас PA2 это INP4!
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_5);
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_10);
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_11);
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_4);
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_8);
 
-    LL_ADC_REG_SetSequencerLength(_adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_5RANKS);
 
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_1, LL_ADC_CHANNEL_16);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_2, LL_ADC_CHANNEL_17);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_3, LL_ADC_CHANNEL_14);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_4, LL_ADC_CHANNEL_15);
-    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_5, LL_ADC_CHANNEL_18);
+    LL_ADC_REG_SetSequencerLength(_adc_inst, LL_ADC_REG_SEQ_SCAN_ENABLE_8RANKS);
+
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_1, LL_ADC_CHANNEL_3);
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_2, LL_ADC_CHANNEL_7);
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_3, LL_ADC_CHANNEL_9);
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_4, LL_ADC_CHANNEL_5);
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_5, LL_ADC_CHANNEL_10);
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_6, LL_ADC_CHANNEL_11);
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_7, LL_ADC_CHANNEL_4);
+    LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_8, LL_ADC_CHANNEL_8);
+
 
     // 7. Настройка времени выборки (Sampling Time) для каждого канала
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_16, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_17, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_14, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_15, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_18, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_7, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_9, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_10, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_11, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_4, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_8, LL_ADC_SAMPLINGTIME_64CYCLES_5);
 
     // 8. Установка режима Single-ended для всех четырех каналов
-    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_16, LL_ADC_SINGLE_ENDED);
-    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_17, LL_ADC_SINGLE_ENDED);
-    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_14, LL_ADC_SINGLE_ENDED);
-    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_15, LL_ADC_SINGLE_ENDED);
-    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_18, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_7, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_9, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_5, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_10, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_11, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_4, LL_ADC_SINGLE_ENDED);
+    LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_8, LL_ADC_SINGLE_ENDED);
 
 
- if (LL_ADC_IsEnabled(_adc_inst) == 1)
+    if (LL_ADC_IsEnabled(_adc_inst) == 1)
     {
         LL_ADC_Disable(_adc_inst);
         while (LL_ADC_IsEnabled(_adc_inst) == 1);
@@ -490,9 +418,9 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
  *
  *  @return     int - Ноль при успехе, код ошибки при сбое
  */
-static int _seq_mux_adc_init(const struct device *_dev)
+static int _scan_cont_adc_init(const struct device *_dev)
 {
-    const struct seq_mux_adc_config *config = _dev->config;
+    const struct scan_cont_adc_config  *config = _dev->config;
     int ret;
 
     ADC_TypeDef *adc_inst = (ADC_TypeDef *)SEQ_ADC_BASE;
@@ -503,7 +431,7 @@ static int _seq_mux_adc_init(const struct device *_dev)
 
     _gpio_init();
 
-    _fill_gpio_buffer(gpio_raw_buf);
+  
     
     // Конфигурация DMA
     ret = _dma_init(config, adc_inst, _dev);
@@ -522,14 +450,6 @@ static int _seq_mux_adc_init(const struct device *_dev)
     // Инициализация модуля АЦП
     _adc_init(adc_inst);
 
-
-    // Запуск DMA и таймера
-    ret = dma_start(config->dma_dev, config->gpio_dma_channel);
-    if (ret < 0) 
-    {
-        return ret;
-    }
-
     ret = dma_start(config->dma_dev, config->adc_dma_channel);
     if (ret < 0) 
     {
@@ -546,30 +466,27 @@ static int _seq_mux_adc_init(const struct device *_dev)
  *                                        PUBLIC FUNCTIONS
  **************************************************************************************************/
 
-static const struct seq_mux_adc_api driver_api = 
+static const struct scan_cont_adc_api driver_api = 
 {
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
     .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
 };
 
-static const struct seq_mux_adc_config seq_config = 
+static const struct scan_cont_adc_config scan_config = 
 {
-    .dma_dev          = DEVICE_DT_GET(DT_DMAS_CTLR(DT_NODELABEL(my_sequencer))),
-    .gpio_dma_channel = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(my_sequencer), 
-                                              seq_dma, channel),
-    .gpio_dma_slot    = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(my_sequencer), 
-                                              seq_dma, slot),
-    .adc_dma_channel  = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(my_sequencer), 
+    .dma_dev          = DEVICE_DT_GET(DT_DMAS_CTLR(DT_NODELABEL(scan_adc))),
+
+    .adc_dma_channel  = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(scan_adc), 
                                               adc_dma, channel),
-    .adc_dma_slot     = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(my_sequencer), 
+    .adc_dma_slot     = DT_DMAS_CELL_BY_NAME(DT_NODELABEL(scan_adc), 
                                               adc_dma, slot),
 };
 
-DEVICE_DT_DEFINE(DT_NODELABEL(my_sequencer),
-                 _seq_mux_adc_init,
+DEVICE_DT_DEFINE(DT_NODELABEL(scan_adc),
+                 _scan_cont_adc_init,
                  NULL,
                  NULL,
-                 &seq_config,
+                 &scan_config,
                  POST_KERNEL,
                  CONFIG_APPLICATION_INIT_PRIORITY,
                  &driver_api);

@@ -16,11 +16,16 @@ extern "C" {
 #define ADC_BUF_SIZE       (ADC_NUM_CHANNELS * ADC_SAMPLES_PER_CH)
 #define TOTAL_CHANNEL_COUNT ADC_BUF_SIZE 
 
+#define ADC2_BUF_SIZE  8
+
 /* Структура сообщения АЦП */
 typedef struct adc_data_msg {
     float channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
 };
 
+typedef struct adc_scan_msg {
+    float channels_mv[ADC2_BUF_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
+};
 
 #ifdef __cplusplus
 }

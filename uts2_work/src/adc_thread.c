@@ -6,6 +6,7 @@
 
 /* Подключаем публичный заголовочный файл нашего драйвера */
 #include <seq_mux_adc.h>
+#include <scan_cont_adc.h>
 
 
 static const uint32_t r1_resistors[TOTAL_CHANNEL_COUNT] = {
@@ -30,7 +31,19 @@ static const uint32_t r2_resistors[TOTAL_CHANNEL_COUNT] = {
     1, 1, 1, 1,1
 };
 
+
+static const uint32_t r1_resistors1[ADC2_BUF_SIZE] = {
+    10000,  10000,  100000,  124000, 124000, // Шаг 0 (AO1, AO7, AO13, AVsense1)
+    10000,  10000,  10000  
+};
+
+static const uint32_t r2_resistors1[ADC2_BUF_SIZE] = {
+    20000, 10000, 12000, 10000, 6800,
+    10000, 20000, 20000
+};
+
 static float coefficients[TOTAL_CHANNEL_COUNT];
+static float coefficients1[ADC2_BUF_SIZE];
 
 /* 
  * ОПРЕДЕЛЯЕМ КАНАЛ.
@@ -39,6 +52,15 @@ static float coefficients[TOTAL_CHANNEL_COUNT];
  */
 ZBUS_CHAN_DEFINE(adc_data_chan,
                  struct adc_data_msg,
+                 NULL, /* Валидатор */
+                 NULL, /* Пользовательские данные */
+                 ZBUS_OBSERVERS(), /* Список получателей */
+                 ZBUS_MSG_INIT(0) /* Инициализация нулями */
+);
+
+
+ZBUS_CHAN_DEFINE(adc2_data_chan,
+                 struct adc_scan_msg,
                  NULL, /* Валидатор */
                  NULL, /* Пользовательские данные */
                  ZBUS_OBSERVERS(), /* Список получателей */
@@ -68,10 +90,18 @@ static void _adc_init()
 {
     // Рассчитываем коэффициенты делителей один раз
     for (int i = 0; i < TOTAL_CHANNEL_COUNT; i++) {
-        coefficients[i] =  (float)r2_resistors[i]  /(float)(r1_resistors[i] + r2_resistors[i]);
+        coefficients[i] =   (float)(r1_resistors[i] + r2_resistors[i])/(float)r2_resistors[i] ;
     }
 }
 
+
+static void _adc_init2()
+{
+    // Рассчитываем коэффициенты делителей один раз
+    for (int i = 0; i < ADC2_BUF_SIZE; i++) {
+        coefficients1[i] =  (float)(r1_resistors1[i] + r2_resistors1[i])/(float)r2_resistors1[i];
+    }
+}
 
 static void my_custom_thread_entry(void *p1, void *p2, void *p3)
 {
@@ -85,10 +115,9 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
     
     _adc_init();
     struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)seq_dev->api;
-    struct adc_data_msg msg; 
     /* Извлекаем интерфейс высокоуровневого API нашего драйвера */
     //struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)seq_dev->api;
-   // struct adc_data_msg msg; 
+    struct adc_data_msg msg; 
     k_msleep(2000);
     
    
@@ -103,25 +132,62 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
         }
 
         // Выполняем тестовое заполнение буфера
-        for (int step = 0; step < ADC_SAMPLES_PER_CH; step++) {
-           
-            
+         for (int step = 0; step < ADC_SAMPLES_PER_CH; step++) 
+         {                       
               for (int ch = 0; ch < ADC_NUM_CHANNELS; ch++) {
                  uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
                   uint32_t raw_val = 0;
                   api->get_channel_value(seq_dev, ch_idx, &raw_val);
                   float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
                  msg.channels_mv[ch_idx] =(v_pin_mv * coefficients[ch_idx]);
-             }
-             
+             }             
         }
-
         // Публикуем тестовый 32-канальный пакет в Zbus
         zbus_chan_pub(&adc_data_chan, &msg, K_NO_WAIT);
     }
 }
 
 
+static void my_custom_thread_entry2(void *p1, void *p2, void *p3)
+{
+   static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
+  // Проверяем готовность драйвера перед началом работы
+    if (!device_is_ready(seq_dev)) {
+         LOG_ERR("Sequencer driver is not ready!");
+     return;
+    }
+    
+    
+    _adc_init2();
+    struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)seq_dev->api;
+    struct adc_scan_msg msg; 
+
+    k_msleep(2000);
+    
+   
+    
+     while (1) 
+     {
+       
+         // Ждем готовности на семафоре драйвера (весь цикл 32 пересылок окончен)
+        api->wait_for_data(seq_dev, K_FOREVER);
+
+        // Выполняем тестовое заполнение буфера
+        for (int step = 0; step < ADC2_BUF_SIZE; step++) {
+           
+
+                uint32_t raw_val = 0;
+                api->get_channel_value(seq_dev, step, &raw_val);
+                float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
+                 msg.channels_mv[step] =(v_pin_mv * coefficients1[step]);
+            
+             
+        }
+
+        // Публикуем тестовый 32-канальный пакет в Zbus
+        zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
+    }
+}
 
 
 K_THREAD_DEFINE(my_thread_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry, 
@@ -129,7 +195,9 @@ K_THREAD_DEFINE(my_thread_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry,
                 7, 0, 0);
 
 
-
+K_THREAD_DEFINE(my_adc_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry2, 
+           NULL, NULL, NULL, 
+                7, 0, 0);
 
 
 
@@ -176,4 +244,13 @@ PARAM_ROUTE_DEFINE(AIN_DA44_test2,&adc_data_chan,38,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(AIN_DA41_test2,&adc_data_chan,39,ARRAY_DATA);
  
  
- 
+
+PARAM_ROUTE_DEFINE(ENV_P3V3,&adc2_data_chan,0,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(ENV_P5V0,&adc2_data_chan,1,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(ENV_VIN,&adc2_data_chan,2,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(ENV_VDOUT1,&adc2_data_chan,3,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(ENV_P40V,&adc2_data_chan,4,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(ENV_USB,&adc2_data_chan,5,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(ENV_VDOUT2,&adc2_data_chan,6,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(ENV_VDOUT3,&adc2_data_chan,7,ARRAY_DATA);
+

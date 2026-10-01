@@ -1,0 +1,12 @@
+config CUSTOM_SEQ_MUX_ADC
+	bool "Custom STM32 Sequencer Multiplexed ADC Driver"
+	default y
+	# Драйвер включится автоматически, если в DTS оверлее есть активный узел с нашим compatible
+	depends on DT_HAS_CUSTOM_SEQ_MUX_ADC_ENABLED
+	# Автоматически подключаем зависимости, чтобы пользователю не нужно было настраивать их в prj.conf
+	select DMA
+	select COUNTER
+	select PINCTRL
+	select PINCTRL_DYNAMIC
+	help
+	  Enable support for the custom synchronized GPIO-ADC sequencer on STM32.

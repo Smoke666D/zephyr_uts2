@@ -401,7 +401,7 @@ int main(void)
         else
             LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
                  
-        float ain1,ain2,ain3,ain4,ain5;
+        float ain1,ain2,ain3,ain4,ain5,ain6,ain7,ain8;
 
         SYSTEM_BUS_GET( AIN_AO1,  &ain1);
         SYSTEM_BUS_GET(AIN_AO7,  &ain2);
@@ -451,6 +451,17 @@ int main(void)
         SYSTEM_BUS_GET(AIN_DA44_test2,  &ain4);
         SYSTEM_BUS_GET(AIN_DA41_test2,  &ain5);
         LOG_INF("STEP8:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
+         SYSTEM_BUS_GET(ENV_P3V3,  &ain1);
+        SYSTEM_BUS_GET(ENV_P5V0,  &ain2);
+        SYSTEM_BUS_GET(ENV_VIN,  &ain3);
+        SYSTEM_BUS_GET(ENV_VDOUT1,  &ain4);
+        SYSTEM_BUS_GET(ENV_P40V,  &ain5);
+        SYSTEM_BUS_GET(ENV_USB,  &ain6);
+        SYSTEM_BUS_GET(ENV_VDOUT2,  &ain7);
+        SYSTEM_BUS_GET(ENV_VDOUT3,  &ain8);
+        LOG_INF("adc2  %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6,(double)ain7,(double)ain8);
+ 
+
 
  
    }
