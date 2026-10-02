@@ -13,7 +13,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/spi.h>
-#include "led.h"
 #include <zephyr/drivers/eeprom.h>
 #include <zephyr/drivers/i2c.h>
 #include "ad5243.h"
