@@ -58,7 +58,7 @@ led_heandler_t leds[LED_CNT] =
 
 
 
-K_MSGQ_DEFINE(led_queue, sizeof(led_command_t), 4, 4);
+//K_MSGQ_DEFINE(led_queue, sizeof(led_command_t), 4, 4);
 
 static struct k_work led_task;
 
@@ -70,29 +70,10 @@ static void led_zbus_listener_callback(const struct zbus_channel *chan)
     
     if (chan == &led_state_channel)
     {
-        const BOOLEAN_ARRAY_CHANNEL_t *msg = zbus_chan_const_msg(chan);
-        led_command_t _msg;
-        memcpy(&_msg.led_state,&msg->value,sizeof(led_command_t));
-        k_msgq_put(&led_queue, &_msg, K_NO_WAIT);
         app_worker_submit(&led_task);
     }
 }
 
-/* 2. Создаем самого слушателя (теперь символ 'led_listener' гарантированно существует) */
-ZBUS_LISTENER_DEFINE(led_listener, led_zbus_listener_callback);
-
-/* 3. Обработчик воркера (физическое переключение пинов) */
-static void led_hardware_update_handler(struct k_work *work)
-{    
-    bool led_state[32];
-    while (k_msgq_get(&led_queue, led_state, K_NO_WAIT) == 0)
-    {
-        for (int i = 0; i < LED_CNT; i++)
-        {            
-             gpio_pin_set_dt(&leds[i].spec, led_state[i] ? 1 : 0);        
-        } 
-    }
-}
 
 /* 4. Теперь определяем канал ZBUS, ссылаясь на уже созданный 'led_listener' */
 ZBUS_CHAN_DEFINE(led_state_channel,
@@ -102,6 +83,28 @@ ZBUS_CHAN_DEFINE(led_state_channel,
                  ZBUS_OBSERVERS(led_listener),
                  ZBUS_MSG_INIT(0)
 );
+
+/* 2. Создаем самого слушателя (теперь символ 'led_listener' гарантированно существует) */
+ZBUS_LISTENER_DEFINE(led_listener, led_zbus_listener_callback);
+
+/* 3. Обработчик воркера (физическое переключение пинов) */
+static void led_hardware_update_handler(struct k_work *work)
+{    
+    bool led_state[32];   
+    if (zbus_chan_read(&led_state_channel, led_state, K_MSEC(50)) == 0)
+    {
+        for (int i = 0; i < LED_CNT; i++)
+        {            
+            if (led_state[i] != leds[i].state)
+            {
+                leds[i].state = led_state[i];
+                gpio_pin_set_dt(&leds[i].spec, led_state[i] ? 1 : 0);        
+            }
+        } 
+    }
+}
+
+
 
 /* 5. Инициализация железа через SYS_INIT */
 static int led_manager_system_init(void)
@@ -134,29 +137,6 @@ static int led_manager_system_init(void)
 
 SYS_INIT(led_manager_system_init, APPLICATION, 40);
 
-
-/*static int _led_set(PARAM_ID _id, const PARAM_VAL *_val,  bool is_sync)
-{
-    if (true
-        && _id >= LED1
-        && _id <= LED3
-    )
-    {
-        struct led_state_msg new_state;
-        new_state.led[_id - LED1] = _val->value.boolean;
-        new_state.update_mask = 0x01 << (_id - LED1);
-        
-        k_sem_init(&led_task.done_sem, 0, 1);
-       
-        zbus_chan_pub(&led_state_channel, &new_state, K_NO_WAIT);
-        if (is_sync == true)
-        {
-            k_sem_take(&led_task.done_sem, K_MSEC(100));
-        }
-
-    }
-
-}*/
 
 PARAM_ROUTE_DEFINE(LED1,&led_state_channel,0,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(LED2,&led_state_channel,1,ARRAY_DATA);

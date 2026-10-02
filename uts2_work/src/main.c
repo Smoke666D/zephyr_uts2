@@ -17,6 +17,7 @@
 #include <zephyr/drivers/i2c.h>
 #include "ad5243.h"
 #include "settings.h"
+#include "out_and_power_control.h"
 #include "system_bus_model.h"
 #
 
@@ -325,6 +326,7 @@ int main(void)
     //settings_fram_init();
 
     */
+    int out_step  = 0;
     int i = 0;
     while (1) 
 	{
@@ -361,7 +363,7 @@ int main(void)
         }
        // SYSTEM_BUS_SET(LED1, (bool)false);            
         SYSTEM_BUS_SET(LED3, (bool)true);                
-        SYSTEM_BUS_SET(LED2, (bool)false);                
+     SYSTEM_BUS_SET(LED2, (bool)false);                
         //param_set(LED3, &val, false);                
         k_msleep(SLEEP_TIME_MS);
         SYSTEM_BUS_SET(LED3, (bool)false);                
@@ -401,6 +403,7 @@ int main(void)
             LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
                  
         float ain1,ain2,ain3,ain4,ain5,ain6,ain7,ain8;
+        LOG_INF("OUT STEP1: %d", out_step);
 
         SYSTEM_BUS_GET( AIN_AO1,  &ain1);
         SYSTEM_BUS_GET(AIN_AO7,  &ain2);
@@ -460,8 +463,85 @@ int main(void)
         SYSTEM_BUS_GET(ENV_VDOUT3,  &ain8);
         LOG_INF("adc2  %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6,(double)ain7,(double)ain8);
  
+    /*   switch (out_step)
+        {
+            case 0:
+                SYSTEM_BUS_SET(DOUT18, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT1, STATE_HIGH);  
+                break;
+            case 1:
+                SYSTEM_BUS_SET(DOUT1, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT2, STATE_HIGH);  
+                break;
+            case 2:
+                SYSTEM_BUS_SET(DOUT2, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT3, STATE_HIGH);  
+                break;
+            case 3:
+                SYSTEM_BUS_SET(DOUT3, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT4, STATE_HIGH);  
+                break;
+            case 4:
+                SYSTEM_BUS_SET(DOUT4, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT5, STATE_HIGH);  
+                break;
+            case 5:
+                SYSTEM_BUS_SET(DOUT5, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT6, STATE_HIGH);  
+                break;
+            case 6:
+                SYSTEM_BUS_SET(DOUT6, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT7, STATE_HIGH);  
+                break;
+            case 7:
+                SYSTEM_BUS_SET(DOUT7, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT8, STATE_HIGH);  
+                break;
+            case 8:
+                SYSTEM_BUS_SET(DOUT8, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT9, STATE_HIGH);  
+                break;
+            case 9:
+                SYSTEM_BUS_SET(DOUT9, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT10, STATE_HIGH);  
+                break;
+            case 10:
+                SYSTEM_BUS_SET(DOUT10, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT11, STATE_HIGH);  
+                break;
+            case 11:
+                SYSTEM_BUS_SET(DOUT11, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT12, STATE_HIGH);  
+                break;
+            case 12:
+                SYSTEM_BUS_SET(DOUT12, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT13, STATE_HIGH);  
+                break;
+            case 13:
+                SYSTEM_BUS_SET(DOUT13, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT14, STATE_HIGH);  
+                break;
+            case 14:
+                SYSTEM_BUS_SET(DOUT14, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT15, STATE_HIGH);  
+                break;
+            case 15:
+                SYSTEM_BUS_SET(DOUT15, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT16, STATE_HIGH);  
+                break;
+           case 16:
+                SYSTEM_BUS_SET(DOUT16, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT17, STATE_HIGH);  
+                break;
+            case 17:
+                SYSTEM_BUS_SET(DOUT17, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT18, STATE_HIGH);  
+                break;
 
 
+        }
+*/
+           // if (++out_step == 18) out_step = 0;
  
    }
 	

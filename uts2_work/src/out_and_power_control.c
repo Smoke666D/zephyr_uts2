@@ -8,14 +8,21 @@
 #include "out_and_power_control.h"
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
+#include "app_worker.h"
+
 
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
+static struct k_work out_task; 
+
+static void out_zbus_listener_callback(const struct zbus_channel *chan)
+{
+    /* Объявление канала будет ниже, но сам указатель chan уже известен */
+    app_worker_submit(&out_task);
+}
 
 
-
-/* 1. Объявляем подписчика Zbus для управления выходами */
-ZBUS_SUBSCRIBER_DEFINE(hc595_sub, 8);
+ZBUS_LISTENER_DEFINE(hc595_sub, out_zbus_listener_callback);
 
 /* 2. Объявляем канал Zbus для управления выходами */
 ZBUS_CHAN_DEFINE(hc595_chan,
@@ -44,7 +51,7 @@ static void hc595_calculate_mask(const struct hc595_channels_msg *msg, uint8_t *
                  ((uint8_t)msg->channels_mv[20] << 6) |
                  ((uint8_t)msg->channels_mv[21] << 7);
 
-    static const uint8_t state_to_bits[] = {0, 2, 1};
+    static const uint8_t state_to_bits[] = {0, 0x02, 0x01};
 
     /* Заполняем каналы слаботочных драйверов */
     for (int i = 0; i < LOW_CUR_DRIVER_COUNT; i++) {
@@ -96,9 +103,9 @@ static void hc595_dispatcher_thread(void *p1, void *p2, void *p3)
                 continue;
             }
 
-            uint8_t tx_data[5] = {0};
+            uint8_t tx_data[5] = {0x00,0x00,0x00,0x00,0x02};
 
-            hc595_calculate_mask(&current_msg, tx_data, sizeof(tx_data));
+            //hc595_calculate_mask(&current_msg, tx_data, sizeof(tx_data));
                        
             err = hc595_chain_write(hc595_dev, tx_data, sizeof(tx_data));
             if (err) 
@@ -130,7 +137,7 @@ static void hc595_dispatcher_test(void *p1, void *p2, void *p3)
 
   int err;
 
- uint8_t test_pattern[5] = {0x55, 0x55, 0x55, 0x55, 0x55};
+ uint8_t test_pattern[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
     
     struct spi_buf tx_buf = {
         .buf = test_pattern,
@@ -157,6 +164,42 @@ static void hc595_dispatcher_test(void *p1, void *p2, void *p3)
 K_THREAD_DEFINE(hc595_dispatcher_thread_data, DISPATCHER_STACK_SIZE, hc595_dispatcher_test, 
             NULL, NULL, NULL, 
                 7, 0, 0);
+
+
+
+          
+     const struct device *hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));      
+
+static void out_update_handler(struct k_work *work)
+{    
+    struct hc595_channels_msg msg;
+    if (zbus_chan_read(&hc595_chan, &msg, K_MSEC(50)) == 0)
+    {
+        uint8_t tx_data[5] = {0};
+
+        hc595_calculate_mask(&msg, tx_data, sizeof(tx_data));
+                   
+         if (hc595_chain_write(hc595_dev, tx_data, sizeof(tx_data)))         
+         {
+                LOG_ERR("Failed to write registers");
+         } 
+        // else 
+        // {
+        //        memcpy(last_tx_data, tx_data, sizeof(tx_data));                                
+        // }
+    }
+}
+
+
+static int out_manager_system_init(void)
+{
+   
+    k_work_init(&out_task, out_update_handler);
+    return 0;
+}
+
+
+SYS_INIT(out_manager_system_init, APPLICATION, 40);
 
 
 PARAM_ROUTE_DEFINE(DOUT1,&hc595_chan,0,ARRAY_DATA);

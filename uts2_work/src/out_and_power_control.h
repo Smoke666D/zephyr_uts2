@@ -26,7 +26,7 @@ typedef enum
 #define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
 
 typedef struct hc595_channels_msg {
-    float channels_mv[CHANNEL_DATA_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
+    uint32_t channels_mv[CHANNEL_DATA_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
 };
 
 #ifdef __cplusplus
