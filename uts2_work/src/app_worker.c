@@ -6,7 +6,7 @@
 LOG_MODULE_REGISTER(app_worker, LOG_LEVEL_INF);
 
 #define WORKER_STACK_SIZE 1024
-#define WORKER_PRIORITY   0
+#define WORKER_PRIORITY   -1
 
 static struct k_work_q app_work_q;
 K_THREAD_STACK_DEFINE(worker_stack, WORKER_STACK_SIZE);
