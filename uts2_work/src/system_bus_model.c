@@ -192,4 +192,53 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val)
    return -ENODEV; /* Модуль обслуживания параметра не скомпилирован */
 }
 
+int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count)
+{
+    if (ids == NULL || count == 0) {
+        return -EINVAL;
+    }
+
+    // Временный массив обработанных флагов, чтобы не уведомлять канал дважды
+    // Либо простой обход: если следующий ID на том же канале — не отпускаем claim
+    const struct zbus_channel *current_chan = NULL;
+    BOOLEAN_ARRAY_CHANNEL_t *msg = NULL;
+    int ret = 0;
+
+    for (size_t i = 0; i < count; i++) {
+        const struct system_bus_handler *h = _get_valid_handler(ids[i]);
+        if (h == NULL || h->channel_type != ARRAY_DATA) {
+            ret = -EINVAL;
+            continue;
+        }
+
+        // Если сменился канал, закрываем предыдущий и захватываем новый
+        if (h->channel != current_chan) {
+            if (current_chan != NULL) {
+                zbus_chan_finish(current_chan);
+                zbus_chan_notify(current_chan, K_NO_WAIT);
+            }
+
+            current_chan = h->channel;
+            if (zbus_chan_claim(current_chan, K_MSEC(50)) != 0) {
+                current_chan = NULL;
+                ret = -EBUSY;
+                continue;
+            }
+            msg = zbus_chan_msg(current_chan);
+        }
+
+        if (msg != NULL) {
+            msg->value[h->system_index] = val;
+        }
+    }
+
+    // Завершаем последний активный канал
+    if (current_chan != NULL) {
+        zbus_chan_finish(current_chan);
+        zbus_chan_notify(current_chan, K_NO_WAIT);
+    }
+
+    return ret;
+}
+
 SYS_INIT(system_bus_cache_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);

@@ -83,9 +83,6 @@ static uint32_t get_vref_raw(const struct device *dev, uint8_t step)
     return raw_vref;
 }
 
-
-
-
 static void _adc_init()
 {
     // Рассчитываем коэффициенты делителей один раз
@@ -152,38 +149,30 @@ static void my_custom_thread_entry2(void *p1, void *p2, void *p3)
 {
    static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
   // Проверяем готовность драйвера перед началом работы
-    if (!device_is_ready(seq_dev)) {
-         LOG_ERR("Sequencer driver is not ready!");
-     return;
+    if (!device_is_ready(seq_dev)) 
+    {
+        LOG_ERR("Sequencer driver is not ready!");
+        return;
     }
-    
     
     _adc_init2();
     struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)seq_dev->api;
     struct adc_scan_msg msg; 
 
     k_msleep(2000);
-    
-   
-    
-     while (1) 
-     {
-       
+    while (1) 
+    {   
          // Ждем готовности на семафоре драйвера (весь цикл 32 пересылок окончен)
         api->wait_for_data(seq_dev, K_FOREVER);
 
         // Выполняем тестовое заполнение буфера
-        for (int step = 0; step < ADC2_BUF_SIZE; step++) {
-           
-
-                uint32_t raw_val = 0;
-                api->get_channel_value(seq_dev, step, &raw_val);
-                float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
-                 msg.channels_mv[step] =(v_pin_mv * coefficients1[step]);
-            
-             
+        for (int step = 0; step < ADC2_BUF_SIZE; step++) 
+        {
+            uint32_t raw_val = 0;
+            api->get_channel_value(seq_dev, step, &raw_val);
+            float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
+            msg.channels_mv[step] =(v_pin_mv * coefficients1[step]); 
         }
-
         // Публикуем тестовый 32-канальный пакет в Zbus
         zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
     }
@@ -198,8 +187,6 @@ K_THREAD_DEFINE(my_thread_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry,
 K_THREAD_DEFINE(my_adc_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry2, 
            NULL, NULL, NULL, 
                 7, 0, 0);
-
-
 
 
 PARAM_ROUTE_DEFINE(AIN_AO1,&adc_data_chan,0,ARRAY_DATA);
@@ -242,7 +229,6 @@ PARAM_ROUTE_DEFINE(AIN_DA20_test2,&adc_data_chan,36,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(AIN_DA33_test2,&adc_data_chan,37,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(AIN_DA44_test2,&adc_data_chan,38,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(AIN_DA41_test2,&adc_data_chan,39,ARRAY_DATA);
- 
  
 
 PARAM_ROUTE_DEFINE(ENV_P3V3,&adc2_data_chan,0,ARRAY_DATA);

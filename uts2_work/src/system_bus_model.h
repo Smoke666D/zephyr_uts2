@@ -170,6 +170,26 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val);
     unsigned: bus_get_u32,  \
     float:    bus_get_real  \
 )((id), (val))
+
+
+
+/* Базовые функции установки массива параметров */
+int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count);
+int bus_set_u32_arr(uint32_t val, const SYSTEM_BUS_ID *ids, size_t count);
+int bus_set_real_arr(float val, const SYSTEM_BUS_ID *ids, size_t count);
+
+/* Вспомогательный макрос генерации массива "на лету" */
+#define _BUS_CALL_MULTI(fn, val, ...) \
+    fn((val), (const SYSTEM_BUS_ID[]){__VA_ARGS__}, sizeof((const SYSTEM_BUS_ID[]){__VA_ARGS__}) / sizeof(SYSTEM_BUS_ID))
+
+/* Универсальный макрос с автоопределением типа значения */
+#define SYSTEM_BUS_SET_MULTI(val, ...) _Generic((val), \
+    bool:          bus_set_bool_arr, \
+    int:           bus_set_u32_arr,  \
+    unsigned int:  bus_set_u32_arr,  \
+    uint32_t:      bus_set_u32_arr,  \
+    float:         bus_set_real_arr  \
+)((val), (const SYSTEM_BUS_ID[]){__VA_ARGS__}, sizeof((const SYSTEM_BUS_ID[]){__VA_ARGS__}) / sizeof(SYSTEM_BUS_ID))
     
 #ifdef __cplusplus
 }
