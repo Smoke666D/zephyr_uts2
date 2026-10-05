@@ -69,8 +69,12 @@ static int dac_control_init(void)
         return -ENODEV;
     }
 
+<<<<<<< HEAD
     struct dac_channel_cfg dac_ch_cfg = 
     {
+=======
+    struct dac_channel_cfg dac_ch_cfg = {
+>>>>>>> b8026efd5313219f7bbd2eb9eb329d1426066afb
         .channel_id = 2, /* PA5 */
         .resolution = 12
     };
