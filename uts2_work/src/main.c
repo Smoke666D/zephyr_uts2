@@ -361,6 +361,7 @@ int main(void)
         {
             LOG_INF("AD5243 Ch1 error");
         }
+         poll_all_sensors();
        // SYSTEM_BUS_SET(LED1, (bool)false);            
         SYSTEM_BUS_SET(LED3, (bool)true);                
      SYSTEM_BUS_SET(LED2, (bool)false);                
@@ -414,14 +415,14 @@ int main(void)
         SYSTEM_BUS_GET(AIN_AO4, &ain4);
         SYSTEM_BUS_GET(AIN_AO5, &ain5);
         SYSTEM_BUS_GET(AIN_AO6, &ain6);
-        LOG_INF("AO: 1: %.2f 2: %.2f 3: %.2f 4: %.2f 5: %.2f 6: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
+        LOG_INF("AO:  1: %.2f  2: %.2f  3: %.2f  4: %.2f  5: %.2f  6: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
         SYSTEM_BUS_GET(AIN_AO7,   &ain1);
         SYSTEM_BUS_GET(AIN_AO8,   &ain2);
         SYSTEM_BUS_GET(AIN_AO9,   &ain3);
         SYSTEM_BUS_GET(AIN_AO10,  &ain4);
         SYSTEM_BUS_GET(AIN_AO11,  &ain5);
         SYSTEM_BUS_GET(AIN_AO12,  &ain6);
-        LOG_INF("AO: 7: %.2f 8: %.2f 9: %.2f 10: %.2f 11: %.2f 12: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
+        LOG_INF("AO:  7: %.2f  8: %.2f  9: %.2f 10: %.2f 11: %.2f 12: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
         SYSTEM_BUS_GET(AIN_AO13,  &ain1);
         SYSTEM_BUS_GET(AIN_AO14,  &ain2);
         SYSTEM_BUS_GET(AIN_AO15,  &ain3);
@@ -459,11 +460,11 @@ int main(void)
         SYSTEM_BUS_GET(ENV_VDOUT2,  &ain7);
         SYSTEM_BUS_GET(ENV_VDOUT3,  &ain8);
         LOG_INF("adc2  %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6,(double)ain7,(double)ain8);
- 
-    /*   switch (out_step)
+
+      switch (out_step)
         {
             case 0:
-                SYSTEM_BUS_SET(DOUT18, STATE_LOW);  
+                SYSTEM_BUS_SET(DOUT16, STATE_LOW);  
                 SYSTEM_BUS_SET(DOUT1, STATE_HIGH);  
                 break;
             case 1:
@@ -537,8 +538,7 @@ int main(void)
 
 
         }
-*/
-           // if (++out_step == 18) out_step = 0;
+            if (++out_step == 16) out_step = 0;
  
    }
 	

@@ -67,57 +67,7 @@ static void hc595_calculate_mask(const struct hc595_channels_msg *msg, uint8_t *
 
 
 
-/* Функция потока диспетчера (коллбэк) */
-static void hc595_dispatcher_thread(void *p1, void *p2, void *p3)
-{
-    ARG_UNUSED(p1);
-    ARG_UNUSED(p2);
-    ARG_UNUSED(p3);
 
-    const struct device *hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));
-
-    if (!device_is_ready(hc595_dev)) {
-        LOG_ERR("74HC595 device not ready in dispatcher thread");
-        return;
-    }
-
-    /* На старте выходы аппаратно выключены */
-    hc595_chain_output_enable(hc595_dev, false);
-
-    struct hc595_channels_msg current_msg = {0};  /* Желаемое состояние из Zbus */
-    uint8_t last_tx_data[5] = {0};
-    bool first_run = true;
-    const struct zbus_channel *chan;
-
-    while (1) 
-    {
-        /* Поток засыпает и ждет публикации в канале [2, 3] */
-        int err = zbus_sub_wait(&hc595_sub, &chan, K_FOREVER);
-        if (err != 0) {
-            continue;
-        }
-                
-            err = zbus_chan_read(&hc595_chan, &current_msg, K_NO_WAIT);
-            if (err != 0) 
-            {
-                continue;
-            }
-
-            uint8_t tx_data[5] = {0x00,0x00,0x00,0x00,0x02};
-
-            //hc595_calculate_mask(&current_msg, tx_data, sizeof(tx_data));
-                       
-            err = hc595_chain_write(hc595_dev, tx_data, sizeof(tx_data));
-            if (err) 
-            {
-                LOG_ERR("Failed to write registers: %d", err);
-            } 
-            else 
-            {
-                memcpy(last_tx_data, tx_data, sizeof(tx_data));                                
-            }
-    }        
-}
 
 static struct spi_dt_spec spi_spec = 
     SPI_DT_SPEC_GET(DT_NODELABEL(hc595_chain),
@@ -125,50 +75,8 @@ static struct spi_dt_spec spi_spec =
                     SPI_WORD_SET(8) | 
                     SPI_TRANSFER_MSB);
 
-
-
-
-/* Функция потока диспетчера (коллбэк) */
-static void hc595_dispatcher_test(void *p1, void *p2, void *p3)
-{
-    ARG_UNUSED(p1);
-    ARG_UNUSED(p2);
-    ARG_UNUSED(p3);
-
-  int err;
-
- uint8_t test_pattern[5] = {0x00, 0x00, 0x00, 0x00, 0x00};
-    
-    struct spi_buf tx_buf = {
-        .buf = test_pattern,
-        .len = sizeof(test_pattern),
-    };
-    struct spi_buf_set tx_bufs = {
-        .buffers = &tx_buf,
-        .count = 1,
-    };
-
-    while (1) {
-        /* Отправляем пачку 5 байт синхронно [1.2.2] */
-        err = spi_write_dt(&spi_spec, &tx_bufs);
-        if (err) {
-            LOG_ERR("SPI write failed: %d", err);
-        }
-
-        /* Пауза 10 миллисекунд между пачками */
-        k_msleep(100);
-    }
-}
-
-
-K_THREAD_DEFINE(hc595_dispatcher_thread_data, DISPATCHER_STACK_SIZE, hc595_dispatcher_test, 
-            NULL, NULL, NULL, 
-                7, 0, 0);
-
-
-
           
-     const struct device *hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));      
+const struct device *hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));      
 
 static void out_update_handler(struct k_work *work)
 {    
