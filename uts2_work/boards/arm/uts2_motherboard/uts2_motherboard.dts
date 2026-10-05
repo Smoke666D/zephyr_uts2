@@ -500,3 +500,49 @@ zephyr_udc0: &usbotg_hs {
         oe-gpios = <&gpiob 14 GPIO_ACTIVE_LOW>;  // Пин разрешения выходов OE (активный 0)
     };
 };
+
+/ {
+    /* Создаем логическую группу выходов */
+    enbale_control_switch {
+        compatible = "gpio-leds";
+
+        /* Пин включения питания метки №1 */
+        en_dut2: en_1 {
+            gpios = <&gpioe 3 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин включения питания метки №2 */
+        en_dut3: en_2 {
+            gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин включения питания +12В */
+        en_p12v: en_3 {
+            gpios = <&gpiod 3 GPIO_ACTIVE_HIGH>;            
+        };
+         /* Пин включения питания +12В */
+        en_p24v: en_4 {
+            gpios = <&gpiod 7 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания аналоговых буфферов */
+        en_va: en_5 {
+            gpios = <&gpiod 4 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания usb интрефенйсной платы */
+        en_usb_out: en_6 {
+            gpios = <&gpiod 10 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания usb верхней части двойнгого разъема  */
+        en_usb_boot: en_7 {
+            gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания usb нижней части двойного платы */
+        en_usb_top: en_8 {
+            gpios = <&gpioc 6 GPIO_ACTIVE_HIGH>;            
+        };
+    };
+};
+
+&dac1 {
+    status = "okay";
+    pinctrl-0 = <&dac1_out2_pa5>; /* Переводит PA5 в режим аналогового выхода ЦАП */
+    pinctrl-names = "default";
+};

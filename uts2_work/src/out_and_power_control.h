@@ -25,6 +25,15 @@ typedef enum
 #define LIN_CONTROL_CNT  4
 #define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
 
+#define CONTROL_LINE_CNT 8
+
+typedef struct discrete_control_line_msg 
+{
+    bool state[CONTROL_LINE_CNT]; // Наш тестовый буфер (8 шагов * 2 канала)
+} discrete_control_line_msg;
+
+
+
 typedef struct hc595_channels_msg {
     uint32_t channels_mv[CHANNEL_DATA_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
 };
