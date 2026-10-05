@@ -331,112 +331,100 @@ int main(void)
     while (1) 
 	{
     
-        float d,d1,d2,d3;
-        if (true 
-            && SYSTEM_BUS_GET(RF_POWER,&d) == 0
-            && SYSTEM_BUS_GET(NTC,&d1) == 0
-            && SYSTEM_BUS_GET(EXT_VSENSE,&d2) == 0
-            && SYSTEM_BUS_GET(BRD_DETECT,&d3) == 0
-        )
-        {
-            LOG_INF("=== ADS1115 SNAPSHOT ===");
-            LOG_INF("AIN0: %.2f mV", d);
-            LOG_INF("AIN1: %.2f mV", d1);
-            LOG_INF("AIN2: %.2f mV", d2);
-            LOG_INF("AIN3: %.2f mV", d3);
-        }
-        else 
-        {
-            LOG_WRN("No data in Zbus channel yet.");
-        }
-
+        float ain1,ain2,ain3,ain4,ain5,ain6,ain7,ain8;
+        
+        SYSTEM_BUS_GET(RF_POWER,&ain1);
+        SYSTEM_BUS_GET(NTC,&ain2);
+        SYSTEM_BUS_GET(EXT_VSENSE,&ain3);
+        SYSTEM_BUS_GET(BRD_DETECT,&ain4);
+        
+        printk("=== ADS1115 SNAPSHOT ===\n");
+        printk("AIN0: %.2f mV\n", ain1);
+        printk("AIN1: %.2f mV\n", ain2);
+        printk("AIN2: %.2f mV\n", ain3);
+        printk("AIN3: %.2f mV\n", ain4);
+     
 
         if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
         {
-            LOG_INF("AD5243 Ch1 -> %d",i);
+            LOG_INF("AD5243 Ch1 -> %d\n",i);
             i=i+10;
             if (i >=255)  i = 0;
         }
         else 
         {
-            LOG_INF("AD5243 Ch1 error");
+            LOG_INF("AD5243 Ch1 error\n");
         }
          poll_all_sensors();
        // SYSTEM_BUS_SET(LED1, (bool)false);            
         SYSTEM_BUS_SET(LED3, (bool)true);                
-     SYSTEM_BUS_SET(LED2, (bool)false);                
+        SYSTEM_BUS_SET(LED2, (bool)false);                
         //param_set(LED3, &val, false);                
         k_msleep(SLEEP_TIME_MS);
         SYSTEM_BUS_SET(LED3, (bool)false);                
         SYSTEM_BUS_SET(LED2, (bool)true);                
         k_msleep(SLEEP_TIME_MS);
 
-         float temp_gnd = 0.0f, temp_vdd = 0.0f;
+        float temp_gnd = 0.0f, temp_vdd = 0.0f;
         float light_gnd = 0.0f, light_vdd = 0.0f;
 
-        LOG_INF("--- Текущие значения датчиков (из кэша) ---");
 
         SYSTEM_BUS_GET(I2C1_TEMP1, &temp_gnd);
         if isnan(temp_gnd)
-            LOG_WRN("TMP112 (GND): нет данных");
+            printk("TMP112 (GND): нет данных\n");
         else
-            LOG_INF("TMP112 (GND): %.2f °C", (double)temp_gnd);
+            printk("TMP112 (GND): %.2f °C\n", (double)temp_gnd);
 
         SYSTEM_BUS_GET(I2C1_TEMP2, &temp_vdd);
         if isnan(temp_vdd) 
-            LOG_WRN("TMP112 (VDD): нет данных");
+            printk("TMP112 (VDD): нет данных\n");
         else
-            LOG_INF("TMP112 (VDD): %.2f °C", (double)temp_vdd);
+            printk("TMP112 (VDD): %.2f °C\n", (double)temp_vdd);
          
         
         SYSTEM_BUS_GET(I2C1_LUX1, &light_gnd);
         if isnan(light_gnd)
-           LOG_WRN("BH1750 (GND): нет данных");
+           printk("BH1750 (GND): нет данных\n");
         else
-           LOG_INF("BH1750 (GND): %.2f lx", (double)light_gnd);
+           printk("BH1750 (GND): %.2f lx\n", (double)light_gnd);
         
          
 
         SYSTEM_BUS_GET(I2C1_LUX2,  &light_vdd);
         if isnan(light_vdd) 
-            LOG_WRN("BH1750 (VDD): нет данных");
+            printk("BH1750 (VDD): нет данных\n");
         else
-            LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
+            printk("BH1750 (VDD): %.2f lx\n", (double)light_vdd);
                  
-        float ain1,ain2,ain3,ain4,ain5,ain6,ain7,ain8;
-
-
-        LOG_INF("OUT STEP1: %d", out_step);
-
-
+        
         SYSTEM_BUS_GET(AIN_AO1, &ain1);
         SYSTEM_BUS_GET(AIN_AO2, &ain2);
         SYSTEM_BUS_GET(AIN_AO3, &ain3);
         SYSTEM_BUS_GET(AIN_AO4, &ain4);
         SYSTEM_BUS_GET(AIN_AO5, &ain5);
         SYSTEM_BUS_GET(AIN_AO6, &ain6);
-        LOG_INF("AO:  1: %.2f  2: %.2f  3: %.2f  4: %.2f  5: %.2f  6: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
+        printk("AO:  1: %.2f  2: %.2f  3: %.2f  4: %.2f  5: %.2f  6: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
         SYSTEM_BUS_GET(AIN_AO7,   &ain1);
         SYSTEM_BUS_GET(AIN_AO8,   &ain2);
         SYSTEM_BUS_GET(AIN_AO9,   &ain3);
         SYSTEM_BUS_GET(AIN_AO10,  &ain4);
         SYSTEM_BUS_GET(AIN_AO11,  &ain5);
         SYSTEM_BUS_GET(AIN_AO12,  &ain6);
-        LOG_INF("AO:  7: %.2f  8: %.2f  9: %.2f 10: %.2f 11: %.2f 12: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
+        printk("AO:  7: %.2f  8: %.2f  9: %.2f 10: %.2f 11: %.2f 12: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
         SYSTEM_BUS_GET(AIN_AO13,  &ain1);
         SYSTEM_BUS_GET(AIN_AO14,  &ain2);
         SYSTEM_BUS_GET(AIN_AO15,  &ain3);
         SYSTEM_BUS_GET(AIN_AO16,  &ain4);
         SYSTEM_BUS_GET(AIN_AO17,  &ain5);
         SYSTEM_BUS_GET(AIN_AO18,  &ain6);
-        LOG_INF("AO: 13: %.2f 14: %.2f 15: %.2f 16: %.2f 17: %.2f 18: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
+        printk("AO: 13: %.2f 14: %.2f 15: %.2f 16: %.2f 17: %.2f 18: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
         SYSTEM_BUS_GET(AIN_AVsense1,  &ain1);
         SYSTEM_BUS_GET(AIN_AVsense2,  &ain2);
         SYSTEM_BUS_GET(AIN_AVsense3,  &ain3);
         SYSTEM_BUS_GET(AIN_AVsense4,  &ain4);
         SYSTEM_BUS_GET(AIN_AVsense5,  &ain5);
         SYSTEM_BUS_GET(AIN_AVsense6,  &ain6);
-        LOG_INF("AIN_VSense 1: %.2f 2: %.2f 3: %.2f 4: %.2f 5: %.2f 6: %.2f ", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
+        printk("AIN_VSense 1: %.2f 2: %.2f 3: %.2f 4: %.2f 5: %.2f 6: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
 
 
         SYSTEM_BUS_GET(AIN_DA11_test1,  &ain1);
@@ -444,13 +432,13 @@ int main(void)
         SYSTEM_BUS_GET(AIN_DA33_test1,  &ain3);
         SYSTEM_BUS_GET(AIN_DA44_test1,  &ain4);
         SYSTEM_BUS_GET(AIN_DA41_test1,  &ain5);
-        LOG_INF("STEP7:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
+        printk("STEP7:  %.2f %.2f %.2f %.2f %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
         SYSTEM_BUS_GET(AIN_DA11_test2,  &ain1);
         SYSTEM_BUS_GET(AIN_DA20_test2,  &ain2);
         SYSTEM_BUS_GET(AIN_DA33_test2,  &ain3);
         SYSTEM_BUS_GET(AIN_DA44_test2,  &ain4);
         SYSTEM_BUS_GET(AIN_DA41_test2,  &ain5);
-        LOG_INF("STEP8:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
+        printk("STEP8:  %.2f %.2f %.2f %.2f %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
          SYSTEM_BUS_GET(ENV_P3V3,  &ain1);
         SYSTEM_BUS_GET(ENV_P5V0,  &ain2);
         SYSTEM_BUS_GET(ENV_VIN,  &ain3);
@@ -459,7 +447,7 @@ int main(void)
         SYSTEM_BUS_GET(ENV_USB,  &ain6);
         SYSTEM_BUS_GET(ENV_VDOUT2,  &ain7);
         SYSTEM_BUS_GET(ENV_VDOUT3,  &ain8);
-        LOG_INF("adc2  %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6,(double)ain7,(double)ain8);
+        printk("adc2  %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6,(double)ain7,(double)ain8);
 
       switch (out_step)
         {
