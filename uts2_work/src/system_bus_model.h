@@ -91,6 +91,15 @@ typedef enum
     LIN_PD2,
     LIN_PD3,
     LIN_PD4,
+    EN_DUT2_PSU,
+    EN_DUT3_PSU,  
+    EN_P12V,
+    EN_P24V,
+    EN_VA,
+    EN_USB_OUT,
+    EN_USB_BOOT,
+    EN_USB_TOP,
+    DAC_VALUE,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;

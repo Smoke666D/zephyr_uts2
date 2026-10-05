@@ -463,11 +463,11 @@ int main(void)
 
       switch (out_step)
         {
-            case 0:
+            case 0:                
                 SYSTEM_BUS_SET(DOUT16, STATE_LOW);  
                 SYSTEM_BUS_SET(DOUT1, STATE_HIGH);  
                 break;
-            case 1:
+            case 1:                
                 SYSTEM_BUS_SET(DOUT1, STATE_LOW);  
                 SYSTEM_BUS_SET(DOUT2, STATE_HIGH);  
                 break;
@@ -476,6 +476,7 @@ int main(void)
                 SYSTEM_BUS_SET(DOUT3, STATE_HIGH);  
                 break;
             case 3:
+                
                 SYSTEM_BUS_SET(DOUT3, STATE_LOW);  
                 SYSTEM_BUS_SET(DOUT4, STATE_HIGH);  
                 break;
@@ -484,6 +485,7 @@ int main(void)
                 SYSTEM_BUS_SET(DOUT5, STATE_HIGH);  
                 break;
             case 5:
+                
                 SYSTEM_BUS_SET(DOUT5, STATE_LOW);  
                 SYSTEM_BUS_SET(DOUT6, STATE_HIGH);  
                 break;
@@ -538,7 +540,8 @@ int main(void)
 
 
         }
-            if (++out_step == 16) out_step = 0;
+        if (++out_step == 16) out_step = 0;
+
  
    }
 	

@@ -1,5 +1,7 @@
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
@@ -9,11 +11,15 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/spi.h>
 #include "app_worker.h"
+#include <zephyr/shell/shell.h>
+#include <zephyr/zbus/zbus.h>
+
 
 
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
 static struct k_work out_task; 
+static struct k_work discrete_control_task; 
 
 static void out_zbus_listener_callback(const struct zbus_channel *chan)
 {
@@ -32,6 +38,25 @@ ZBUS_CHAN_DEFINE(hc595_chan,
                  ZBUS_OBSERVERS(hc595_sub),
                  {0}
 );
+
+
+static void discret_control_line_listener_callback(const struct zbus_channel *chan)
+{
+    /* Объявление канала будет ниже, но сам указатель chan уже известен */
+    app_worker_submit(&discrete_control_task);
+}
+
+
+ZBUS_LISTENER_DEFINE(discret_control_line_listener, discret_control_line_listener_callback);
+
+ZBUS_CHAN_DEFINE(discrete_control_chan,
+                 struct discrete_control_line_msg,
+                 NULL,
+                 NULL,
+                 ZBUS_OBSERVERS(discret_control_line_listener),
+                 {0}
+);
+
 
 
 /**
@@ -98,11 +123,63 @@ static void out_update_handler(struct k_work *work)
     }
 }
 
+static const struct gpio_dt_spec power_switches[CONTROL_LINE_CNT] = {
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_dut2), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_dut3), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_p12v), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_p24v), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_va),      gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_usb_out), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_usb_boot), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(en_usb_top), gpios)
+};
+
+static discrete_control_line_msg  _cash_enable_state = {0};
+
+static void _enable_port_init()
+{
+   
+   if ( zbus_chan_claim(&discrete_control_chan, K_FOREVER) == 0)
+   {        
+        /* Получаем прямой указатель на сообщение в памяти Zbus [2] */
+        struct discrete_control_line_msg *msg = 
+            (struct discrete_control_line_msg *)zbus_chan_msg(&discrete_control_chan);
+        for (int i = 0; i < CONTROL_LINE_CNT; i++) 
+        {
+            if (gpio_is_ready_dt(&power_switches[i])) 
+            {
+                gpio_pin_configure_dt(&power_switches[i], GPIO_OUTPUT_ACTIVE);                        
+                _cash_enable_state.state[i]  = true;
+                msg->state[i] = true;
+            }
+        }
+         zbus_chan_finish(&discrete_control_chan);
+   }
+}
+
+static void discrete_contol_update_handler(struct k_work *work)
+{    
+    struct discrete_control_line_msg  msg;
+    if (zbus_chan_read(&discrete_control_chan, &msg, K_MSEC(50)) == 0)
+    {
+        for (int i = 0; i < CONTROL_LINE_CNT; i++ )
+        {
+            if (_cash_enable_state.state[i] != msg.state[i])
+            {
+                _cash_enable_state.state[i] = msg.state[i];
+                gpio_pin_set_dt(&power_switches[i], _cash_enable_state.state[i] ? 1 : 0); 
+            }
+        }
+    }
+}
+
 
 static int out_manager_system_init(void)
 {
    
     k_work_init(&out_task, out_update_handler);
+    k_work_init(&discrete_control_task, discrete_contol_update_handler);
+    _enable_port_init();
     return 0;
 }
 
@@ -132,3 +209,68 @@ PARAM_ROUTE_DEFINE(LIN_PD1,&hc595_chan,18,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(LIN_PD2,&hc595_chan,19,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(LIN_PD3,&hc595_chan,20,ARRAY_DATA);
 PARAM_ROUTE_DEFINE(LIN_PD4,&hc595_chan,22,ARRAY_DATA);
+
+PARAM_ROUTE_DEFINE(EN_DUT2_PSU,&discrete_control_chan,0,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EN_DUT3_PSU,&discrete_control_chan,1,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EN_P12V,    &discrete_control_chan,2,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EN_P24V,    &discrete_control_chan,3,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EN_VA,      &discrete_control_chan,4,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EN_USB_OUT, &discrete_control_chan,5,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EN_USB_BOOT,&discrete_control_chan,6,ARRAY_DATA);
+PARAM_ROUTE_DEFINE(EN_USB_TOP, &discrete_control_chan,7,ARRAY_DATA);
+
+
+uint32_t name[] =
+{
+    EN_DUT2_PSU,
+    EN_DUT3_PSU,  
+    EN_P12V,
+    EN_P24V,
+    EN_VA,
+    EN_USB_OUT,
+    EN_USB_BOOT,
+    EN_USB_TOP,
+};
+
+
+
+static int cmd_discrete_set(const struct shell *sh, size_t argc, char **argv)
+{
+    /* Проверяем количество переданных аргументов (команда + 2 параметра) */
+    if (argc != 3)
+    {
+        shell_error(sh, "Usage: discrete_set <1-%d> <ON/OFF>", CONTROL_LINE_CNT);
+        return -EINVAL;
+    }
+
+    /* 2. Парсим логический номер выхода (1 .. CONTROL_LINE_CNT) */
+    char *endptr;
+    long channel_num = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || channel_num < 1 || channel_num > CONTROL_LINE_CNT) {
+        shell_error(sh, "Invalid channel: %s (Must be 1 to %d)", argv[1], CONTROL_LINE_CNT);
+        return -EINVAL;
+    }
+
+    /* 3. Парсим желаемое состояние (ON/OFF) */
+    bool state;
+    if (strcmp(argv[2], "ON") == 0 || strcmp(argv[2], "on") == 0) {
+        state = true;
+    } else if (strcmp(argv[2], "OFF") == 0 || strcmp(argv[2], "off") == 0) {
+        state = false;
+    } else {
+        shell_error(sh, "Invalid state: %s (Must be ON or OFF)", argv[2]);
+        return -EINVAL;
+    }
+
+    /* 4. Выполняем безопасный атомарный Zero-Copy доступ к каналу Zbus [2] */
+    SYSTEM_BUS_SET(name[channel_num-1],(bool)state);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. РЕГИСТРАЦИЯ КОМАНДЫ В СИСТЕМЕ SHELL                             */
+/* ------------------------------------------------------------------ */
+
+SHELL_CMD_REGISTER(en_set, NULL, 
+                   "Set state of a discrete channel: discrete_set <1-22> <ON/OFF>", 
+                   cmd_discrete_set);
