@@ -19,7 +19,7 @@ target_include_directories(app PRIVATE
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"  
-    "src/logic_signal/*.c"  
+    "src/works/*.c"  
 #"src/lua/*.c"    
 )
 
@@ -27,12 +27,10 @@ target_sources(app PRIVATE
        src/adc_thread.c
        src/ina228_stream_thread.c
        src/app_worker.c
-       #src/param_server.c 
        src/system_bus_model.c
        src/out_and_power_control.c
        src/main.c
        src/settings.c
-       src/dac_work.c
        src/shell_cmd.c
       ${APP_SOURCES} 
 )

@@ -368,14 +368,10 @@ int main(void)
     //settings_fram_init();
 
     */
-   
-   
     while (1) 
 	{    
         send_binary_telemetry(telemetry_uart);       
         k_msleep(SLEEP_TIME_MS);
-  
-   }
-	
+    }
 	return 0;
 }

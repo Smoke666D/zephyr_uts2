@@ -229,11 +229,7 @@ uint32_t out_name[] =
     DOUT15,
     DOUT16,
     DOUT17,
-    DOUT18,
-    LIN_PD1,
-    LIN_PD2,
-    LIN_PD3,
-    LIN_PD4   
+    DOUT18 
 };
 
 
@@ -243,7 +239,7 @@ static int cmd_out_set(const struct shell *sh, size_t argc, char **argv)
     /* Проверяем количество переданных аргументов (команда + 2 параметра) */
     if (argc != 3)
     {
-        shell_error(sh, "Usage: discrete_set <1-%d> <ON/OFF>", CHANNEL_DATA_SIZE );
+        shell_error(sh, "Usage: out_set <1-18> <IN/HI/LO>");
         return -EINVAL;
     }
     

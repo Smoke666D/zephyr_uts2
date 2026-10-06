@@ -133,12 +133,18 @@ typedef enum
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;
 
-
+typedef enum
+{
+   LIN_PULL_DOWN_OFF,
+   LIN_PULL_DOWN_ON,
+} lin_pull_down_state_t;
 
 
 typedef enum
 {
   SINGLE_DATA,
+  FLOAT,
+  BOOL,
   ARRAY_DATA,
   QUEUE_DATA,
 } SYSTEM_BUS_DATA_TYPE;
