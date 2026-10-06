@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <zephyr/zbus/zbus.h>
+#include "system_bus_model.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,9 +22,7 @@ typedef enum
     STATE_HIGH = 2,
 } LOW_CUR_OUT_STATE_t;
 
-#define LOW_CUR_DRIVER_COUNT 18
-#define LIN_CONTROL_CNT  4
-#define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
+
 
 #define CONTROL_LINE_CNT 8
 

@@ -25,7 +25,7 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
 
 target_sources(app PRIVATE 
        src/adc_thread.c
-       #src/ina228_stream_thread.c
+       src/ina228_stream_thread.c
        src/app_worker.c
        #src/param_server.c 
        src/system_bus_model.c
@@ -33,6 +33,7 @@ target_sources(app PRIVATE
        src/main.c
        src/settings.c
        src/dac_work.c
+       src/shell_cmd.c
       ${APP_SOURCES} 
 )
 

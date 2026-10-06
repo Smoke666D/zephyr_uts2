@@ -7,6 +7,13 @@ extern "C" {
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
 
+
+#define LED_CNT 3
+
+#define LOW_CUR_DRIVER_COUNT 18
+#define LIN_CONTROL_CNT  4
+#define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
+
 typedef enum
 {   AIN_AO1,
     AIN_AO7,
@@ -100,6 +107,22 @@ typedef enum
     EN_USB_BOOT,
     EN_USB_TOP,
     DAC_VALUE,
+    SENS_BRD_LOW_CURRENT, 
+    SENS_BRD_LOW_VOLTAGE,  
+    SENS_BRD_HIGH_CURRENT, 
+    SENS_BRD_HIGH_VOLTAGE, 
+    SENS_VDUT2_CURRENT,   
+    SENS_VDUT2_VOLTAGE,  
+    SENS_VDUT3_CURRENT,  
+    SENS_VDUT3_VOLTAGE,  
+    SENS_VIN_CURRENT,    
+    SENS_VIN_VOLTAGE,    
+    SENS_DCDC_3_3_CURRENT,
+    SENS_DCDC_3_3_VOLTAGE,
+    SENS_VDOUT_PWR_CURRENT,
+    SENS_VDOUT_PWR_VOLTAGE,
+    SENS_VD5_CURRENT,      
+    SENS_VD5_VOLTAGE,      
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;
@@ -165,6 +188,7 @@ struct system_bus_handler
 #define SYSTEM_BUS_SET(id, val) _Generic((val), \
         bool:       bus_set_bool(id, val), \
         int:        bus_set_u32(id, val),  \
+        unsigned:   bus_set_u32(id, val),  \
         float:      bus_set_real(id, val) \
     )
 

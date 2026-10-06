@@ -19,7 +19,7 @@
 #include "settings.h"
 #include "out_and_power_control.h"
 #include "system_bus_model.h"
-#
+#include "telemetry.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "usb_thread.h"
@@ -27,7 +27,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "ina228_stream_thread.h"
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   1000
+#define SLEEP_TIME_MS   500
 
 
 
@@ -315,6 +315,121 @@ int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
 
 */
 
+
+void send_binary_telemetry(const struct device *uart_dev) {
+    struct telemetry_packet pkt;
+    pkt.magic = 0xBE;
+
+    // Заполняем данными из твоего системного буфера
+    SYSTEM_BUS_GET(RF_POWER, &pkt.rf_power);
+    SYSTEM_BUS_GET(NTC, &pkt.ntc);
+    SYSTEM_BUS_GET(EXT_VSENSE, &pkt.ext_vsense);
+    SYSTEM_BUS_GET(BRD_DETECT, &pkt.brd_detect);
+
+    SYSTEM_BUS_GET(I2C1_TEMP1, &pkt.temp_gnd);
+    SYSTEM_BUS_GET(I2C1_TEMP2, &pkt.temp_vdd);
+    SYSTEM_BUS_GET(I2C1_LUX1, &pkt.light_gnd);
+    SYSTEM_BUS_GET(I2C1_LUX2, &pkt.light_vdd);
+
+    // AO 1-6, 7-12, 13-18
+    SYSTEM_BUS_GET(AIN_AO1, &pkt.ao[0]);
+    SYSTEM_BUS_GET(AIN_AO2, &pkt.ao[1]);
+    SYSTEM_BUS_GET(AIN_AO3, &pkt.ao[2]);
+    SYSTEM_BUS_GET(AIN_AO4, &pkt.ao[3]);
+    SYSTEM_BUS_GET(AIN_AO5, &pkt.ao[4]);
+    SYSTEM_BUS_GET(AIN_AO6, &pkt.ao[5]);
+    
+    SYSTEM_BUS_GET(AIN_AO7, &pkt.ao[6]);
+    SYSTEM_BUS_GET(AIN_AO8, &pkt.ao[7]);
+    SYSTEM_BUS_GET(AIN_AO9, &pkt.ao[8]);
+    SYSTEM_BUS_GET(AIN_AO10, &pkt.ao[9]);
+    SYSTEM_BUS_GET(AIN_AO11, &pkt.ao[10]);
+    SYSTEM_BUS_GET(AIN_AO12, &pkt.ao[11]);
+    
+    SYSTEM_BUS_GET(AIN_AO13, &pkt.ao[12]);
+    SYSTEM_BUS_GET(AIN_AO14, &pkt.ao[13]);
+    SYSTEM_BUS_GET(AIN_AO15, &pkt.ao[14]);
+    SYSTEM_BUS_GET(AIN_AO16, &pkt.ao[15]);
+    SYSTEM_BUS_GET(AIN_AO17, &pkt.ao[16]);
+    SYSTEM_BUS_GET(AIN_AO18, &pkt.ao[17]);
+
+    // AIN_VSense 1-6
+    SYSTEM_BUS_GET(AIN_AVsense1, &pkt.vsense[0]);
+    SYSTEM_BUS_GET(AIN_AVsense2, &pkt.vsense[1]);
+    SYSTEM_BUS_GET(AIN_AVsense3, &pkt.vsense[2]);
+    SYSTEM_BUS_GET(AIN_AVsense4, &pkt.vsense[3]);
+    SYSTEM_BUS_GET(AIN_AVsense5, &pkt.vsense[4]);
+    SYSTEM_BUS_GET(AIN_AVsense6, &pkt.vsense[5]);
+
+    // Step 7 & 8
+    SYSTEM_BUS_GET(AIN_DA11_test1, &pkt.step7[0]);
+    SYSTEM_BUS_GET(AIN_DA20_test1, &pkt.step7[1]);
+    SYSTEM_BUS_GET(AIN_DA33_test1, &pkt.step7[2]);
+    SYSTEM_BUS_GET(AIN_DA44_test1, &pkt.step7[3]);
+    SYSTEM_BUS_GET(AIN_DA41_test1, &pkt.step7[4]);
+
+    SYSTEM_BUS_GET(AIN_DA11_test2, &pkt.step8[0]);
+    SYSTEM_BUS_GET(AIN_DA20_test2, &pkt.step8[1]);
+    SYSTEM_BUS_GET(AIN_DA33_test2, &pkt.step8[2]);
+    SYSTEM_BUS_GET(AIN_DA44_test2, &pkt.step8[3]);
+    SYSTEM_BUS_GET(AIN_DA41_test2, &pkt.step8[4]);
+
+    // Env (8 шт)
+    SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
+    SYSTEM_BUS_GET(ENV_P5V0,  &pkt.env[1]);
+    SYSTEM_BUS_GET(ENV_VIN,   &pkt.env[2]);
+    SYSTEM_BUS_GET(ENV_VDOUT1, &pkt.env[3]);
+    SYSTEM_BUS_GET(ENV_P40V,  &pkt.env[4]);
+    SYSTEM_BUS_GET(ENV_USB,   &pkt.env[5]);
+    SYSTEM_BUS_GET(ENV_VDOUT2, &pkt.env[6]);
+    SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
+
+    // Отправляем всю структуру байт за байтом в UART
+    uint8_t *ptr = (uint8_t *)&pkt;
+    for (size_t i = 0; i < sizeof(pkt); i++) {
+        uart_poll_out(uart_dev, ptr[i]);
+    }
+}
+
+
+void _send_log()
+{
+        float ain[16];
+        
+    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT, &ain[0]);
+    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &ain[1]);
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &ain[2]);
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &ain[3]);
+    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,    &ain[4]);
+    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,   &ain[5]);
+    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,   &ain[6]);
+    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,   &ain[7]);
+    SYSTEM_BUS_GET(SENS_VIN_CURRENT,     &ain[8]);
+    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,     &ain[9]);
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT, &ain[10]);
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE, &ain[11]);
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &ain[12]);
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &ain[13]);
+    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &ain[14]);
+    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &ain[15]);
+        
+        
+        
+
+    printk("ina1  %.2f %.6f \n", (double)ain[0],(double)ain[1]);
+    printk("ina2  %.2f %.6f \n", (double)ain[2],(double)ain[3]);
+    printk("ina3  %.2f %.6f \n", (double)ain[4],(double)ain[5]);
+    printk("ina4  %.2f %.6f \n", (double)ain[6],(double)ain[7]);
+    printk("ina5  %.2f %.6f \n", (double)ain[8],(double)ain[9]);
+    printk("ina6  %.2f %.6f \n", (double)ain[10],(double)ain[11]);
+    printk("ina7  %.2f %.6f \n", (double)ain[12],(double)ain[13]);
+    printk("ina8  %.2f %.6f \n", (double)ain[14],(double)ain[15]);
+
+}
+
+
+static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
+
 int main(void)
 {
 	LOG_INF("SYSTETM START 3");	
@@ -330,22 +445,17 @@ int main(void)
     int i = 0;
     while (1) 
 	{
-    
-        float ain1,ain2,ain3,ain4,ain5,ain6,ain7,ain8;
+         _send_log();
         
-        SYSTEM_BUS_GET(RF_POWER,&ain1);
-        SYSTEM_BUS_GET(NTC,&ain2);
-        SYSTEM_BUS_GET(EXT_VSENSE,&ain3);
-        SYSTEM_BUS_GET(BRD_DETECT,&ain4);
-        
-        printk("=== ADS1115 SNAPSHOT ===\n");
-        printk("AIN0: %.2f mV\n", ain1);
-        printk("AIN1: %.2f mV\n", ain2);
-        printk("AIN2: %.2f mV\n", ain3);
-        printk("AIN3: %.2f mV\n", ain4);
-     
 
-        if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
+       // send_binary_telemetry(telemetry_uart);
+        // poll_all_sensors();
+       
+        k_msleep(SLEEP_TIME_MS);
+             
+        k_msleep(SLEEP_TIME_MS);
+
+       /* if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
         {
             LOG_INF("AD5243 Ch1 -> %d\n",i);
             i=i+10;
@@ -354,181 +464,7 @@ int main(void)
         else 
         {
             LOG_INF("AD5243 Ch1 error\n");
-        }
-         poll_all_sensors();
-       // SYSTEM_BUS_SET(LED1, (bool)false);            
-        SYSTEM_BUS_SET(LED3, (bool)true);                
-        SYSTEM_BUS_SET(LED2, (bool)false);                
-        //param_set(LED3, &val, false);                
-        k_msleep(SLEEP_TIME_MS);
-        SYSTEM_BUS_SET(LED3, (bool)false);                
-        SYSTEM_BUS_SET(LED2, (bool)true);                
-        k_msleep(SLEEP_TIME_MS);
-
-        float temp_gnd = 0.0f, temp_vdd = 0.0f;
-        float light_gnd = 0.0f, light_vdd = 0.0f;
-
-
-        SYSTEM_BUS_GET(I2C1_TEMP1, &temp_gnd);
-        if isnan(temp_gnd)
-            printk("TMP112 (GND): нет данных\n");
-        else
-            printk("TMP112 (GND): %.2f °C\n", (double)temp_gnd);
-
-        SYSTEM_BUS_GET(I2C1_TEMP2, &temp_vdd);
-        if isnan(temp_vdd) 
-            printk("TMP112 (VDD): нет данных\n");
-        else
-            printk("TMP112 (VDD): %.2f °C\n", (double)temp_vdd);
-         
-        
-        SYSTEM_BUS_GET(I2C1_LUX1, &light_gnd);
-        if isnan(light_gnd)
-           printk("BH1750 (GND): нет данных\n");
-        else
-           printk("BH1750 (GND): %.2f lx\n", (double)light_gnd);
-        
-         
-
-        SYSTEM_BUS_GET(I2C1_LUX2,  &light_vdd);
-        if isnan(light_vdd) 
-            printk("BH1750 (VDD): нет данных\n");
-        else
-            printk("BH1750 (VDD): %.2f lx\n", (double)light_vdd);
-                 
-        
-        SYSTEM_BUS_GET(AIN_AO1, &ain1);
-        SYSTEM_BUS_GET(AIN_AO2, &ain2);
-        SYSTEM_BUS_GET(AIN_AO3, &ain3);
-        SYSTEM_BUS_GET(AIN_AO4, &ain4);
-        SYSTEM_BUS_GET(AIN_AO5, &ain5);
-        SYSTEM_BUS_GET(AIN_AO6, &ain6);
-        printk("AO:  1: %.2f  2: %.2f  3: %.2f  4: %.2f  5: %.2f  6: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
-        SYSTEM_BUS_GET(AIN_AO7,   &ain1);
-        SYSTEM_BUS_GET(AIN_AO8,   &ain2);
-        SYSTEM_BUS_GET(AIN_AO9,   &ain3);
-        SYSTEM_BUS_GET(AIN_AO10,  &ain4);
-        SYSTEM_BUS_GET(AIN_AO11,  &ain5);
-        SYSTEM_BUS_GET(AIN_AO12,  &ain6);
-        printk("AO:  7: %.2f  8: %.2f  9: %.2f 10: %.2f 11: %.2f 12: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
-        SYSTEM_BUS_GET(AIN_AO13,  &ain1);
-        SYSTEM_BUS_GET(AIN_AO14,  &ain2);
-        SYSTEM_BUS_GET(AIN_AO15,  &ain3);
-        SYSTEM_BUS_GET(AIN_AO16,  &ain4);
-        SYSTEM_BUS_GET(AIN_AO17,  &ain5);
-        SYSTEM_BUS_GET(AIN_AO18,  &ain6);
-        printk("AO: 13: %.2f 14: %.2f 15: %.2f 16: %.2f 17: %.2f 18: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
-        SYSTEM_BUS_GET(AIN_AVsense1,  &ain1);
-        SYSTEM_BUS_GET(AIN_AVsense2,  &ain2);
-        SYSTEM_BUS_GET(AIN_AVsense3,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense4,  &ain4);
-        SYSTEM_BUS_GET(AIN_AVsense5,  &ain5);
-        SYSTEM_BUS_GET(AIN_AVsense6,  &ain6);
-        printk("AIN_VSense 1: %.2f 2: %.2f 3: %.2f 4: %.2f 5: %.2f 6: %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6);
-
-
-        SYSTEM_BUS_GET(AIN_DA11_test1,  &ain1);
-        SYSTEM_BUS_GET(AIN_DA20_test1,  &ain2);
-        SYSTEM_BUS_GET(AIN_DA33_test1,  &ain3);
-        SYSTEM_BUS_GET(AIN_DA44_test1,  &ain4);
-        SYSTEM_BUS_GET(AIN_DA41_test1,  &ain5);
-        printk("STEP7:  %.2f %.2f %.2f %.2f %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-        SYSTEM_BUS_GET(AIN_DA11_test2,  &ain1);
-        SYSTEM_BUS_GET(AIN_DA20_test2,  &ain2);
-        SYSTEM_BUS_GET(AIN_DA33_test2,  &ain3);
-        SYSTEM_BUS_GET(AIN_DA44_test2,  &ain4);
-        SYSTEM_BUS_GET(AIN_DA41_test2,  &ain5);
-        printk("STEP8:  %.2f %.2f %.2f %.2f %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-         SYSTEM_BUS_GET(ENV_P3V3,  &ain1);
-        SYSTEM_BUS_GET(ENV_P5V0,  &ain2);
-        SYSTEM_BUS_GET(ENV_VIN,  &ain3);
-        SYSTEM_BUS_GET(ENV_VDOUT1,  &ain4);
-        SYSTEM_BUS_GET(ENV_P40V,  &ain5);
-        SYSTEM_BUS_GET(ENV_USB,  &ain6);
-        SYSTEM_BUS_GET(ENV_VDOUT2,  &ain7);
-        SYSTEM_BUS_GET(ENV_VDOUT3,  &ain8);
-        printk("adc2  %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6,(double)ain7,(double)ain8);
-
-      switch (out_step)
-        {
-            case 0:                
-                SYSTEM_BUS_SET(DOUT16, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT1, STATE_HIGH);  
-                break;
-            case 1:                
-                SYSTEM_BUS_SET(DOUT1, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT2, STATE_HIGH);  
-                break;
-            case 2:
-                SYSTEM_BUS_SET(DOUT2, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT3, STATE_HIGH);  
-                break;
-            case 3:
-                
-                SYSTEM_BUS_SET(DOUT3, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT4, STATE_HIGH);  
-                break;
-            case 4:
-                SYSTEM_BUS_SET(DOUT4, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT5, STATE_HIGH);  
-                break;
-            case 5:
-                
-                SYSTEM_BUS_SET(DOUT5, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT6, STATE_HIGH);  
-                break;
-            case 6:
-                SYSTEM_BUS_SET(DOUT6, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT7, STATE_HIGH);  
-                break;
-            case 7:
-                SYSTEM_BUS_SET(DOUT7, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT8, STATE_HIGH);  
-                break;
-            case 8:
-                SYSTEM_BUS_SET(DOUT8, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT9, STATE_HIGH);  
-                break;
-            case 9:
-                SYSTEM_BUS_SET(DOUT9, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT10, STATE_HIGH);  
-                break;
-            case 10:
-                SYSTEM_BUS_SET(DOUT10, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT11, STATE_HIGH);  
-                break;
-            case 11:
-                SYSTEM_BUS_SET(DOUT11, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT12, STATE_HIGH);  
-                break;
-            case 12:
-                SYSTEM_BUS_SET(DOUT12, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT13, STATE_HIGH);  
-                break;
-            case 13:
-                SYSTEM_BUS_SET(DOUT13, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT14, STATE_HIGH);  
-                break;
-            case 14:
-                SYSTEM_BUS_SET(DOUT14, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT15, STATE_HIGH);  
-                break;
-            case 15:
-                SYSTEM_BUS_SET(DOUT15, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT16, STATE_HIGH);  
-                break;
-           case 16:
-                SYSTEM_BUS_SET(DOUT16, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT17, STATE_HIGH);  
-                break;
-            case 17:
-                SYSTEM_BUS_SET(DOUT17, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT18, STATE_HIGH);  
-                break;
-
-
-        }
-        if (++out_step == 16) out_step = 0;
+        }*/
 
  
    }

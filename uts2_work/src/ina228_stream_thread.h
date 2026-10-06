@@ -31,9 +31,7 @@ extern "C" {
 /***************************************************************************************************
  *                                      PUBLIC TYPES
  **************************************************************************************************/
-#define POLL_INTERVAL_MS          5
-#define INA228_THREAD_STACK_SIZE  3072
-#define INA228_THREAD_PRIORITY    4
+
 
 /**
  *  @brief Перечисление физических измерительных каналов (датчиков)
@@ -51,21 +49,14 @@ typedef enum cur_sens_channel
     CUR_SENS_NUM_SENSORS = 8,
 } cur_sens_channel_t;
 
-/**
- *  @brief Структура одиночного измерения датчика
- */
-typedef struct sensor_reading 
-{
-    double voltage;
-    double current;
-} sensor_reading_t;
+
 
 /**
  *  @brief Пакетное сообщение ZBUS с результатами опроса всех датчиков
  */
 typedef struct ina_batch_msg 
 {
-    sensor_reading_t sensors[CUR_SENS_NUM_SENSORS];
+    float sensors[CUR_SENS_NUM_SENSORS*2];
 } ina_batch_msg_t;
 
 /**
