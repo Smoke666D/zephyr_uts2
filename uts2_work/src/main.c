@@ -441,8 +441,8 @@ int main(void)
     //settings_fram_init();
 
     */
-    int out_step  = 0;
-    int i = 0;
+   
+   
     while (1) 
 	{
          _send_log();
