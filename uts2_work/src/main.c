@@ -270,50 +270,7 @@ void EEPROM_Test()
     
 }
 #define I2C1_NODE DT_NODELABEL(i2c1)
-/*
 
-#define AD5243_DEFAULT_ADDR 0x2F 
-
-typedef enum {
-    AD5243_CHANNEL_1 = 0,
-    AD5243_CHANNEL_2 = 1
-} ad5243_channel_t;
-
-
-int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
-{
-    const struct device *i2c_dev = DEVICE_DT_GET(I2C1_NODE);
-    if (!device_is_ready(i2c_dev)) {
-        LOG_ERR("I2C1 bus not ready for AD5243!");
-        return -ENODEV;
-    }
-
-    struct i2c_dt_spec spec = {
-        .bus = i2c_dev,
-        .addr = AD5243_DEFAULT_ADDR
-    };
-
-    uint8_t tx_data[2];
-
-    if (channel == AD5243_CHANNEL_1) {
-        tx_data[0] = 0x00; // Выбор канала 1 (W1)
-    } else {
-        tx_data[0] = 0x80; // Выбор канала 2 (W2)
-    }
-
-    tx_data[1] = value; // Значение положения движка (0..255)
-
-    int ret = i2c_write_dt(&spec, tx_data, sizeof(tx_data));
-    if (ret < 0) {
-        LOG_ERR("Failed to set AD5243 wiper: %d", ret);
-        return ret;
-    }
-
-    LOG_DBG("AD5243 Ch %d set to wiper pos: %d", channel + 1, value);
-    return 0;
-}
-
-*/
 
 
 void send_binary_telemetry(const struct device *uart_dev) {

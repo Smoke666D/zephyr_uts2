@@ -314,6 +314,113 @@ with ui.card().classes('bg-slate-800 p-2 w-full mb-3'):
             'update:model-value', lambda e, c=i, s=io_select: on_io_change(c, s)
         )
 
+
+# --- ПАНЕЛЬ УПРАВЛЕНИЯ АНАЛОГОВЫМИ ВЫХОДАМИ И РЕЗИСТОРАМИ ---
+with ui.card().classes('bg-slate-800 p-2 w-full mb-3'):
+  ui.label('Управление ЦАП и подстроечными резисторами').classes(
+      'text-xs font-semibold text-yellow-300 mb-1.5'
+  )
+
+  with ui.row().classes('w-full gap-4 items-center'):
+
+    # 1. Управление ЦАП (15.00 - 30.00 В)
+    with ui.row().classes('items-center gap-1.5 flex-1'):
+      ui.label('ЦАП:').classes('text-xs text-white font-medium')
+
+      dac_input = ui.input(placeholder='15.00 - 30.00', value='15.00').props(
+          'dark outlined dense type=number input-class="text-right"'
+      ).classes('w-28 bg-slate-700 text-xs text-white rounded')
+
+      # Размерность после окна ввода
+      ui.label('В').classes('text-xs text-slate-300 font-medium')
+
+      def send_dac():
+        try:
+          val = float(dac_input.value)
+          if 15.00 <= val <= 30.00:
+            cmd = f'dac_set {val:.2f}\r\n'
+            if shell_ser and shell_ser.is_open:
+              shell_ser.write(cmd.encode('utf-8'))
+              ui.notify(f'[ЦАП] Отправлено: {cmd.strip()}', type='positive')
+            else:
+              ui.notify('Shell порт закрыт!', type='warning')
+          else:
+            ui.notify('Значение ЦАП должно быть от 15.00 до 30.00', type='warning')
+        except ValueError:
+          ui.notify('Введите корректное число для ЦАП', type='negative')
+
+      dac_input.on('keydown.enter', send_dac)
+      ui.button('Set DAC', on_click=send_dac).classes(
+          'bg-sky-600 text-white text-xs py-1 px-2'
+      )
+
+    # 2. Подстроечный резистор Канал 1 (0.00 - 100.00 кОм)
+    with ui.row().classes('items-center gap-1.5'):
+      ui.label('Резистор 1:').classes('text-xs text-white font-medium')
+
+      res1_input = ui.input(placeholder='0-100', value='0.00').props(
+          'dark outlined dense type=number input-class="text-right"'
+      ).classes('w-20 bg-slate-700 text-xs text-white rounded')
+
+      # Размерность после окна ввода
+      ui.label('кОм').classes('text-xs text-slate-300 font-medium')
+
+      def send_res1():
+        try:
+          val = float(res1_input.value)
+          if 0.00 <= val <= 100.00:
+            cmd = f'adj_res_set 1 {val:.2f}\r\n'
+            if shell_ser and shell_ser.is_open:
+              shell_ser.write(cmd.encode('utf-8'))
+              ui.notify(
+                  f'[Резистор 1] Отправлено: {cmd.strip()}', type='positive'
+              )
+            else:
+              ui.notify('Shell порт закрыт!', type='warning')
+          else:
+            ui.notify('Значение резистора должно быть от 0.00 до 100.00', type='warning')
+        except ValueError:
+          ui.notify('Введите корректное число для Резистора 1', type='negative')
+
+      res1_input.on('keydown.enter', send_res1)
+      ui.button('Set R1', on_click=send_res1).classes(
+          'bg-emerald-600 text-white text-xs py-1 px-2'
+      )
+
+    # 3. Подстроечный резистор Канал 2 (0.00 - 100.00 кОм)
+    with ui.row().classes('items-center gap-1.5'):
+      ui.label('Резистор 2:').classes('text-xs text-white font-medium')
+
+      res2_input = ui.input(placeholder='0-100', value='0.00').props(
+          'dark outlined dense type=number input-class="text-right"'
+      ).classes('w-20 bg-slate-700 text-xs text-white rounded')
+
+      # Размерность после окна ввода
+      ui.label('кОм').classes('text-xs text-slate-300 font-medium')
+
+      def send_res2():
+        try:
+          val = float(res2_input.value)
+          if 0.00 <= val <= 100.00:
+            cmd = f'adj_res_set 2 {val:.2f}\r\n'
+            if shell_ser and shell_ser.is_open:
+              shell_ser.write(cmd.encode('utf-8'))
+              ui.notify(
+                  f'[Резистор 2] Отправлено: {cmd.strip()}', type='positive'
+              )
+            else:
+              ui.notify('Shell порт закрыт!', type='warning')
+          else:
+            ui.notify('Значение резистора должно быть от 0.00 до 100.00', type='warning')
+        except ValueError:
+          ui.notify('Введите корректное число для Резистора 2', type='negative')
+
+      res2_input.on('keydown.enter', send_res2)
+      ui.button('Set R2', on_click=send_res2).classes(
+          'bg-emerald-600 text-white text-xs py-1 px-2'
+      )
+
+
 # --- УПЛОТНЕННЫЕ КАРТОЧКИ (Крупное название, минимальный проем, цифры вправо) ---
 
 # --- КАРТОЧКИ В ОДНУ СТРОКУ (С поддержкой размерности) ---
@@ -345,16 +452,16 @@ def create_metric_card(title, key, unit=''):
 with ui.column().classes('w-full gap-2'):
   ui.label('Дашборд датчиков').classes('text-sm font-bold text-sky-300')
 
-  # Основные датчики (в 1 ряд)
+  # Основные датчики с новыми именами и размерностями
   with ui.row().classes('w-full gap-1'):
-    create_metric_card('RF Power', 'rf_power')
+    create_metric_card('RF Power', 'rf_power', unit='дБ')
     create_metric_card('NTC', 'ntc')
     create_metric_card('Ext VSense', 'ext_vsense')
     create_metric_card('Brd Detect', 'brd_detect')
-    create_metric_card('Temp GND', 'temp_gnd')
-    create_metric_card('Temp VDD', 'temp_vdd')
-    create_metric_card('Light GND', 'light_gnd')
-    create_metric_card('Light VDD', 'light_vdd')
+    create_metric_card('Температура МУ', 'temp_gnd', unit='°C')
+    create_metric_card('Температура ИУ', 'temp_vdd', unit='°C')
+    create_metric_card('Освещенность (DA22)', 'light_gnd', unit='лк')
+    create_metric_card('Освещенность (DA23)', 'light_vdd', unit='лк')
 
   # Питание (Environment)
   ui.label('Environment Voltages').classes(
@@ -412,8 +519,6 @@ with ui.column().classes('w-full gap-2'):
                 'text-sm font-mono text-sky-400 font-bold leading-none'
             )
             ui.label('А').classes('text-[11px] text-slate-400 leading-none')
-          
-          
           
 # --- ФОНОВЫЙ ПОТОК ЧТЕНИЯ ТЕЛЕМЕТРИИ ---
 async def telemetry_reader_loop():
