@@ -70,7 +70,7 @@ static void led_zbus_listener_callback(const struct zbus_channel *chan)
     
     if (chan == &led_state_channel)
     {
-        app_worker_submit(&led_task);
+        app_worker_submit(&led_task,COMMON_WORKER);
     }
 }
 

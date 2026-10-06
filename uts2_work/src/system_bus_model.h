@@ -127,6 +127,8 @@ typedef enum
     SENS_VDOUT_PWR_VOLTAGE,
     SENS_VD5_CURRENT,      
     SENS_VD5_VOLTAGE,      
+    HARDWARE_ERROR_REGISTER1,
+    HARDWARE_ERROR_REGISTER2,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;

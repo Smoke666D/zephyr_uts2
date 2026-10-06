@@ -24,7 +24,7 @@ static struct k_work discrete_control_task;
 static void out_zbus_listener_callback(const struct zbus_channel *chan)
 {
     /* Объявление канала будет ниже, но сам указатель chan уже известен */
-    app_worker_submit(&out_task);
+    app_worker_submit(&out_task,REAL_TIME_WORKER);
 }
 
 
@@ -43,7 +43,7 @@ ZBUS_CHAN_DEFINE(hc595_chan,
 static void discret_control_line_listener_callback(const struct zbus_channel *chan)
 {
     /* Объявление канала будет ниже, но сам указатель chan уже известен */
-    app_worker_submit(&discrete_control_task);
+    app_worker_submit(&discrete_control_task,REAL_TIME_WORKER);
 }
 
 

@@ -171,7 +171,7 @@ static void my_fast_adc_listener_handler(struct k_work *work)
     adc_poll_events[0].state = K_POLL_STATE_NOT_READY;
 
     /* Повторно отправляем воркер следить за семафором DMA АЦП [1] */
-    app_worker_poll_submit(&adc_monitor_work, adc_poll_events);
+    app_worker_poll_submit(&adc_monitor_work, adc_poll_events,REAL_TIME_WORKER);
     
 }
 
@@ -203,7 +203,7 @@ static int adc_scan_init(void)
                       adc_sem);
 
     k_work_poll_init(&adc_monitor_work, my_fast_adc_listener_handler);                
-    app_worker_poll_submit(&adc_monitor_work, adc_poll_events);
+    app_worker_poll_submit(&adc_monitor_work, adc_poll_events,REAL_TIME_WORKER);
     
     return 0;
 }

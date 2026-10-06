@@ -117,7 +117,7 @@ static void _sensor_poll_handler(struct k_work *_work)
     zbus_chan_pub(&sensor_channel_poll, &msg, K_MSEC(10));
     
     // Перезапуск воркера ровно через 500 мс
-    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(500));
+    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(500),COMMON_WORKER);
 }
 
 /**
@@ -132,7 +132,7 @@ static int _app_worker_system_init(void)
     k_work_init_delayable(&sensor_poll_dwork, _sensor_poll_handler);
     
     // Запуск первого опроса через 100 мс
-    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(100));
+    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(100),COMMON_WORKER);
 
     LOG_INF("Фоновый опрос датчиков успешно инициализирован");
     return 0;

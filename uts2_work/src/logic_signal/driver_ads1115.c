@@ -90,7 +90,7 @@ static void ads_isr_handler(const struct device *dev, struct gpio_callback *cb, 
 {
 
     if (!k_work_is_pending(&ads_work)) {
-        app_worker_submit(&ads_work);
+        app_worker_submit(&ads_work,REAL_TIME_WORKER);
     }
 }
 

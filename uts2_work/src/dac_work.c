@@ -34,7 +34,7 @@ static dac_data_msg _cache_dac_data={0};
 static void dac_control_line_listener_callback(const struct zbus_channel *chan)
 {
     /* Объявление канала будет ниже, но сам указатель chan уже известен */
-    app_worker_submit(&dac_work);
+    app_worker_submit(&dac_work,COMMON_WORKER);
 }
 
 
@@ -115,6 +115,8 @@ static void dac_update_handler(struct k_work *work)
     }
 }
 
+#define I2C1_NODE DT_NODELABEL(i2c1)
+
 static int dac_control_init(void)
 {
     int err;
@@ -141,6 +143,9 @@ static int dac_control_init(void)
      k_work_init(&dac_work, dac_update_handler);
 
     LOG_INF("DAC1 Channel 2 (PA5) successfully initialized during boot.");
+
+
+    ad5243_init(DEVICE_DT_GET(I2C1_NODE), 0, 0);
     return 0;
 }
 

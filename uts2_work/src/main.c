@@ -17,19 +17,15 @@
 #include <zephyr/drivers/i2c.h>
 #include "ad5243.h"
 #include "settings.h"
-#include "out_and_power_control.h"
 #include "system_bus_model.h"
 #include "telemetry.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
-//#include "usb_thread.h"
 
-//#include "ina228_stream_thread.h"
+
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   100
-
-
+#define SLEEP_TIME_MS   200
 
 #define SPI4_NODE DT_NODELABEL(spi4)
 
@@ -202,17 +198,6 @@ void poll_all_sensors(void)
  const struct device *dev1 = DEVICE_DT_GET(EEPROM_1_NODE);
 const struct device *dev2 = DEVICE_DT_GET(EEPROM_2_NODE);
 
-#define TMP112_GND_NODE DT_NODELABEL(tmp112_gnd)
-#define TMP112_VDD_NODE DT_NODELABEL(tmp112_vdd)
-
-const struct device *dev_gnd = DEVICE_DT_GET(TMP112_GND_NODE);
-const struct device *dev_vdd = DEVICE_DT_GET(TMP112_VDD_NODE);
-
-#define BH1750_GND_NODE DT_NODELABEL(bh1750_gnd)
-#define BH1750_VDD_NODE DT_NODELABEL(bh1750_vdd)
-
-const struct device *dev_gnd1 = DEVICE_DT_GET(BH1750_GND_NODE);
-const struct device *dev_vdd1 = DEVICE_DT_GET(BH1750_VDD_NODE);
 
 void EEPROM_Test()
 {
@@ -342,7 +327,7 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
 
 
-       SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT, &pkt.current_sensors[0]);
+    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT, &pkt.current_sensors[0]);
     SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[1]);
     SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &pkt.current_sensors[2]);
     SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &pkt.current_sensors[3]);
@@ -367,40 +352,7 @@ void send_binary_telemetry(const struct device *uart_dev) {
 }
 
 
-void _send_log()
-{
-        float ain[16];
-        
-    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT, &ain[0]);
-    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &ain[1]);
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &ain[2]);
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &ain[3]);
-    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,    &ain[4]);
-    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,   &ain[5]);
-    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,   &ain[6]);
-    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,   &ain[7]);
-    SYSTEM_BUS_GET(SENS_VIN_CURRENT,     &ain[8]);
-    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,     &ain[9]);
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT, &ain[10]);
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE, &ain[11]);
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &ain[12]);
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &ain[13]);
-    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &ain[14]);
-    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &ain[15]);
-        
-        
-        
 
-    printk("ina1  %.2f %.6f \n", (double)ain[0],(double)ain[1]);
-    printk("ina2  %.2f %.6f \n", (double)ain[2],(double)ain[3]);
-    printk("ina3  %.2f %.6f \n", (double)ain[4],(double)ain[5]);
-    printk("ina4  %.2f %.6f \n", (double)ain[6],(double)ain[7]);
-    printk("ina5  %.2f %.6f \n", (double)ain[8],(double)ain[9]);
-    printk("ina6  %.2f %.6f \n", (double)ain[10],(double)ain[11]);
-    printk("ina7  %.2f %.6f \n", (double)ain[12],(double)ain[13]);
-    printk("ina8  %.2f %.6f \n", (double)ain[14],(double)ain[15]);
-
-}
 
 
 static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
@@ -408,7 +360,7 @@ static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(us
 int main(void)
 {
 	LOG_INF("SYSTETM START 3");	
-    ad5243_init(DEVICE_DT_GET(I2C1_NODE), 0, 0);
+
 /*	int ret;
     EEPROM_Test();
 	FRAM_Test();
@@ -419,20 +371,10 @@ int main(void)
    
    
     while (1) 
-	{
-        // _send_log();
-        
-
-        send_binary_telemetry(telemetry_uart);
-        // poll_all_sensors();
-       
+	{    
+        send_binary_telemetry(telemetry_uart);       
         k_msleep(SLEEP_TIME_MS);
-             
-        k_msleep(SLEEP_TIME_MS);
-
   
-
- 
    }
 	
 	return 0;
