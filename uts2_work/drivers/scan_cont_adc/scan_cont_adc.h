@@ -61,7 +61,10 @@ typedef struct  scan_cont_adc_api
     
     /// @brief Ожидание готовности новых данных АЦП с учетом таймаута
     int (*wait_for_data)(const struct device *_dev, k_timeout_t _timeout);
+
+    struct k_sem *(*get_sem)(const struct device *dev);
 } scan_cont_adc_api_t;
+
 
 /**
  *  @brief Структура конфигурации аппаратных ресурсов драйвера
@@ -72,6 +75,25 @@ typedef struct scan_cont_adc_config
     uint32_t             adc_dma_channel;  ///< Номер канала DMA для передачи данных АЦП
     uint32_t             adc_dma_slot;     ///< Слот аппаратного триггера DMA для АЦП
 } scan_cont_adc_config_t;
+
+
+/**
+ * @brief     Получить указатель на внутренний семафор готовности данных АЦП.
+ * @details   Позволяет привязать k_work_poll или k_poll для неблокирующего 
+ *            ожидания завершения DMA-кадра [1].
+ * 
+ * @param     dev - Указатель на устройство драйвера АЦП
+ * @return    struct k_sem* - Указатель на семафор готовности данных
+ */
+static inline struct k_sem *scan_cont_adc_get_sem(const struct device *dev)
+{
+    const struct scan_cont_adc_api *api = (const struct scan_cont_adc_api *)dev->api;
+    
+    if (api->get_sem == NULL) {
+        return NULL;
+    }
+    return api->get_sem(dev);
+}
 
 /***************************************************************************************************
  *                                       END OF FILE

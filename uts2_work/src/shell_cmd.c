@@ -7,7 +7,9 @@
 #include <zephyr/zbus/zbus.h>
 #include "out_and_power_control.h"
 
-
+ /* ------------------------------------------------------------------ */
+/*  Аналогоавые выхода                                                */
+/* ------------------------------------------------------------------ */    
 static int cmd_dac_set(const struct shell *sh, size_t argc, char **argv)
 {
     if (argc != 2) 
@@ -34,6 +36,55 @@ static int cmd_dac_set(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_REGISTER(dac_set, NULL, 
                    "Set DAC output value: dac_set <0-4095>", 
                    cmd_dac_set);
+
+uint32_t adj_res_name[] =
+{
+    ADJ_RES1,
+    ADJ_RES2,  
+};
+
+
+static int cmd_adj_res_set(const struct shell *sh, size_t argc, char **argv)
+{
+    LOW_CUR_OUT_STATE_t out_state;
+    /* Проверяем количество переданных аргументов (команда + 2 параметра) */
+    if (argc != 3)
+    {
+        shell_error(sh, "Usage: discrete_set <1-%d> <ON/OFF>", 2 );
+        return -EINVAL;
+    }
+    
+    char *endptr;
+    long channel_num = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || channel_num < 1 || channel_num > 2 ) 
+    {
+        shell_error(sh, "Invalid channel: %s (Must be 1 to %d)", argv[1], 2 );
+        return -EINVAL;
+    }
+
+
+     /* Парсим вещественное значение напряжения (float) из аргумента */
+  
+    float resistance = strtof(argv[2], &endptr);
+    
+    /* Проверяем корректность парсинга и границы диапазона */
+    if (*endptr != '\0' || resistance < 0.0f || resistance > 100.0f) 
+    {
+        shell_error(sh, "Invalid voltage: %s (Must be between 0.0 and 100.0 kOm)", argv[2]);
+        return -EINVAL;
+    }
+
+    
+    /* 4. Выполняем безопасный атомарный Zero-Copy доступ к каналу Zbus [2] */
+    SYSTEM_BUS_SET(adj_res_name[channel_num-1],resistance);
+    return 0;
+}
+
+SHELL_CMD_REGISTER(adj_res_set, NULL, 
+                   "Set state of out: out_set <1-18> <IN/HI/LO>", 
+                   cmd_adj_res_set);                   
+
+
 
 uint32_t name[] =
 {
@@ -233,3 +284,6 @@ static int cmd_out_set(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_REGISTER(out_set, NULL, 
                    "Set state of out: out_set <1-18> <IN/HI/LO>", 
                    cmd_out_set);
+
+
+                   

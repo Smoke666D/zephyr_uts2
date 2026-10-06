@@ -14,6 +14,8 @@ extern "C" {
 #define LIN_CONTROL_CNT  4
 #define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
 
+#define TOTAL_DAC_COUNT 3
+
 typedef enum
 {   AIN_AO1,
     AIN_AO7,
@@ -107,6 +109,8 @@ typedef enum
     EN_USB_BOOT,
     EN_USB_TOP,
     DAC_VALUE,
+    ADJ_RES1,
+    ADJ_RES2,
     SENS_BRD_LOW_CURRENT, 
     SENS_BRD_LOW_VOLTAGE,  
     SENS_BRD_HIGH_CURRENT, 

@@ -462,6 +462,15 @@ static int _scan_cont_adc_init(const struct device *_dev)
     return 0;
 }
 
+static struct k_sem * _seq_mux_adc_get_sem_impl(const struct device *_dev)
+{
+    ARG_UNUSED(_dev);
+    
+    /* Возвращаем адрес нашего системного семафора, который выдается в dma_callback */
+    return &sem_data_ready;
+}
+
+
 /***************************************************************************************************
  *                                        PUBLIC FUNCTIONS
  **************************************************************************************************/
@@ -470,6 +479,7 @@ static const struct scan_cont_adc_api driver_api =
 {
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
     .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
+    .get_sem           = _seq_mux_adc_get_sem_impl,
 };
 
 static const struct scan_cont_adc_config scan_config = 

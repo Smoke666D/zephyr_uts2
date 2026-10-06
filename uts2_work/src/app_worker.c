@@ -5,7 +5,7 @@
 /* Регистрируем модуль логирования для воркера */
 LOG_MODULE_REGISTER(app_worker, LOG_LEVEL_INF);
 
-#define WORKER_STACK_SIZE 1024
+#define WORKER_STACK_SIZE 2048
 #define WORKER_PRIORITY   -1
 
 static struct k_work_q app_work_q;
@@ -33,6 +33,11 @@ void app_worker_reschedule_submit(struct k_work_delayable *delayed_work, k_timeo
 void app_worker_submit(struct k_work *work)
 {
     k_work_submit_to_queue(&app_work_q, work);
+}
+
+void app_worker_poll_submit(struct k_work_poll *_work, struct k_poll_event * _poll_event)
+{
+    k_work_poll_submit_to_queue(&app_work_q, _work, _poll_event, 1, K_FOREVER);
 }
 
 SYS_INIT(app_worker_system_init, POST_KERNEL, 50);

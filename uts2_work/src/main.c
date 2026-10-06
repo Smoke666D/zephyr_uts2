@@ -473,16 +473,7 @@ int main(void)
              
         k_msleep(SLEEP_TIME_MS);
 
-       /* if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
-        {
-            LOG_INF("AD5243 Ch1 -> %d\n",i);
-            i=i+10;
-            if (i >=255)  i = 0;
-        }
-        else 
-        {
-            LOG_INF("AD5243 Ch1 error\n");
-        }*/
+  
 
  
    }

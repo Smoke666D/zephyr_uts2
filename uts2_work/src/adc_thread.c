@@ -3,7 +3,7 @@
 #include <zephyr/zbus/zbus.h>
 #include "system_bus_model.h"
 #include <zephyr/kernel.h>
-
+#include "app_worker.h"
 /* Подключаем публичный заголовочный файл нашего драйвера */
 #include <seq_mux_adc.h>
 #include <scan_cont_adc.h>
@@ -145,47 +145,74 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
 }
 
 
-static void my_custom_thread_entry2(void *p1, void *p2, void *p3)
+static struct k_sem *adc_sem;
+static const struct device *const scan_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
+static struct k_work_poll adc_monitor_work;
+static struct k_poll_event adc_poll_events[1];
+
+
+static void my_fast_adc_listener_handler(struct k_work *work)
 {
-   static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
-  // Проверяем готовность драйвера перед началом работы
-    if (!device_is_ready(seq_dev)) 
-    {
-        LOG_ERR("Sequencer driver is not ready!");
-        return;
-    }
-    
-    _adc_init2();
-    struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)seq_dev->api;
-    struct adc_scan_msg msg; 
+     k_sem_reset(adc_sem);
+   struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)scan_dev->api;
+   struct adc_scan_msg msg; 
 
-    k_msleep(2000);
-    while (1) 
-    {   
-         // Ждем готовности на семафоре драйвера (весь цикл 32 пересылок окончен)
-        api->wait_for_data(seq_dev, K_FOREVER);
-
-        // Выполняем тестовое заполнение буфера
-        for (int step = 0; step < ADC2_BUF_SIZE; step++) 
-        {
-            uint32_t raw_val = 0;
-            api->get_channel_value(seq_dev, step, &raw_val);
-            float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
+    for (int step = 0; step < ADC2_BUF_SIZE; step++) 
+       {
+           uint32_t raw_val = 0;
+           api->get_channel_value(scan_dev, step, &raw_val);
+           float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
             msg.channels_mv[step] =(v_pin_mv * coefficients1[step]); 
         }
         // Публикуем тестовый 32-канальный пакет в Zbus
         zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
-    }
+    
+    /* Сбрасываем статус события в "не готово" для следующего кадра АЦП [1] */
+    adc_poll_events[0].state = K_POLL_STATE_NOT_READY;
+
+    /* Повторно отправляем воркер следить за семафором DMA АЦП [1] */
+    app_worker_poll_submit(&adc_monitor_work, adc_poll_events);
+    
 }
+
+
+
+
+
+
+static int adc_scan_init(void)
+{
+    /* 1. ИСПРАВЛЕНИЕ: Обязательно проверяем готовность АЦП перед работой [1] */
+    if (!device_is_ready(scan_dev)) {
+        LOG_ERR("scan_adc device is not ready yet!");
+        return -ENODEV;
+    }
+
+    _adc_init2();
+
+    /* 2. ИСПРАВЛЕНИЕ: Используем красивую безопасную inline-функцию из заголовка [1] */
+    adc_sem = scan_cont_adc_get_sem(scan_dev);
+    if (adc_sem == NULL) {
+        LOG_ERR("Failed to retrieve semaphore from scan_adc driver!");
+        return -ENOTSUP;
+    }
+
+    k_poll_event_init(&adc_poll_events[0],
+                      K_POLL_TYPE_SEM_AVAILABLE,
+                      K_POLL_MODE_NOTIFY_ONLY,
+                      adc_sem);
+
+    k_work_poll_init(&adc_monitor_work, my_fast_adc_listener_handler);                
+    app_worker_poll_submit(&adc_monitor_work, adc_poll_events);
+    
+    return 0;
+}
+
+SYS_INIT(adc_scan_init, APPLICATION, 40);
 
 
 K_THREAD_DEFINE(my_thread_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry, 
             NULL, NULL, NULL, 
-                7, 0, 0);
-
-
-K_THREAD_DEFINE(my_adc_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry2, 
-           NULL, NULL, NULL, 
                 7, 0, 0);
 
 

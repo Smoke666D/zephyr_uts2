@@ -11,7 +11,7 @@ void app_worker_submit(struct k_work *work);
 
 void app_worker_reschedule_submit(struct k_work_delayable *delayed_work, k_timeout_t delay);
 
-
+void app_worker_poll_submit(struct k_work_poll *_work, struct k_poll_event * _poll_event);
 
 
 
