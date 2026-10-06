@@ -27,7 +27,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 //#include "ina228_stream_thread.h"
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   500
+#define SLEEP_TIME_MS   100
 
 
 
@@ -384,6 +384,24 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(ENV_VDOUT2, &pkt.env[6]);
     SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
 
+
+       SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT, &pkt.current_sensors[0]);
+    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[1]);
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &pkt.current_sensors[2]);
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &pkt.current_sensors[3]);
+    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,    &pkt.current_sensors[4]);
+    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,   &pkt.current_sensors[5]);
+    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,   &pkt.current_sensors[6]);
+    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,   &pkt.current_sensors[7]);
+    SYSTEM_BUS_GET(SENS_VIN_CURRENT,     &pkt.current_sensors[8]);
+    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,     &pkt.current_sensors[9]);
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT, &pkt.current_sensors[10]);
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE, &pkt.current_sensors[11]);
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &pkt.current_sensors[12]);
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &pkt.current_sensors[13]);
+    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &pkt.current_sensors[14]);
+    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &pkt.current_sensors[15]);
+
     // Отправляем всю структуру байт за байтом в UART
     uint8_t *ptr = (uint8_t *)&pkt;
     for (size_t i = 0; i < sizeof(pkt); i++) {
@@ -445,10 +463,10 @@ int main(void)
    
     while (1) 
 	{
-         _send_log();
+        // _send_log();
         
 
-       // send_binary_telemetry(telemetry_uart);
+        send_binary_telemetry(telemetry_uart);
         // poll_all_sensors();
        
         k_msleep(SLEEP_TIME_MS);

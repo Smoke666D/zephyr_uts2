@@ -5,7 +5,8 @@ import serial
 from serial.tools import list_ports
 
 # --- Настройка бинарного протокола телеметрии ---
-TELEMETRY_FORMAT = '<B' + 'f' * 50
+# 1 байт (magic 0xBE) + 66 полей float (было 50, добавилось 16 для 8 датчиков ток/напряжение)
+TELEMETRY_FORMAT = '<B' + 'f' * 66
 PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)
 
 # Глобальные переменные портов
@@ -16,7 +17,7 @@ serial_buffer = bytearray()
 # Ссылки на элементы UI для динамического обновления
 ui_labels = {}
 
-# Имена линий enable по порядку от 1 до 8
+# Имена линий enable
 ENABLE_LINES = [
     'EN_DUT2_PSU',
     'EN_DUT3_PSU',
@@ -34,7 +35,6 @@ LED_LINES = [
     {'id': 2, 'name': 'Зеленый'},
     {'id': 3, 'name': 'Синий'},
 ]
-
 
 
 def get_available_ports():
@@ -255,7 +255,7 @@ with ui.card().classes('bg-slate-800 p-2 w-full mb-2'):
       ).classes('text-white text-xs')
 
 # --- ПАНЕЛЬ УПРАВЛЕНИЯ СВЕТОДИОДАМИ ---
-with ui.card().classes('bg-slate-800 p-2 w-full mb-3'):
+with ui.card().classes('bg-slate-800 p-2 w-full mb-2'):
   ui.label('Управление светодиодами').classes(
       'text-xs font-semibold text-yellow-300 mb-1'
   )
@@ -281,8 +281,7 @@ with ui.card().classes('bg-slate-800 p-2 w-full mb-3'):
           ),
       ).classes('text-white text-xs')
 
-
-# --- ПАНЕЛЬ УПРАВЛЕНИЯ 18 КАНАЛАМИ ВВОДА/ВЫВОДА (IO) ---
+# --- ПАНЕЛЬ УПРАВЛЕНИЯ 18 КАНАЛАМИ IO ---
 with ui.card().classes('bg-slate-800 p-2 w-full mb-3'):
   ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
       'text-xs font-semibold text-yellow-300 mb-1'
@@ -293,7 +292,6 @@ with ui.card().classes('bg-slate-800 p-2 w-full mb-3'):
     val_map = {'INPUT': 'IN', 'HIGH': 'HI', 'LOW': 'LO'}
     short_state = val_map.get(select_element.value, 'IN')
     cmd = f'out_set {ch_num} {short_state}\r\n'
-
     if shell_ser and shell_ser.is_open:
       shell_ser.write(cmd.encode('utf-8'))
       ui.notify(f'[IO {ch_num}] Отправлено: {cmd.strip()}', type='info')
@@ -301,39 +299,46 @@ with ui.card().classes('bg-slate-800 p-2 w-full mb-3'):
       ui.notify('Shell порт закрыт!', type='warning')
 
 
-  # Сетка для 18 каналов (по 6 штук в ряд, чтобы компактно и аккуратно)
   with ui.grid(columns=6).classes('w-full gap-1'):
     for i in range(1, 19):
       with ui.card().classes(
           'bg-slate-700 p-1 flex-row items-center justify-between rounded'
       ):
         ui.label(f'IO {i}').classes('text-[11px] text-white font-bold')
-
-        # Селект состояний: INPUT, HIGH, LOW
         io_select = ui.select(
             options=['INPUT', 'HIGH', 'LOW'], value='INPUT'
         ).props('dark outlined dense').classes(
             'w-20 bg-slate-800 text-[10px] text-white'
         )
-
-        # Привязываем событие изменения
         io_select.on(
             'update:model-value', lambda e, c=i, s=io_select: on_io_change(c, s)
         )
 
+# --- УПЛОТНЕННЫЕ КАРТОЧКИ (Крупное название, минимальный проем, цифры вправо) ---
+
+# --- КАРТОЧКИ В ОДНУ СТРОКУ (С поддержкой размерности) ---
+# --- КАРТОЧКИ (Значение и размерность "В" вместе справа) ---
 
 
-# --- ДАШБОРД ТЕЛЕМЕТРИИ (Уплотненный) ---
-
-
-def create_metric_card(title, key):
+def create_metric_card(title, key, unit=''):
   with ui.card().classes(
-      'bg-slate-700 p-1.5 flex-1 min-w-[90px] text-center rounded'
+      'bg-slate-700 py-3 px-3 flex-1 min-w-[130px] rounded flex flex-row justify-between items-center'
   ):
-    ui.label(title).classes('text-[10px] text-slate-300 leading-none mb-1')
-    lbl = ui.label('0.00').classes(
-        'text-sm font-mono text-emerald-400 font-bold leading-none'
+    # Название слева
+    ui.label(title).classes(
+        'text-xs text-slate-300 font-medium leading-none m-0'
     )
+
+    # Правая часть: значение + размерность в одной строке
+    with ui.row().classes('items-center gap-1 m-0'):
+      lbl = ui.label('0.00').classes(
+          'text-base font-mono text-emerald-400 font-bold leading-none m-0'
+      )
+      if unit:
+        ui.label(unit).classes(
+            'text-xs text-slate-400 font-medium leading-none m-0'
+        )
+
     ui_labels[key] = lbl
 
 
@@ -359,15 +364,15 @@ with ui.column().classes('w-full gap-2'):
     for idx, name in enumerate(
         ['P3V3', 'P5V0', 'VIN', 'VDOUT1', 'P40V', 'USB', 'VDOUT2', 'VDOUT3']
     ):
-      create_metric_card(name, f'env_{idx}')
+      create_metric_card(name, f'env_{idx}', unit='В')
 
-  # AO каналы (1-18) — сетка по 9 штук в ряд для экономии места
+  # AO каналы (1-18)
   ui.label('AO Channels (1-18)').classes(
       'text-xs font-semibold text-slate-400 mt-1'
   )
-  with ui.grid(columns=9).classes('w-full gap-1'):
+  with ui.grid(columns=6).classes('w-full gap-1'):
     for i in range(18):
-      create_metric_card(f'AO {i+1}', f'ao_{i}')
+      create_metric_card(f'AO {i+1}', f'ao_{i}', unit='В')
 
   # VSense каналы (1-6)
   ui.label('AIN VSense (1-6)').classes(
@@ -375,9 +380,41 @@ with ui.column().classes('w-full gap-2'):
   )
   with ui.grid(columns=6).classes('w-full gap-1'):
     for i in range(6):
-      create_metric_card(f'VSense {i+1}', f'vsense_{i}')
+      create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
 
+  # --- ДАТЧИКИ ТОКА И НАПРЯЖЕНИЯ ---
+  ui.label('Датчики тока и напряжения (1-8)').classes(
+      'text-xs font-semibold text-slate-400 mt-1'
+  )
+  with ui.grid(columns=4).classes('w-full gap-1'):
+    for i in range(1, 9):
+      with ui.card().classes(
+          'bg-slate-700 py-2.5 px-3 rounded flex flex-col justify-between'
+      ):
+        ui.label(f'Датчик тока {i}').classes(
+            'text-xs text-yellow-300 font-bold leading-none mb-1.5'
+        )
 
+        # Строка Напряжения (значение + "В" справа)
+        with ui.row().classes('w-full justify-between items-center'):
+          ui.label('U:').classes('text-[11px] text-slate-300 leading-none')
+          with ui.row().classes('items-center gap-1'):
+            ui_labels[f'curr_v_{i}'] = ui.label('0.00').classes(
+                'text-sm font-mono text-emerald-400 font-bold leading-none'
+            )
+            ui.label('В').classes('text-[11px] text-slate-400 leading-none')
+
+        # Строка Тока (значение + "А" справа)
+        with ui.row().classes('w-full justify-between items-center mt-1.5'):
+          ui.label('I:').classes('text-[11px] text-slate-300 leading-none')
+          with ui.row().classes('items-center gap-1'):
+            ui_labels[f'curr_i_{i}'] = ui.label('0.0000').classes(
+                'text-sm font-mono text-sky-400 font-bold leading-none'
+            )
+            ui.label('А').classes('text-[11px] text-slate-400 leading-none')
+          
+          
+          
 # --- ФОНОВЫЙ ПОТОК ЧТЕНИЯ ТЕЛЕМЕТРИИ ---
 async def telemetry_reader_loop():
   global serial_buffer
@@ -408,6 +445,20 @@ async def telemetry_reader_loop():
                 ui_labels[f'vsense_{i}'].set_text(f'{unpacked[27+i]:.2f}')
               for i in range(8):
                 ui_labels[f'env_{i}'].set_text(f'{unpacked[43+i]:.2f}')
+
+              # --- РАСПАКОВКА 8 ДАТЧИКОВ ТОКА (16 float, индексы с 51 по 66) ---
+              # Индекс 51: датчик 1 Напряжение, Индекс 52: датчик 1 Ток и т.д.
+              curr_offset = 51
+              for i in range(1, 9):
+                v_val = unpacked[curr_offset]
+                i_val = unpacked[curr_offset + 1]
+
+                # Напряжение ровно 2 знака после запятой
+                ui_labels[f'curr_v_{i}'].set_text(f'{v_val:.2f}')
+                # Ток 4 знака (можно изменить при необходимости)
+                ui_labels[f'curr_i_{i}'].set_text(f'{i_val:.4f}')
+
+                curr_offset += 2
 
               serial_buffer = serial_buffer[PACKET_SIZE:]
             else:

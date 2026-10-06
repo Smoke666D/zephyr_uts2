@@ -28,4 +28,6 @@ struct telemetry_packet {
 
     // Environment (P3V3, P5V0, VIN, VDOUT1, P40V, USB, VDOUT2, VDOUT3)
     float    env[8];
+
+    float    current_sensors[16]; 
 } __packed;
