@@ -36,21 +36,26 @@ typedef enum
 K_MSGQ_DEFINE(can1_tx_msgq, sizeof(system_can_message_t), 10, 4);
 K_MSGQ_DEFINE(can2_tx_msgq, sizeof(system_can_message_t), 10, 4);
 K_MSGQ_DEFINE(can3_tx_msgq, sizeof(system_can_message_t), 10, 4);
+K_MSGQ_DEFINE(can1_rx_msgq, sizeof(system_can_message_t), 10, 4);
+K_MSGQ_DEFINE(can2_rx_msgq, sizeof(system_can_message_t), 10, 4);
+K_MSGQ_DEFINE(can3_rx_msgq, sizeof(system_can_message_t), 10, 4);
 
 /* 1. СНАЧАЛА ОБЪЯВЛЯЕМ СТРУКТУРУ КОНТЕКСТА */
 struct can_tx_context {
     const struct device *can_dev;
     struct k_msgq *tx_msgq;
+    struct k_msgq *rx_msgq;
     CAN_SYSTEM_BUS_ID bus_id;
 };
 
 /* 2. ЗАТЕМ ОБЪЯВЛЯЕМ МАССИВ КОНТЕКСТОВ */
 static struct can_tx_context can_contexts[] = {
-    { .can_dev = NULL, .tx_msgq = &can1_tx_msgq, .bus_id = FD_CAN1 },
-    { .can_dev = NULL, .tx_msgq = &can2_tx_msgq, .bus_id = FD_CAN2 },
-    { .can_dev = NULL, .tx_msgq = &can3_tx_msgq, .bus_id = FD_CAN3 },
+    { .can_dev = NULL, .tx_msgq = &can1_tx_msgq, .rx_msgq = &can1_rx_msgq, .bus_id = FD_CAN1 },
+    { .can_dev = NULL, .tx_msgq = &can2_tx_msgq, .rx_msgq = &can2_rx_msgq, .bus_id = FD_CAN2 },
+    { .can_dev = NULL, .tx_msgq = &can3_tx_msgq, .rx_msgq = &can3_rx_msgq, .bus_id = FD_CAN3 },
 };
 
+static struct k_work can_rx_task; 
 static struct k_work can_task; 
 
 /* Прототипы функций теперь видят структуру правильно */
@@ -68,8 +73,7 @@ ZBUS_CHAN_DEFINE(can1_tx_chan,
                  ZBUS_OBSERVERS(can_tx_listener), 
                  ZBUS_MSG_INIT(0) 
 );
-ZBUS_CHAN_DEFINE(can2_tx_chan,
-                 system_can_message_t,
+ZBUS_CHAN_DEFINE(can2_tx_chan, system_can_message_t,
                  NULL, 
                  (void*)FD_CAN2, 
                  ZBUS_OBSERVERS(can_tx_listener), 
@@ -80,6 +84,28 @@ ZBUS_CHAN_DEFINE(can3_tx_chan,
                  NULL, 
                  (void*)FD_CAN3, 
                  ZBUS_OBSERVERS(can_tx_listener), 
+                 ZBUS_MSG_INIT(0) 
+);
+
+ZBUS_CHAN_DEFINE(can1_rx_chan,
+                 system_can_message_t,
+                 NULL, 
+                 (void*)FD_CAN1, 
+                 ZBUS_OBSERVERS(), 
+                 ZBUS_MSG_INIT(0) 
+);
+ZBUS_CHAN_DEFINE(can2_rx_chan,
+                 system_can_message_t,
+                 NULL, 
+                 (void*)FD_CAN2, 
+                 ZBUS_OBSERVERS(), 
+                 ZBUS_MSG_INIT(0) 
+);
+ZBUS_CHAN_DEFINE(can3_rx_chan,
+                 system_can_message_t,
+                 NULL, 
+                 (void*)FD_CAN3, 
+                 ZBUS_OBSERVERS(), 
                  ZBUS_MSG_INIT(0) 
 );
 
@@ -153,27 +179,63 @@ static void _can_tx_handler(struct k_work *_work)
     }
 }
 
+static void _can_rx_handler(struct k_work *_work)
+{
+    struct can_frame frame;
+    system_can_message_t msg;
+
+    // Проверяем RX-очередь CAN 1
+    while (k_msgq_get(&can1_rx_msgq, &frame, K_NO_WAIT) == 0) 
+    {
+        msg.id = frame.id;
+        msg.flags = frame.flags;
+        msg.dlc = frame.dlc;
+        memcpy(msg.data, frame.data, sizeof(msg.data));        
+        zbus_chan_pub(&can1_rx_chan, &msg, K_NO_WAIT);
+    }
+
+    // Проверяем RX-очередь CAN 2
+    while (k_msgq_get(&can2_rx_msgq, &frame, K_NO_WAIT) == 0) 
+    {
+        msg.id = frame.id;
+        msg.flags = frame.flags;
+        msg.dlc = frame.dlc;
+        memcpy(msg.data, frame.data, sizeof(msg.data));        
+        zbus_chan_pub(&can2_rx_chan, &msg, K_NO_WAIT);
+    }
+
+    // Проверяем RX-очередь CAN 3
+    while (k_msgq_get(&can3_rx_msgq, &frame, K_NO_WAIT) == 0) 
+    {
+        msg.id = frame.id;
+        msg.flags = frame.flags;
+        msg.dlc = frame.dlc;
+        memcpy(msg.data, frame.data, sizeof(msg.data));        
+        zbus_chan_pub(&can3_rx_chan, &msg, K_NO_WAIT);
+    }
+}
+
 static void can_rx_callback(const struct device *dev, struct can_frame *frame, void *user_data)
 {
-    // Обработка входящего пакета из CAN
+    struct can_tx_context *ctx = (struct can_tx_context *)user_data;
+    if (ctx == NULL) {
+        return;
+    }
+
+    // Кладываем сырой фрейм в софтовую очередь приема (безопасно для ISR благодаря K_NO_WAIT)
+    if (ctx == &can_contexts[0]) {
+        k_msgq_put(&can1_rx_msgq, frame, K_NO_WAIT);
+    } else if (ctx == &can_contexts[1]) {
+        k_msgq_put(&can2_rx_msgq, frame, K_NO_WAIT);
+    } else if (ctx == &can_contexts[2]) {
+        k_msgq_put(&can3_rx_msgq, frame, K_NO_WAIT);
+    }
+
+    // Передаем задачу на обработку приема в защищенный workqueue
+    app_worker_submit(&can_rx_task, REAL_TIME_WORKER);
 }
 
-/* Пример ручной отправки пакета через Zbus */
-int send_my_can_packet(const struct device *can_dev)
-{
-    
-    system_can_message_t msg = {
-        .id = 0x123,
-        .flags = 0,
-        .dlc = 3,
-        .data = {0xAA, 0xBB, 0xCC}
-    };
 
-    // Публикуем в Zbus канал первого порта — дальше всё сработает автоматически через листенер
-    SYSTEM_BUS_SET_P(CAN1_TX,(system_can_message_t *)&msg);
-    return 0;
-    //return zbus_chan_pub(&can1_tx_chan, &msg, K_MSEC(100));
-}
 
 static int dev_can_init(void)
 {
@@ -220,7 +282,7 @@ static int dev_can_init(void)
             .mask  = 0,
         };
         
-        int filter_id_std = can_add_rx_filter(cfg->can_device, can_rx_callback, NULL, &std_filter);
+       int filter_id_std = can_add_rx_filter(cfg->can_device, can_rx_callback, &can_contexts[i], &std_filter);
         if (filter_id_std < 0) {
             LOG_ERR("Failed to add standard RX filter for %s (err %d)", cfg->can_device->name, filter_id_std);
         }
@@ -231,7 +293,7 @@ static int dev_can_init(void)
             .mask  = 0,
         };
         
-        int filter_id_ext = can_add_rx_filter(cfg->can_device, can_rx_callback, NULL, &ext_filter);
+        int filter_id_ext = can_add_rx_filter(cfg->can_device, can_rx_callback, &can_contexts[i], &ext_filter);
         if (filter_id_ext < 0) {
             LOG_ERR("Failed to add extended RX filter for %s (err %d)", cfg->can_device->name, filter_id_ext);
         }
@@ -246,34 +308,15 @@ static int dev_can_init(void)
     }    
 
     k_work_init(&can_task, _can_tx_handler);
+    k_work_init(&can_rx_task, _can_rx_handler);
     return 0;
 }
 
 SYS_INIT(dev_can_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 
-#define CAN_TASK_STACK_SIZE 2048
-#define CAN_TASK_PRIORITY 10
-
-static void can_thread_entry(void *p1, void *p2, void *p3)
-{
-    k_msleep(2000);
-   
-    while (1) 
-    {
-        k_msleep(1000);
-
-        for (int i = 0; i < 1; i++) 
-        {
-            send_my_can_packet(can_channels[i].can_device);
-        }
-    }
-}
-
-//K_THREAD_DEFINE(can_thread, CAN_TASK_STACK_SIZE, can_thread_entry, 
-//                NULL, NULL, NULL, 
-//                7, 0, 0);
-
-
 PARAM_ROUTE_DEFINE(CAN1_TX, &can1_tx_chan, 0, ARRAY_DATA);
 PARAM_ROUTE_DEFINE(CAN2_TX, &can2_tx_chan, 0, ARRAY_DATA);
 PARAM_ROUTE_DEFINE(CAN3_TX, &can3_tx_chan, 0, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(CAN1_RX, &can1_rx_chan, 0, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(CAN2_RX, &can2_rx_chan, 0, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(CAN3_RX, &can3_rx_chan, 0, ARRAY_DATA);

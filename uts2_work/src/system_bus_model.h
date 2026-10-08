@@ -132,6 +132,9 @@ typedef enum
     CAN1_TX,
     CAN2_TX,
     CAN3_TX,
+    CAN1_RX,
+    CAN2_RX,
+    CAN3_RX,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;
@@ -235,7 +238,11 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val);
     float:    bus_get_real  \
 )((id), (val))
 
+ int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
+#define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
+    system_can_message_t: bus_get_can     \    
+)((id), (val))
 
 /* Базовые функции установки массива параметров */
 int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count);
@@ -255,6 +262,12 @@ int bus_set_real_arr(float val, const SYSTEM_BUS_ID *ids, size_t count);
     float:         bus_set_real_arr  \
 )((val), (const SYSTEM_BUS_ID[]){__VA_ARGS__}, sizeof((const SYSTEM_BUS_ID[]){__VA_ARGS__}) / sizeof(SYSTEM_BUS_ID))
     
+
+int bus_listener_attach(const struct zbus_observer *listener, SYSTEM_BUS_ID id);
+
+
+    
+
 #ifdef __cplusplus
 }
 #endif

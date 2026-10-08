@@ -73,8 +73,8 @@
                     <&gpioe 13 GPIO_ACTIVE_HIGH>,
                     <&gpioe 14 GPIO_ACTIVE_HIGH>;
 
-        adc-duration-us = <1000>;     /* T1: время АЦП */
-        switch-duration-us = <1000>;  /* T2: время переключения */ 
+        adc-duration-us = <65>;     /* T1: время АЦП */
+        switch-duration-us = <65>;  /* T2: время переключения */ 
 
         status = "okay";
     };

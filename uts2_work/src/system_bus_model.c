@@ -146,6 +146,27 @@ int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val)
     return ret;        
 }
 
+int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val)
+{
+
+const struct system_bus_handler *handler = _get_valid_handler(id);
+    if (false
+        || handler == NULL 
+        || _val == NULL
+    ) 
+    {
+        return -EINVAL;
+    } 
+     const system_can_message_t *channel_msg = (const system_can_message_t *)zbus_chan_msg(handler->channel);
+    if (channel_msg == NULL)
+    {
+        return -ENODEV;
+    }   
+     *_val = *channel_msg;  
+    return 0;
+}
+
+
     
  int bus_get_bool(SYSTEM_BUS_ID id, bool * _val)
 {
@@ -281,3 +302,17 @@ int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count)
 }
 
 SYS_INIT(system_bus_cache_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
+
+
+
+int bus_listener_attach(const struct zbus_observer *listener, SYSTEM_BUS_ID id)
+{
+    const struct system_bus_handler *handler = _get_valid_handler(id);
+    if (handler == NULL || handler->channel == NULL || listener == NULL) {
+        return -EINVAL;
+    }
+
+    // Добавляем слушателя к каналу динамически в рантайме
+    // Требует включенного CONFIG_ZBUS_RUNTIME_OBSERVERS=y в prj.conf
+    return zbus_chan_add_obs(handler->channel, listener, K_NO_WAIT);
+}

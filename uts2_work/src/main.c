@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   200
+#define SLEEP_TIME_MS   10
 
 #define SPI4_NODE DT_NODELABEL(spi4)
 
@@ -257,10 +257,45 @@ void EEPROM_Test()
 #define I2C1_NODE DT_NODELABEL(i2c1)
 
 
+void send_can_message_binary(const struct device *uart_dev, uint8_t can_num, const system_can_message_t *msg) {
+    if (!uart_dev || !device_is_ready(uart_dev) || !msg) {
+        return;
+    }
+
+    struct can_rx_bin_packet pkt;
+    pkt.magic = CAN_MAGIC_BYTE;
+    pkt.can_num = can_num;
+    pkt.id = msg->id;
+    pkt.dlc = msg->dlc;
+
+    // Определяем реальную длину данных в байтах (если dlc хранит код длины CAN-FD или байты)
+    // Если у тебя в dlc уже лежит реальное количество байт (0-64), то просто:
+    size_t bytes_len = msg->dlc;
+    
+    // Ели же это стандартный CAN DLC (где 9-15 это кодированные длины для CAN-FD), 
+    // то лучше использовать функцию Zephyr: can_dlc_to_bytes(msg->dlc)
+    // size_t bytes_len = can_dlc_to_bytes(msg->dlc);
+
+    if (bytes_len > 64) {
+        bytes_len = 64;
+    }
+
+    memset(pkt.data, 0, sizeof(pkt.data));
+    memcpy(pkt.data, msg->data, bytes_len);
+
+    // Размер пакета: заголовок (7 байт) + полезная нагрузка
+    size_t total_size = 7 + bytes_len;
+
+    // Отправляем байты в UART
+    const uint8_t *ptr = (const uint8_t *)&pkt;
+    for (size_t i = 0; i < total_size; i++) {
+        uart_poll_out(uart_dev, ptr[i]);
+    }
+}
 
 void send_binary_telemetry(const struct device *uart_dev) {
     struct telemetry_packet pkt;
-    pkt.magic = 0xBE;
+    pkt.magic = TELEMETRY_MAGIC_BYTE;
 
     // Заполняем данными из твоего системного буфера
     SYSTEM_BUS_GET(RF_POWER, &pkt.rf_power);
@@ -327,7 +362,7 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
 
 
-    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT, &pkt.current_sensors[0]);
+    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,   &pkt.current_sensors[0]);
     SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[1]);
     SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &pkt.current_sensors[2]);
     SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &pkt.current_sensors[3]);
@@ -357,6 +392,20 @@ void send_binary_telemetry(const struct device *uart_dev) {
 
 static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
+
+K_MSGQ_DEFINE(my_super_queue, sizeof(system_can_message_t), 10, 4);
+
+
+static void _can1_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    system_can_message_t _temp;
+    SYSTEM_BUS_GET_P(CAN1_RX,&_temp);
+    k_msgq_put(&my_super_queue,&_temp,K_NO_WAIT);
+}
+
+
+ZBUS_LISTENER_DEFINE(can1_rx_listener, _can1_rx_listener_cb);
+
 int main(void)
 {
 	LOG_INF("SYSTETM START 3");	
@@ -368,9 +417,25 @@ int main(void)
     //settings_fram_init();
 
     */
+    
+    bus_listener_attach(&can1_rx_listener,CAN1_RX);
+    system_can_message_t incoming_can;
+
     while (1) 
 	{    
-       // send_binary_telemetry(telemetry_uart);       
+        system_can_message_t rx_msg;
+
+       // int err = bus_sub_receive(&my_can_listener_sub.obs, CAN_PORT_1_ID, &incoming_can, K_MSEC(100));
+       // if (err==0)
+       //     LOG_INF("Принят пакет на CAN1! ID: 0x%X, DLC: %d", incoming_can.id, incoming_can.dlc);
+       // }
+        // Проверяем RX-очередь первого CAN-модуля
+        if (k_msgq_get(&my_super_queue, &rx_msg, K_NO_WAIT) == 0) {
+
+             send_can_message_binary(telemetry_uart, 1, &rx_msg);
+            //LOG_INF("Принят пакет на CAN1! ID: 0x%X, DLC: %d", rx_msg.id, rx_msg.dlc);
+        }
+        send_binary_telemetry(telemetry_uart);       
         k_msleep(SLEEP_TIME_MS);
     }
 	return 0;
