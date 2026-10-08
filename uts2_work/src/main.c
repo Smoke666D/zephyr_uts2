@@ -387,20 +387,28 @@ void send_binary_telemetry(const struct device *uart_dev) {
 }
 
 
-
+typedef struct 
+{
+    system_can_message_t  msg;
+    uint8_t               iface_id;
+} can_queue_message_t;
 
 
 static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
 
-K_MSGQ_DEFINE(my_super_queue, sizeof(system_can_message_t), 10, 4);
+K_MSGQ_DEFINE(all_can_rx_queue, sizeof(can_queue_message_t), 10, 4);
+
 
 
 static void _can1_rx_listener_cb(const struct zbus_channel *_chan)
 {
     system_can_message_t _temp;
     SYSTEM_BUS_GET_P(CAN1_RX,&_temp);
-    k_msgq_put(&my_super_queue,&_temp,K_NO_WAIT);
+    can_queue_message_t _msg;
+    _msg.msg =  _temp;
+    _msg.iface_id = 1;
+    k_msgq_put(&all_can_rx_queue,&_msg,K_NO_WAIT);
 }
 
 
@@ -416,29 +424,21 @@ int main(void)
 	init_all_sensors();
     //settings_fram_init();
 
-    */
-    
+    */    
     bus_listener_attach(&can1_rx_listener,CAN1_RX);
     system_can_message_t incoming_can;
 
     while (1) 
 	{    
-        system_can_message_t rx_msg;
-
-       // int err = bus_sub_receive(&my_can_listener_sub.obs, CAN_PORT_1_ID, &incoming_can, K_MSEC(100));
-       // if (err==0)
-       //     LOG_INF("Принят пакет на CAN1! ID: 0x%X, DLC: %d", incoming_can.id, incoming_can.dlc);
-       // }
-        // Проверяем RX-очередь первого CAN-модуля
-        if (k_msgq_get(&my_super_queue, &rx_msg, K_NO_WAIT) == 0) {
-
-             send_can_message_binary(telemetry_uart, 1, &rx_msg);
-            //LOG_INF("Принят пакет на CAN1! ID: 0x%X, DLC: %d", rx_msg.id, rx_msg.dlc);
+        can_queue_message_t rx_msg;       
+        while (k_msgq_get(&all_can_rx_queue, &rx_msg, K_NO_WAIT) == 0) 
+        {
+             send_can_message_binary(telemetry_uart, rx_msg.iface_id, &rx_msg.msg);        
         }
         k_msleep(SLEEP_TIME_MS);      
-        send_binary_telemetry(telemetry_uart); 
-        
+        send_binary_telemetry(telemetry_uart);         
         k_msleep(SLEEP_TIME_MS);
     }
 	return 0;
 }
+Управление линиями enable1. EN_DUT2_PSU2. EN_DUT3_PSU3. EN_P12V4. EN_P40V5. EN_VA6. EN_USB_OUT7. EN_USB_BOOT8. EN_USB_TOP
