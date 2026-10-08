@@ -399,8 +399,6 @@ static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(us
 
 K_MSGQ_DEFINE(all_can_rx_queue, sizeof(can_queue_message_t), 10, 4);
 
-
-
 static void _can1_rx_listener_cb(const struct zbus_channel *_chan)
 {
     system_can_message_t _temp;
@@ -411,8 +409,30 @@ static void _can1_rx_listener_cb(const struct zbus_channel *_chan)
     k_msgq_put(&all_can_rx_queue,&_msg,K_NO_WAIT);
 }
 
+static void _can2_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    system_can_message_t _temp;
+    SYSTEM_BUS_GET_P(CAN2_RX,&_temp);
+    can_queue_message_t _msg;
+    _msg.msg =  _temp;
+    _msg.iface_id = 2;
+    k_msgq_put(&all_can_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _can3_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    system_can_message_t _temp;
+    SYSTEM_BUS_GET_P(CAN3_RX,&_temp);
+    can_queue_message_t _msg;
+    _msg.msg =  _temp;
+    _msg.iface_id = 3;
+    k_msgq_put(&all_can_rx_queue,&_msg,K_NO_WAIT);
+}
+
 
 ZBUS_LISTENER_DEFINE(can1_rx_listener, _can1_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(can2_rx_listener, _can2_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(can3_rx_listener, _can3_rx_listener_cb);
 
 int main(void)
 {
@@ -426,6 +446,8 @@ int main(void)
 
     */    
     bus_listener_attach(&can1_rx_listener,CAN1_RX);
+    bus_listener_attach(&can2_rx_listener,CAN2_RX);
+    bus_listener_attach(&can3_rx_listener,CAN3_RX);
     system_can_message_t incoming_can;
 
     while (1) 
@@ -441,4 +463,3 @@ int main(void)
     }
 	return 0;
 }
-Управление линиями enable1. EN_DUT2_PSU2. EN_DUT3_PSU3. EN_P12V4. EN_P40V5. EN_VA6. EN_USB_OUT7. EN_USB_BOOT8. EN_USB_TOP
