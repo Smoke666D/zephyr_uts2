@@ -448,7 +448,7 @@ int main(void)
     bus_listener_attach(&can1_rx_listener,CAN1_RX);
     bus_listener_attach(&can2_rx_listener,CAN2_RX);
     bus_listener_attach(&can3_rx_listener,CAN3_RX);
-    system_can_message_t incoming_can;
+   
 
     while (1) 
 	{    
