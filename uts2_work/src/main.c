@@ -435,7 +435,9 @@ int main(void)
              send_can_message_binary(telemetry_uart, 1, &rx_msg);
             //LOG_INF("Принят пакет на CAN1! ID: 0x%X, DLC: %d", rx_msg.id, rx_msg.dlc);
         }
-        send_binary_telemetry(telemetry_uart);       
+        k_msleep(SLEEP_TIME_MS);      
+        send_binary_telemetry(telemetry_uart); 
+        
         k_msleep(SLEEP_TIME_MS);
     }
 	return 0;

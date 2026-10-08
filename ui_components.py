@@ -19,6 +19,9 @@ LED_LINES = [
     {'id': 3, 'name': 'Синий'},
 ]
 
+# Глобальный словарь для связи логов CAN с фоновым потоком (ключи 1, 2, 3)
+can_logs_dict = {}
+
 
 def get_available_ports():
   ports = [p.device for p in list_ports.comports()]
@@ -375,7 +378,100 @@ def build_dashboard(ports_refs, ui_labels):
               'bg-emerald-600 text-white text-xs py-1 px-2'
           )
 
- 
+    # --- БЛОК 6: 3 CAN ИНТЕРФЕЙСА ---
+    for can_idx in range(1, 4):
+      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+        ui.label(f'CAN Интерфейс {can_idx}').classes(
+            'text-xs font-semibold text-yellow-300 mb-1'
+        )
+
+        with ui.row().classes('w-full gap-2 items-center'):
+          can_speed_data = ui.select(
+              options=['1000', '500', '250', '125'],
+              value='1000',
+              label='Скорость Data (кб/с)',
+          ).props('dark outlined dense').classes(
+              'w-36 bg-slate-700 text-xs text-white rounded'
+          )
+          can_speed_data.disable()
+
+          def update_can_mode(e, ds=can_speed_data):
+            if e.value == 'CANFD':
+              ds.enable()
+            else:
+              ds.disable()
+              ds.set_value('1000')
+
+          can_mode = ui.select(
+              options=['Classic', 'CANFD'],
+              value='Classic',
+              label='Режим',
+              on_change=update_can_mode,
+          ).props('dark outlined dense').classes(
+              'w-28 bg-slate-700 text-xs text-white rounded'
+          )
+
+          can_speed_nom = ui.select(
+              options=['1000', '500', '250', '125'],
+              value='500',
+              label='Скорость (кб/с)',
+          ).props('dark outlined dense').classes(
+              'w-32 bg-slate-700 text-xs text-white rounded'
+          )
+
+        # Окно входящих сообщений (Регистрируем лог в словаре can_logs_dict с ключом-числом)
+        ui.label('Входящие сообщения:').classes(
+            'text-[10px] text-slate-400 mt-1 mb-0.5'
+        )
+        can_log = ui.log(max_lines=30).classes(
+            'w-full h-20 bg-slate-900 text-green-400 font-mono text-[11px] p-1 rounded'
+        )
+        can_log.push(f'CAN{can_idx} готов к работе...')
+        can_logs_dict[can_idx] = can_log
+
+        # Строка отправки через Shell
+        with ui.row().classes('w-full gap-2 items-center mt-1.5'):
+          can_id_input = ui.input(placeholder='ID (например, 123)').props(
+              'dark outlined dense input-class="text-xs"'
+          ).classes('w-36 bg-slate-700 text-xs text-white rounded')
+
+          can_data_input = ui.input(
+              placeholder='Данные через пробел (например: 11 22 AA)'
+          ).props('dark outlined dense input-class="text-xs"').classes(
+              'flex-1 bg-slate-700 text-xs text-white rounded'
+          )
+
+          def send_can_msg(
+              c_idx=can_idx,
+              id_inp=can_id_input,
+              data_inp=can_data_input,
+              log=can_log,
+          ):
+            cid = id_inp.value.strip()
+            cdata = data_inp.value.strip()
+            if not cid:
+              ui.notify(f'CAN{c_idx}: Укажите ID сообщения!', type='warning')
+              return
+
+            cmd = f'can send {c_idx} {cid} {cdata}\r\n'
+            curr_shell = shell_ref.get('ser')
+
+            if curr_shell and curr_shell.is_open:
+              curr_shell.write(cmd.encode('utf-8'))
+              log.push(f'TX -> ID: {cid} | DATA: {cdata}')
+              id_inp.set_value('')
+              data_inp.set_value('')
+            else:
+              ui.notify(
+                  'Shell порт закрыт! Невозможно отправить пакет',
+                  type='warning',
+              )
+
+          can_id_input.on('keydown.enter', send_can_msg)
+          can_data_input.on('keydown.enter', send_can_msg)
+          ui.button('Отправить', on_click=send_can_msg).classes(
+              'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
+          )
 
     # --- БЛОК 7: ДАШБОРД ДАТЧИКОВ ---
     def create_metric_card(title, key, unit=''):
@@ -425,7 +521,7 @@ def build_dashboard(ports_refs, ui_labels):
 
       ui.label('AIN VSense (1-6)').classes(
           'text-xs font-semibold text-slate-400 mt-1'
-      )
+        )
       with ui.grid(columns=6).classes('w-full gap-1'):
         for i in range(6):
           create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
@@ -459,98 +555,5 @@ def build_dashboard(ports_refs, ui_labels):
                     'text-[11px] text-slate-400 leading-none'
                 )
 
-# --- БЛОК 6: 3 CAN ИНФЕЙСА С ОТПРАВКОЙ ЧЕРЕЗ SHELL ---
-    for can_idx in range(1, 4):
-      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-        ui.label(f'CAN Интерфейс {can_idx}').classes(
-            'text-xs font-semibold text-yellow-300 mb-1'
-        )
-
-        with ui.row().classes('w-full gap-2 items-center'):
-          can_speed_data = ui.select(
-              options=['1000', '500', '250', '125'],
-              value='1000',
-              label='Скорость Data (кб/с)',
-          ).props('dark outlined dense').classes(
-              'w-36 bg-slate-700 text-xs text-white rounded'
-          )
-          can_speed_data.disable()  # Изначально Classic -> выключено
-
-          def update_can_mode(e, ds=can_speed_data):
-            if e.value == 'CANFD':
-              ds.enable()
-            else:
-              ds.disable()
-              ds.set_value('1000')  # Сбрасываем при выключении
-
-          can_mode = ui.select(
-              options=['Classic', 'CANFD'],
-              value='Classic',
-              label='Режим',
-              on_change=update_can_mode,
-          ).props('dark outlined dense').classes(
-              'w-28 bg-slate-700 text-xs text-white rounded'
-          )
-
-          can_speed_nom = ui.select(
-              options=['1000', '500', '250', '125'],
-              value='500',
-              label='Скорость (кб/с)',
-          ).props('dark outlined dense').classes(
-              'w-32 bg-slate-700 text-xs text-white rounded'
-          )
-
-        # Окно входящих сообщений
-        ui.label('Входящие сообщения:').classes(
-            'text-[10px] text-slate-400 mt-1 mb-0.5'
-        )
-        can_log = ui.log(max_lines=30).classes(
-            'w-full h-20 bg-slate-900 text-green-400 font-mono text-[11px] p-1 rounded'
-        )
-        can_log.push(f'CAN{can_idx} готов к работе...')
-
-        # Строка отправки пакета
-        with ui.row().classes('w-full gap-2 items-center mt-1.5'):
-          can_id_input = ui.input(placeholder='ID (например, 123)').props(
-              'dark outlined dense input-class="text-xs"'
-          ).classes('w-36 bg-slate-700 text-xs text-white rounded')
-
-          can_data_input = ui.input(
-              placeholder='Данные (например: 11 22 33)'
-          ).props('dark outlined dense input-class="text-xs"').classes(
-              'flex-1 bg-slate-700 text-xs text-white rounded'
-          )
-
-          def send_can_msg(
-              c_idx=can_idx,
-              id_inp=can_id_input,
-              data_inp=can_data_input,
-              log=can_log,
-          ):
-            cid = id_inp.value.strip()
-            cdata = data_inp.value.strip()
-            if not cid:
-              ui.notify(f'CAN{c_idx}: Укажите ID сообщения!', type='warning')
-              return
-
-            cmd = f'can send {c_idx} {cid} {cdata}\r\n'
-            curr_shell = shell_ref.get('ser')
-
-            if curr_shell and curr_shell.is_open:
-              curr_shell.write(cmd.encode('utf-8'))
-              log.push(f'TX -> ID: {cid} | DATA: {cdata}')
-              id_inp.set_value('')
-              data_inp.set_value('')
-            else:
-              ui.notify(
-                  'Shell порт закрыт! Невозможно отправить пакет',
-                  type='warning',
-              )
-
-          can_id_input.on('keydown.enter', send_can_msg)
-          can_data_input.on('keydown.enter', send_can_msg)
-          ui.button('Отправить', on_click=send_can_msg).classes(
-              'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
-          )
-
   container.make_sortable()
+  return can_logs_dict

@@ -1,25 +1,73 @@
 import asyncio
 import struct
 
-# Настройка бинарного протокола телеметрии (1 байт magic + 66 float)
 TELEMETRY_FORMAT = '<B' + 'f' * 66
 PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)
 
 
-async def telemetry_reader_loop(tel_ser_ref, ui_labels):
-  """Фоновый поток чтения бинарной телеметрии из COM-порта"""
+async def telemetry_reader_loop(tel_ser_ref, ui_labels, can_logs_dict=None):
   serial_buffer = bytearray()
+
   while True:
-    await asyncio.sleep(0.02)
-    # Используем словарь для доступа к мутабельному объекту порта снаружи
+    await asyncio.sleep(0.01)
+
     current_ser = tel_ser_ref.get('ser')
     if current_ser and current_ser.is_open:
       try:
-        data = current_ser.read(current_ser.in_waiting or 1)
-        if data:
-          serial_buffer.extend(data)
-          while len(serial_buffer) >= PACKET_SIZE:
-            if serial_buffer[0] == 0xBE:
+        if current_ser.in_waiting > 0:
+          data = current_ser.read(current_ser.in_waiting)
+          if data:
+            serial_buffer.extend(data)
+
+        if len(serial_buffer) > 4096:
+          serial_buffer = serial_buffer[-2048:]
+
+        while len(serial_buffer) >= 2:
+          magic = serial_buffer[0]
+
+          # --- 1. ПАКЕТ CAN (0xCB) ---
+          if magic == 0xCB:
+            if len(serial_buffer) >= 7:
+              can_num = serial_buffer[1]  # Номер шины (int: 1, 2 или 3)
+              dlc = serial_buffer[6]  # Длина данных в байтах
+              total_can_size = 7 + dlc
+
+              if len(serial_buffer) >= total_can_size:
+                can_pkt = serial_buffer[:total_can_size]
+                try:
+                  _, _, can_id, can_dlc = struct.unpack('<BBIB', can_pkt[:7])
+                  payload = can_pkt[7 : 7 + can_dlc]
+
+                  # ВЫВОД В ОКНО ДАШБОРДА
+                  if can_logs_dict:
+                    # Приводим к int на всякий случай, если ключи словаря целые числа
+                    c_key = int(can_num)
+                    if c_key in can_logs_dict:
+                      data_hex = payload.hex(' ').upper()
+                      can_logs_dict[c_key].push(
+                          f'RX <- ID: 0x{can_id:X} | DLC: {can_dlc} | DATA:'
+                          f' {data_hex}'
+                      )
+                    else:
+                      print(
+                          f'[DEBUG CAN] Предупреждение: Шина {c_key} не найдена'
+                          f' в словаре логов! Доступные ключи:'
+                          f' {list(can_logs_dict.keys())}'
+                      )
+
+                except Exception as ex:
+                  print(f'[DEBUG CAN ERROR] Ошибка struct.unpack: {ex}')
+
+                del serial_buffer[:total_can_size]
+                continue
+              else:
+                break
+            else:
+              break
+
+          # --- 2. ПАКЕТ ТЕЛЕМЕТРИИ (0xBE) ---
+          elif magic == 0xBE:
+            if len(serial_buffer) >= PACKET_SIZE:
               pkt = serial_buffer[:PACKET_SIZE]
               unpacked = struct.unpack(TELEMETRY_FORMAT, pkt)
 
@@ -47,8 +95,13 @@ async def telemetry_reader_loop(tel_ser_ref, ui_labels):
                 ui_labels['curr_i_%d' % i].set_text(f'{i_val:.4f}')
                 curr_offset += 2
 
-              serial_buffer = serial_buffer[PACKET_SIZE:]
+              del serial_buffer[:PACKET_SIZE]
+              continue
             else:
-              serial_buffer.pop(0)
+              break
+          else:
+            serial_buffer.pop(0)
+
       except Exception as e:
-        print(f'Ошибка чтения телеметрии: {e}')
+        print(f'Общая ошибка чтения: {e}')
+        await asyncio.sleep(0.1)
