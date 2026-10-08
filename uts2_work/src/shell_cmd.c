@@ -283,3 +283,34 @@ SHELL_CMD_REGISTER(out_set, NULL,
 
 
                    
+static int cmd_can_send(const struct shell *sh, size_t argc, char **argv) {
+    // Аргументы: can_send <can_num> <id_hex> <data_bytes_hex...>
+    int can_num = atoi(argv[1]);
+    uint32_t id = strtoul(argv[2], NULL, 16);
+    
+    system_can_message_t msg = {
+        .id = id,
+        .dlc = argc - 3, // количество байт данных
+        .flags = 0,
+    };
+
+    for (size_t i = 3; i < argc && (i - 3) < 64; i++) {
+        msg.data[i - 3] = (uint8_t)strtoul(argv[i], NULL, 16);
+    }
+
+    int target_bus = (can_num == 1) ? CAN1_TX : (can_num == 2) ? CAN2_TX : CAN3_TX;
+    int ret = SYSTEM_BUS_SET_P(target_bus, &msg);
+    
+    if (ret < 0) {
+        shell_print(sh, "CAN send error: %d", ret);
+    } else {
+        shell_print(sh, "CAN%d sent ID: 0x%X", can_num, id);
+    }
+    return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(sub_can,
+    SHELL_CMD(send, NULL, "Send CAN frame: can send <num> <id> <b1> <b2>...", cmd_can_send),
+    SHELL_SUBCMD_SET_END
+);
+SHELL_CMD_REGISTER(can, &sub_can, "CAN bus commands", NULL);

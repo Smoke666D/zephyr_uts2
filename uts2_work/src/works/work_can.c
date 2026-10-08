@@ -269,9 +269,9 @@ static void can_thread_entry(void *p1, void *p2, void *p3)
     }
 }
 
-K_THREAD_DEFINE(can_thread, CAN_TASK_STACK_SIZE, can_thread_entry, 
-                NULL, NULL, NULL, 
-                7, 0, 0);
+//K_THREAD_DEFINE(can_thread, CAN_TASK_STACK_SIZE, can_thread_entry, 
+//                NULL, NULL, NULL, 
+//                7, 0, 0);
 
 
 PARAM_ROUTE_DEFINE(CAN1_TX, &can1_tx_chan, 0, ARRAY_DATA);
