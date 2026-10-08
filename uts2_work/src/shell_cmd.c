@@ -76,7 +76,7 @@ static int cmd_adj_res_set(const struct shell *sh, size_t argc, char **argv)
 
     
     /* 4. Выполняем безопасный атомарный Zero-Copy доступ к каналу Zbus [2] */
-    SYSTEM_BUS_SET(adj_res_name[channel_num-1],resistance);
+    SYSTEM_BUS_SET(adj_res_name[channel_num-1],(float)resistance);
     return 0;
 }
 

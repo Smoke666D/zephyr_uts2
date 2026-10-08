@@ -127,6 +127,25 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
     return -ENOTSUP; /* Тип данных не поддерживается этой функцией */
 }
 
+int bus_set_u32p(SYSTEM_BUS_ID id,  uint32_t * _val)
+{
+    return 0;
+}
+
+int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val)
+{
+    const struct system_bus_handler *handler = _get_valid_handler(id);
+    if (false
+        || handler == NULL 
+        || _val == NULL
+    ) 
+    {
+        return -EINVAL;
+    }          
+    int ret = zbus_chan_pub(handler->channel, _val, K_MSEC(50));
+    return ret;        
+}
+
     
  int bus_get_bool(SYSTEM_BUS_ID id, bool * _val)
 {

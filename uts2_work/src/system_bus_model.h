@@ -129,6 +129,9 @@ typedef enum
     SENS_VD5_VOLTAGE,      
     HARDWARE_ERROR_REGISTER1,
     HARDWARE_ERROR_REGISTER2,
+    CAN1_TX,
+    CAN2_TX,
+    CAN3_TX,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;
@@ -159,6 +162,15 @@ typedef struct {
         void *    pointer;
     } value;
 } DATA_VAL;
+
+
+
+typedef struct {
+    uint32_t id;          // CAN Identifier (Standard / Extended)
+    uint8_t  dlc;         // Data Length Code / или реальная длина в байтах (0-64)
+    uint8_t  flags;       // Флаговая маска (CAN_FD_FRAME, CAN_IDE и т.д.)
+    uint8_t  data[64];    // Полезная нагрузка CAN-FD
+} system_can_message_t;
 
 typedef struct 
 {
@@ -196,6 +208,8 @@ struct system_bus_handler
  int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
  int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
  int bus_set_real(SYSTEM_BUS_ID id, float _val);
+ int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
+
 
 #define SYSTEM_BUS_SET(id, val) _Generic((val), \
         bool:       bus_set_bool(id, val), \
@@ -203,6 +217,11 @@ struct system_bus_handler
         unsigned:   bus_set_u32(id, val),  \
         float:      bus_set_real(id, val) \
     )
+
+#define SYSTEM_BUS_SET_P(id, val) _Generic(*(val), \
+    system_can_message_t: bus_set_can     \    
+)((id), (val))
+
 
 int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
 int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
