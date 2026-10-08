@@ -236,11 +236,12 @@ def build_dashboard(ports_refs, ui_labels):
               ),
           ).classes('text-white text-xs')
 
-    # --- БЛОК 4: IO (1-18) ---
+# --- БЛОК 4: IO (1-18) ---
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
           'text-xs font-semibold text-yellow-300 mb-1'
       )
+
 
       def on_io_change(ch_num, select_element):
         val_map = {'INPUT': 'IN', 'HIGH': 'HI', 'LOW': 'LO'}
@@ -253,17 +254,21 @@ def build_dashboard(ports_refs, ui_labels):
         else:
           ui.notify('Shell порт закрыт!', type='warning')
 
+
       with ui.grid(columns=6).classes('w-full gap-1'):
         for i in range(1, 19):
           with ui.card().classes(
               'bg-slate-700 p-1 flex-row items-center justify-between rounded'
           ):
             ui.label(f'IO {i}').classes('text-[11px] text-white font-bold')
+
+            # УВЕЛИЧИЛИ ШИРИНУ С w-20 ДО w-32 СООТВЕТСТВЕННО
             io_select = ui.select(
                 options=['INPUT', 'HIGH', 'LOW'], value='INPUT'
             ).props('dark outlined dense').classes(
-                'w-20 bg-slate-800 text-[10px] text-white'
+                'w-32 bg-slate-800 text-[10px] text-white'
             )
+
             io_select.on(
                 'update:model-value',
                 lambda e, c=i, s=io_select: on_io_change(c, s),
