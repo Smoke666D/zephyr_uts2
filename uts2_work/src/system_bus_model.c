@@ -204,23 +204,21 @@ const struct system_bus_handler *handler = _get_valid_handler(id);
         return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
     }
 
-    size_t msg_size = zbus_chan_msg_size(handler->channel);
-    uint8_t raw_msg_buffer[136]; 
-    if (msg_size > sizeof(raw_msg_buffer)) {
-            return -ENOMEM; 
-    }
 
-    // Захватываем данные канала
-   if (zbus_chan_read(handler->channel, raw_msg_buffer, K_MSEC(50)) == 0)
-        {
-            // 3. Интерпретируем данные как массив float и берем нужное по индексу
-            uint32_t *values = (uint32_t *)raw_msg_buffer;
+
+    const uint32_t *channel_msg = (const uint32_t *)zbus_chan_msg(handler->channel);
+    if (channel_msg == NULL)
+    {
+        return -ENODEV;
+    }   
+     
             
-            *_val = values[handler->system_index];
-            return 0;
-        }          
+     *_val = channel_msg [handler->system_index];
+        
+     return 0;
+               
     
-   return -ENODEV; /* Модуль обслуживания параметра не скомпилирован */
+   
 }
 
 int bus_get_real(SYSTEM_BUS_ID id, float * _val)

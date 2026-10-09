@@ -19,9 +19,11 @@ LED_LINES = [
     {'id': 3, 'name': 'Синий'},
 ]
 
-# Глобальный словарь для связи логов CAN с фоновым потоком (ключи 1, 2, 3)
+# Глобальные словари для связи логов с фоновым потоком
 can_logs_dict = {}
 lin_logs_dict = {}
+raw_logs_dict = {}
+
 
 def get_available_ports():
   ports = [p.device for p in list_ports.comports()]
@@ -191,15 +193,18 @@ def build_dashboard(ports_refs, ui_labels):
           'text-xs font-semibold text-yellow-300 mb-1'
       )
 
-      def on_ch_change(ch_num, name, e):
-        state = 'ON' if e.value else 'OFF'
-        cmd = f'en_set {ch_num} {state}\r\n'
-        curr_shell = shell_ref.get('ser')
-        if curr_shell and curr_shell.is_open:
-          curr_shell.write(cmd.encode('utf-8'))
-          ui.notify(f'[{name}] Отправлено: {cmd.strip()}', type='info')
-        else:
-          ui.notify('Shell порт закрыт!', type='warning')
+      def make_en_handler(c_num, c_name):
+        def handler(e):
+          state = 'ON' if e.value else 'OFF'
+          cmd = f'en_set {c_num} {state}\r\n'
+          curr_shell = shell_ref.get('ser')
+          if curr_shell and curr_shell.is_open:
+            curr_shell.write(cmd.encode('utf-8'))
+            ui.notify(f'[{c_name}] Отправлено: {cmd.strip()}', type='info')
+          else:
+            ui.notify('Shell порт закрыт!', type='warning')
+
+        return handler
 
       with ui.grid(columns=4).classes('w-full gap-1'):
         for idx, name in enumerate(ENABLE_LINES):
@@ -207,7 +212,7 @@ def build_dashboard(ports_refs, ui_labels):
           ui.checkbox(
               f'{ch_num}. {name}',
               value=True,
-              on_change=lambda e, c=ch_num, n=name: on_ch_change(c, n, e),
+              on_change=make_en_handler(ch_num, name),
           ).classes('text-white text-xs')
 
     # --- БЛОК 3: СВЕТОДИОДЫ ---
@@ -216,32 +221,34 @@ def build_dashboard(ports_refs, ui_labels):
           'text-xs font-semibold text-yellow-300 mb-1'
       )
 
-      def on_led_change(led_id, name, e):
-        state = 'ON' if e.value else 'OFF'
-        cmd = f'led_set {led_id} {state}\r\n'
-        curr_shell = shell_ref.get('ser')
-        if curr_shell and curr_shell.is_open:
-          curr_shell.write(cmd.encode('utf-8'))
-          ui.notify(f'[Светодиод {name}] Отправлено: {cmd.strip()}', type='info')
-        else:
-          ui.notify('Shell порт закрыт!', type='warning')
+      def make_led_handler(l_id, l_name):
+        def handler(e):
+          state = 'ON' if e.value else 'OFF'
+          cmd = f'led_set {l_id} {state}\r\n'
+          curr_shell = shell_ref.get('ser')
+          if curr_shell and curr_shell.is_open:
+            curr_shell.write(cmd.encode('utf-8'))
+            ui.notify(
+                f'[Светодиод {l_name}] Отправлено: {cmd.strip()}', type='info'
+            )
+          else:
+            ui.notify('Shell порт закрыт!', type='warning')
+
+        return handler
 
       with ui.row().classes('w-full gap-4'):
         for led in LED_LINES:
           ui.checkbox(
               f'{led["id"]}. {led["name"]}',
               value=False,
-              on_change=lambda e, lid=led['id'], lname=led['name']: on_led_change(
-                  lid, lname, e
-              ),
+              on_change=make_led_handler(led['id'], led['name']),
           ).classes('text-white text-xs')
 
-# --- БЛОК 4: IO (1-18) ---
+    # --- БЛОК 4: IO (1-18) ---
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
           'text-xs font-semibold text-yellow-300 mb-1'
       )
-
 
       def on_io_change(ch_num, select_element):
         val_map = {'INPUT': 'IN', 'HIGH': 'HI', 'LOW': 'LO'}
@@ -254,21 +261,17 @@ def build_dashboard(ports_refs, ui_labels):
         else:
           ui.notify('Shell порт закрыт!', type='warning')
 
-
       with ui.grid(columns=6).classes('w-full gap-1'):
         for i in range(1, 19):
           with ui.card().classes(
               'bg-slate-700 p-1 flex-row items-center justify-between rounded'
           ):
             ui.label(f'IO {i}').classes('text-[11px] text-white font-bold')
-
-            # УВЕЛИЧИЛИ ШИРИНУ С w-20 ДО w-32 СООТВЕТСТВЕННО
             io_select = ui.select(
                 options=['INPUT', 'HIGH', 'LOW'], value='INPUT'
             ).props('dark outlined dense').classes(
                 'w-32 bg-slate-800 text-[10px] text-white'
             )
-
             io_select.on(
                 'update:model-value',
                 lambda e, c=i, s=io_select: on_io_change(c, s),
@@ -383,7 +386,7 @@ def build_dashboard(ports_refs, ui_labels):
               'bg-emerald-600 text-white text-xs py-1 px-2'
           )
 
-    # --- БЛОК 6: 3 CAN ИНТЕРФЕЙСА ---
+    # --- БЛОК 6: 3 CAN ИНФЕЙСА ---
     for can_idx in range(1, 4):
       with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
         ui.label(f'CAN Интерфейс {can_idx}').classes(
@@ -424,7 +427,6 @@ def build_dashboard(ports_refs, ui_labels):
               'w-32 bg-slate-700 text-xs text-white rounded'
           )
 
-        # Окно входящих сообщений (Регистрируем лог в словаре can_logs_dict с ключом-числом)
         ui.label('Входящие сообщения:').classes(
             'text-[10px] text-slate-400 mt-1 mb-0.5'
         )
@@ -434,7 +436,6 @@ def build_dashboard(ports_refs, ui_labels):
         can_log.push(f'CAN{can_idx} готов к работе...')
         can_logs_dict[can_idx] = can_log
 
-        # Строка отправки через Shell
         with ui.row().classes('w-full gap-2 items-center mt-1.5'):
           can_id_input = ui.input(placeholder='ID (например, 123)').props(
               'dark outlined dense input-class="text-xs"'
@@ -526,7 +527,7 @@ def build_dashboard(ports_refs, ui_labels):
 
       ui.label('AIN VSense (1-6)').classes(
           'text-xs font-semibold text-slate-400 mt-1'
-        )
+      )
       with ui.grid(columns=6).classes('w-full gap-1'):
         for i in range(6):
           create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
@@ -559,92 +560,83 @@ def build_dashboard(ports_refs, ui_labels):
                 ui.label('А').classes(
                     'text-[11px] text-slate-400 leading-none'
                 )
-                # --- БЛОК 8: 4 LIN ИНФЕЙСА ---
+
+    # --- БЛОК 8: 4 LIN ИНФЕЙСА ---
+# --- БЛОК 8: 4 LIN ИНФЕЙСА ---
     ui.label('Интерфейсы LIN (1-4)').classes(
         'text-sm font-bold text-sky-300 mt-2'
     )
-    for lin_idx in range(1, 5):
+
+    def make_lin_block(l_idx):
       with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
         with ui.row().classes('w-full justify-between items-center mb-1'):
-          ui.label(f'LIN Интерфейс {lin_idx}').classes(
+          ui.label(f'LIN Интерфейс {l_idx}').classes(
               'text-xs font-semibold text-yellow-300'
           )
 
-          # Чекбокс PULL_DOWN (команда linpb_set <1-4> ON/OFF)
-          def on_pull_down_change(l_idx=lin_idx, e=None):
+          # Функция-обработчик для конкретного индекса l_idx через аргумент по умолчанию
+          def handle_pull_down(e, idx=l_idx):
             state = 'ON' if e.value else 'OFF'
-            cmd = f'linpb_set {l_idx} {state}\r\n'
+            cmd = f'linpb_set {idx} {state}\r\n'
             curr_shell = shell_ref.get('ser')
             if curr_shell and curr_shell.is_open:
               curr_shell.write(cmd.encode('utf-8'))
-              ui.notify(f'[LIN{l_idx} PULL_DOWN] {state}', type='info')
+              ui.notify(f'[LIN{idx} PULL_DOWN] {state}', type='info')
             else:
               ui.notify('Shell порт закрыт!', type='warning')
 
+          # Используем штатный on_change для корректной поимки клика
           ui.checkbox(
-              'PULL_DOWN',
-              value=False,
-              on_change=lambda e, lid=lin_idx: on_pull_down_change(lid, e),
+              'PULL_DOWN', value=False, on_change=handle_pull_down
           ).classes('text-white text-xs')
 
-          # Окошко отображения напряжения LIN
           with ui.row().classes('items-center gap-1'):
             ui.label('U:').classes('text-[11px] text-slate-300')
             lin_v_lbl = ui.label('0.00').classes(
                 'text-xs font-mono text-emerald-400 font-bold'
             )
             ui.label('В').classes('text-[11px] text-slate-400')
-            ui_labels[f'lin_v_{lin_idx}'] = lin_v_lbl
+            ui_labels[f'lin_v_{l_idx}'] = lin_v_lbl
 
-        # Окно входящих сообщений LIN
         ui.label('Входящие пакеты:').classes(
             'text-[10px] text-slate-400 mt-1 mb-0.5'
         )
         lin_log = ui.log(max_lines=20).classes(
             'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1 rounded'
         )
-        lin_log.push(f'LIN{lin_idx} готов...')
-        lin_logs_dict[lin_idx] = lin_log
+        lin_log.push(f'LIN{l_idx} готов...')
+        lin_logs_dict[l_idx] = lin_log
 
-        # Строка отправки пакета LIN через Shell
         with ui.row().classes('w-full gap-2 items-center mt-1.5'):
-          lin_id_input = ui.input(placeholder='ID/Addr').props(
-              'dark outlined dense input-class="text-xs"'
-          ).classes('w-28 bg-slate-700 text-xs text-white rounded')
+          lin_data_input = ui.input(
+              placeholder='Данные через пробел (например: 10 20 AA)'
+          ).props('dark outlined dense input-class="text-xs"').classes(
+              'flex-1 bg-slate-700 text-xs text-white rounded'
+          )
 
-          lin_data_input = ui.input(placeholder='Данные (например: 55 12 34)').props(
-              'dark outlined dense input-class="text-xs"'
-          ).classes('flex-1 bg-slate-700 text-xs text-white rounded')
-
-          def send_lin_msg(
-              l_idx=lin_idx,
-              id_inp=lin_id_input,
-              data_inp=lin_data_input,
-              log=lin_log,
-          ):
-            lid = id_inp.value.strip()
+          def send_lin_msg(idx=l_idx, data_inp=lin_data_input, log=lin_log):
             ldata = data_inp.value.strip()
-            if not lid:
-              ui.notify(f'LIN{l_idx}: Укажите ID/Адрес!', type='warning')
+            if not ldata:
+              ui.notify(f'LIN{idx}: Введите данные для отправки!', type='warning')
               return
 
-            # Команда отправки в Shell: lin send <lin_num> <id> <data>
-            cmd = f'lin send {l_idx} {lid} {ldata}\r\n'
+            cmd = f'lin_send {idx} {ldata}\r\n'
             curr_shell = shell_ref.get('ser')
 
             if curr_shell and curr_shell.is_open:
               curr_shell.write(cmd.encode('utf-8'))
-              log.push(f'TX -> ID: {lid} | DATA: {ldata}')
-              id_inp.set_value('')
+              log.push(f'TX -> {ldata}')
               data_inp.set_value('')
             else:
               ui.notify('Shell порт закрыт!', type='warning')
 
-          lin_id_input.on('keydown.enter', send_lin_msg)
           lin_data_input.on('keydown.enter', send_lin_msg)
           ui.button('Отправить', on_click=send_lin_msg).classes(
               'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
           )
 
+    for lin_idx in range(1, 5):
+      make_lin_block(lin_idx)
+
   container.make_sortable()
-  return can_logs_dict
+  return can_logs_dict, lin_logs_dict

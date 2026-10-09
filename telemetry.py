@@ -1,12 +1,14 @@
 import asyncio
 import struct
 
-# Увеличили количество float с 66 до 70 (добавилось 4 напряжения для LIN 1-4)
+# 70 полей float + 1 байт magic (0xBE)
 TELEMETRY_FORMAT = '<B' + 'f' * 70
 PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)
 
 
-async def telemetry_reader_loop(tel_ser_ref, ui_labels, can_logs_dict=None, lin_logs_dict=None):
+async def telemetry_reader_loop(
+    tel_ser_ref, ui_labels, can_logs_dict=None, lin_logs_dict=None
+):
   serial_buffer = bytearray()
 
   while True:
@@ -26,8 +28,39 @@ async def telemetry_reader_loop(tel_ser_ref, ui_labels, can_logs_dict=None, lin_
         while len(serial_buffer) >= 2:
           magic = serial_buffer[0]
 
-          # --- 1. ПАКЕТ CAN (0xCB) ---
-          if magic == 0xCB:
+          # --- 1. ПАКЕТ СЫРОГО ПОТОКА ДЛЯ LIN КАНАЛОВ (0xC1 - 0xC4) ---
+          if 0xC1 <= magic <= 0xC4:
+            lin_num = magic & 0x0F  # Выделяем номер канала (1, 2, 3 или 4)
+            if len(serial_buffer) >= 2:
+              length = serial_buffer[1]
+              total_size = 2 + length
+
+              if len(serial_buffer) >= total_size:
+                raw_bytes = serial_buffer[2:total_size]
+
+                # Пушим принятые байты в лог соответствующего LIN-интерфейса
+                if lin_logs_dict and lin_num in lin_logs_dict:
+                  hex_data = raw_bytes.hex(' ').upper()
+                  try:
+                    text_data = raw_bytes.decode('utf-8', errors='ignore')
+                  except Exception:
+                    text_data = ''
+
+                  log_msg = f'RX [{len(raw_bytes)}b] HEX: {hex_data}'
+                  if text_data.strip():
+                    log_msg += f' | TXT: {text_data}'
+
+                  lin_logs_dict[lin_num].push(log_msg)
+
+                del serial_buffer[:total_size]
+                continue
+              else:
+                break  # Ждем оставшиеся байты порции
+            else:
+              break  # Ждем байт длины
+
+          # --- 2. ПАКЕТ CAN (0xCB) ---
+          elif magic == 0xCB:
             if len(serial_buffer) >= 7:
               can_num = serial_buffer[1]
               dlc = serial_buffer[6]
@@ -52,7 +85,7 @@ async def telemetry_reader_loop(tel_ser_ref, ui_labels, can_logs_dict=None, lin_
             else:
               break
 
-          # --- 2. ПАКЕТ ТЕЛЕМЕТРИИ (0xBE) ---
+          # --- 3. ПАКЕТ ТЕЛЕМЕТРИИ (0xBE) ---
           elif magic == 0xBE:
             if len(serial_buffer) >= PACKET_SIZE:
               pkt = serial_buffer[:PACKET_SIZE]
@@ -74,16 +107,14 @@ async def telemetry_reader_loop(tel_ser_ref, ui_labels, can_logs_dict=None, lin_
               for i in range(8):
                 ui_labels['env_%d' % i].set_text(f'{unpacked[43+i]:.2f}')
 
-              # Датчики тока (8 пар = 16 float, индексы 51 - 66)
               curr_offset = 51
               for i in range(1, 9):
                 v_val = unpacked[curr_offset]
                 i_val = unpacked[curr_offset + 1]
-                ui_labels[f'curr_v_{i}'].set_text(f'{v_val:.2f}')
-                ui_labels[f'curr_i_{i}'].set_text(f'{i_val:.4f}')
+                ui_labels['curr_v_%d' % i].set_text(f'{v_val:.2f}')
+                ui_labels['curr_i_%d' % i].set_text(f'{i_val:.4f}')
                 curr_offset += 2
 
-              # Напряжения LIN 1-4 (индексы 67, 68, 69, 70)
               for i in range(1, 5):
                 lin_v = unpacked[66 + i]
                 if f'lin_v_{i}' in ui_labels:

@@ -31,7 +31,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 
 const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(usart1));
-
+static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
 // Объявляем буферы глобально (в статической памяти), чтобы они не лежали на стеке
 static uint8_t wr_cmd[] = { 0x02, 0x00, 0x00, 0x55 }; // WEN/Write массив
@@ -393,17 +393,99 @@ void send_binary_telemetry(const struct device *uart_dev) {
 }
 
 
+void send_uart_stream_to_dashboard(uint8_t channel, const uint8_t *data, size_t size) {
+    if (!telemetry_uart || !device_is_ready(telemetry_uart) || !data || size == 0) {
+        return;
+    }
+    
+    // Проверяем диапазон каналов (1-4)
+    if (channel < 1 || channel > 4) {
+        return;
+    }
+
+    // Ограничиваем размер одной порции до 255 байт (так как длина передается в 1 байт uint8_t)
+    if (size > 255) {
+        size = 255;
+    }
+
+    // Формируем байт маркера канала: 0xC1 для канала 1, 0xC2 для 2, 0xC3 для 3, 0xC4 для 4
+    uint8_t magic_channel = 0xC0 | (channel & 0x0F);
+
+    // 1. Отправляем маркер канала
+    uart_poll_out(telemetry_uart, magic_channel);
+    
+    // 2. Отправляем размер данных
+    uart_poll_out(telemetry_uart, (uint8_t)size);
+
+    // 3. Отправляем сами данные байт за байтом
+    for (size_t i = 0; i < size; i++) {
+        uart_poll_out(telemetry_uart, data[i]);
+    }
+}
+
 typedef struct 
 {
     system_can_message_t  msg;
     uint8_t               iface_id;
 } can_queue_message_t;
 
+typedef struct 
+{
+    uint8_t               msg;
+    uint8_t               iface_id;
+} lin_queue_message_t;
 
-static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
+
+
+
+
+K_MSGQ_DEFINE(all_lin_rx_queue, sizeof(lin_queue_message_t), 10, 4);
 
 K_MSGQ_DEFINE(all_can_rx_queue, sizeof(can_queue_message_t), 10, 4);
+
+static void _lin1_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN1_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg = (uint8_t) _temp;
+    _msg.iface_id = 1;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _lin2_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN2_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg = (uint8_t) _temp;
+    _msg.iface_id = 2;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _lin3_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN3_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg = (uint8_t) _temp;
+    _msg.iface_id = 3;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _lin4_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN4_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg =  (uint8_t)_temp;
+    _msg.iface_id = 4;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
+}
+
+
+
 
 static void _can1_rx_listener_cb(const struct zbus_channel *_chan)
 {
@@ -436,9 +518,18 @@ static void _can3_rx_listener_cb(const struct zbus_channel *_chan)
 }
 
 
+
+
+
+
+
 ZBUS_LISTENER_DEFINE(can1_rx_listener, _can1_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(can2_rx_listener, _can2_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(can3_rx_listener, _can3_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin1_rx_listener, _lin1_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin2_rx_listener, _lin2_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin3_rx_listener, _lin3_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin4_rx_listener, _lin4_rx_listener_cb);
 
 int main(void)
 {
@@ -449,13 +540,15 @@ int main(void)
 	FRAM_Test();
 	init_all_sensors();
     //settings_fram_init();
-
     */    
     bus_listener_attach(&can1_rx_listener,CAN1_RX);
     bus_listener_attach(&can2_rx_listener,CAN2_RX);
     bus_listener_attach(&can3_rx_listener,CAN3_RX);
+    bus_listener_attach(&lin1_rx_listener,LIN1_RX);
+    bus_listener_attach(&lin2_rx_listener,LIN2_RX);
+    bus_listener_attach(&lin3_rx_listener,LIN3_RX);
+    bus_listener_attach(&lin4_rx_listener,LIN4_RX);
    
-
     while (1) 
 	{    
         can_queue_message_t rx_msg;       
@@ -463,10 +556,18 @@ int main(void)
         {
              send_can_message_binary(telemetry_uart, rx_msg.iface_id, &rx_msg.msg);        
         }
+        uint8_t ch = 0;
+        lin_queue_message_t lin_msg;
+        while (k_msgq_get(&all_lin_rx_queue, &lin_msg, K_NO_WAIT) == 0) 
+        {
+            uint8_t data;
+            data = lin_msg.msg;
+            send_uart_stream_to_dashboard(lin_msg.iface_id,&data,1);            
+        }
+
         k_msleep(SLEEP_TIME_MS);      
         send_binary_telemetry(telemetry_uart);         
         k_msleep(SLEEP_TIME_MS);   
-
     }
 	return 0;
 }

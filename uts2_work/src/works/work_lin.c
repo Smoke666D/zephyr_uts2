@@ -44,8 +44,12 @@ typedef enum
     LIN4 = 0x04,
 } LIN_SYSTEM_BUS_ID;
 
+typedef struct
+{
+   uint32_t data[8];
+} lin_rx_ch_t;
+
 static struct k_work uart_rx_task; 
-static struct k_work uart_tx_task; 
 
 static void _lin_tx_listener_cb(const struct zbus_channel *_chan);
 
@@ -84,7 +88,7 @@ ZBUS_CHAN_DEFINE(lin4_tx_chan,
 );
 
 ZBUS_CHAN_DEFINE(lin1_rx_chan,
-                 uint8_t,
+                 lin_rx_ch_t,
                  NULL, 
                  (void*)LIN1, 
                  ZBUS_OBSERVERS(), 
@@ -92,25 +96,25 @@ ZBUS_CHAN_DEFINE(lin1_rx_chan,
 );
 
 ZBUS_CHAN_DEFINE(lin2_rx_chan,
-                 uint8_t,
+                 lin_rx_ch_t,
                  NULL, 
-                 (void*)LIN1, 
+                 (void*)LIN2, 
                  ZBUS_OBSERVERS(), 
                  ZBUS_MSG_INIT(0) 
 );
 
 ZBUS_CHAN_DEFINE(lin3_rx_chan,
-                 uint8_t,
+                lin_rx_ch_t,
                  NULL, 
-                 (void*)LIN1, 
+                 (void*)LIN3, 
                  ZBUS_OBSERVERS(), 
                  ZBUS_MSG_INIT(0) 
 );
 
 ZBUS_CHAN_DEFINE(lin4_rx_chan,
-                 uint8_t,
+                 lin_rx_ch_t,
                  NULL, 
-                 (void*)LIN1, 
+                 (void*)LIN4, 
                  ZBUS_OBSERVERS(), 
                  ZBUS_MSG_INIT(0) 
 );
@@ -161,7 +165,8 @@ static void uart_isr_callback(const struct device *dev, void *user_data)
     }
 
     /* --- ПРИЕМ (RX): в аппаратном FIFO появились принятые байты --- */
-    if (uart_irq_rx_ready(dev)) {
+    if (uart_irq_rx_ready(dev))
+     {
         uint8_t received_byte;
 
         int read_bytes = uart_fifo_read(dev, &received_byte, 1);
@@ -169,6 +174,7 @@ static void uart_isr_callback(const struct device *dev, void *user_data)
             // Кладываем принятый байт в RX-очередь (безопасно для ISR благодаря K_NO_WAIT)
             k_msgq_put(&ctx->rx_msgq, &received_byte, K_NO_WAIT);
         }
+        app_worker_submit(&uart_rx_task, REAL_TIME_WORKER);
     }
 }
 
@@ -218,7 +224,29 @@ int uart_channel_receive_byte(int channel_idx, uint8_t *byte, k_timeout_t timeou
 
 static void _uart_rx_handler(struct k_work *_work)
 {
+    uint8_t _data;
+    lin_rx_ch_t send;
     
+    while (k_msgq_get(&uart_contexts[0].rx_msgq, &_data, K_NO_WAIT) == 0) 
+    {         
+        send.data[0] = _data;
+        zbus_chan_pub(&lin1_rx_chan, &send, K_NO_WAIT);
+    }
+    while (k_msgq_get(&uart_contexts[1].rx_msgq, &_data, K_NO_WAIT) == 0) 
+    {         
+        send.data[0] = _data;
+        zbus_chan_pub(&lin2_rx_chan, &send, K_NO_WAIT);
+    }
+    while (k_msgq_get(&uart_contexts[2].rx_msgq, &_data, K_NO_WAIT) == 0) 
+    {         
+        send.data[0] = _data;
+        zbus_chan_pub(&lin3_rx_chan, &send, K_NO_WAIT);
+    }
+    while (k_msgq_get(&uart_contexts[3].rx_msgq, &_data, K_NO_WAIT) == 0) 
+    {         
+        send.data[0] = _data;
+        zbus_chan_pub(&lin4_rx_chan, &send, K_NO_WAIT);
+    }
 }
 
 
