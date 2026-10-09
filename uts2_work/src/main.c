@@ -379,6 +379,12 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &pkt.current_sensors[14]);
     SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &pkt.current_sensors[15]);
 
+
+    SYSTEM_BUS_GET(LIN_AO1,       &pkt.lin_voltages[0]);
+    SYSTEM_BUS_GET(LIN_AO2,       &pkt.lin_voltages[1]);
+    SYSTEM_BUS_GET(LIN_AO3,       &pkt.lin_voltages[2]);
+    SYSTEM_BUS_GET(LIN_AO4,       &pkt.lin_voltages[3]);
+
     // Отправляем всю структуру байт за байтом в UART
     uint8_t *ptr = (uint8_t *)&pkt;
     for (size_t i = 0; i < sizeof(pkt); i++) {
@@ -459,7 +465,8 @@ int main(void)
         }
         k_msleep(SLEEP_TIME_MS);      
         send_binary_telemetry(telemetry_uart);         
-        k_msleep(SLEEP_TIME_MS);
+        k_msleep(SLEEP_TIME_MS);   
+
     }
 	return 0;
 }

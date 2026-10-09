@@ -33,6 +33,9 @@ struct telemetry_packet {
     float    env[8];
 
     float    current_sensors[16]; 
+        // --- Напряжения LIN интерфейсов (4 шт) ---
+    // lin_voltages[0] -> LIN 1, lin_voltages[1] -> LIN 2, и т.д.
+    float    lin_voltages[4];
 } __packed;
 
 

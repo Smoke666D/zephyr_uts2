@@ -21,7 +21,7 @@ LED_LINES = [
 
 # Глобальный словарь для связи логов CAN с фоновым потоком (ключи 1, 2, 3)
 can_logs_dict = {}
-
+lin_logs_dict = {}
 
 def get_available_ports():
   ports = [p.device for p in list_ports.comports()]
@@ -559,6 +559,92 @@ def build_dashboard(ports_refs, ui_labels):
                 ui.label('А').classes(
                     'text-[11px] text-slate-400 leading-none'
                 )
+                # --- БЛОК 8: 4 LIN ИНФЕЙСА ---
+    ui.label('Интерфейсы LIN (1-4)').classes(
+        'text-sm font-bold text-sky-300 mt-2'
+    )
+    for lin_idx in range(1, 5):
+      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+        with ui.row().classes('w-full justify-between items-center mb-1'):
+          ui.label(f'LIN Интерфейс {lin_idx}').classes(
+              'text-xs font-semibold text-yellow-300'
+          )
+
+          # Чекбокс PULL_DOWN (команда linpb_set <1-4> ON/OFF)
+          def on_pull_down_change(l_idx=lin_idx, e=None):
+            state = 'ON' if e.value else 'OFF'
+            cmd = f'linpb_set {l_idx} {state}\r\n'
+            curr_shell = shell_ref.get('ser')
+            if curr_shell and curr_shell.is_open:
+              curr_shell.write(cmd.encode('utf-8'))
+              ui.notify(f'[LIN{l_idx} PULL_DOWN] {state}', type='info')
+            else:
+              ui.notify('Shell порт закрыт!', type='warning')
+
+          ui.checkbox(
+              'PULL_DOWN',
+              value=False,
+              on_change=lambda e, lid=lin_idx: on_pull_down_change(lid, e),
+          ).classes('text-white text-xs')
+
+          # Окошко отображения напряжения LIN
+          with ui.row().classes('items-center gap-1'):
+            ui.label('U:').classes('text-[11px] text-slate-300')
+            lin_v_lbl = ui.label('0.00').classes(
+                'text-xs font-mono text-emerald-400 font-bold'
+            )
+            ui.label('В').classes('text-[11px] text-slate-400')
+            ui_labels[f'lin_v_{lin_idx}'] = lin_v_lbl
+
+        # Окно входящих сообщений LIN
+        ui.label('Входящие пакеты:').classes(
+            'text-[10px] text-slate-400 mt-1 mb-0.5'
+        )
+        lin_log = ui.log(max_lines=20).classes(
+            'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1 rounded'
+        )
+        lin_log.push(f'LIN{lin_idx} готов...')
+        lin_logs_dict[lin_idx] = lin_log
+
+        # Строка отправки пакета LIN через Shell
+        with ui.row().classes('w-full gap-2 items-center mt-1.5'):
+          lin_id_input = ui.input(placeholder='ID/Addr').props(
+              'dark outlined dense input-class="text-xs"'
+          ).classes('w-28 bg-slate-700 text-xs text-white rounded')
+
+          lin_data_input = ui.input(placeholder='Данные (например: 55 12 34)').props(
+              'dark outlined dense input-class="text-xs"'
+          ).classes('flex-1 bg-slate-700 text-xs text-white rounded')
+
+          def send_lin_msg(
+              l_idx=lin_idx,
+              id_inp=lin_id_input,
+              data_inp=lin_data_input,
+              log=lin_log,
+          ):
+            lid = id_inp.value.strip()
+            ldata = data_inp.value.strip()
+            if not lid:
+              ui.notify(f'LIN{l_idx}: Укажите ID/Адрес!', type='warning')
+              return
+
+            # Команда отправки в Shell: lin send <lin_num> <id> <data>
+            cmd = f'lin send {l_idx} {lid} {ldata}\r\n'
+            curr_shell = shell_ref.get('ser')
+
+            if curr_shell and curr_shell.is_open:
+              curr_shell.write(cmd.encode('utf-8'))
+              log.push(f'TX -> ID: {lid} | DATA: {ldata}')
+              id_inp.set_value('')
+              data_inp.set_value('')
+            else:
+              ui.notify('Shell порт закрыт!', type='warning')
+
+          lin_id_input.on('keydown.enter', send_lin_msg)
+          lin_data_input.on('keydown.enter', send_lin_msg)
+          ui.button('Отправить', on_click=send_lin_msg).classes(
+              'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
+          )
 
   container.make_sortable()
   return can_logs_dict

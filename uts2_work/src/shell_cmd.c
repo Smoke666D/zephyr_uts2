@@ -282,6 +282,63 @@ SHELL_CMD_REGISTER(out_set, NULL,
                    cmd_out_set);
 
 
+uint32_t linpb_name[] =
+{
+    LIN_PD1,
+    LIN_PD2,  
+    LIN_PD3,    
+    LIN_PD4,
+
+};
+
+
+static int cmd_linpb_set(const struct shell *sh, size_t argc, char **argv)
+{
+    /* Проверяем количество переданных аргументов (команда + 2 параметра) */
+    if (argc != 3)
+    {
+        shell_error(sh, "Usage: linpb_set <1-4> <ON/OFF>");
+        return -EINVAL;
+    }
+    
+    char *endptr;
+    long channel_num = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || channel_num < 1 || channel_num > 4 ) 
+    {
+        shell_error(sh, "Invalid channel: %s (Must be 1 to %d)", argv[1], 4 );
+        return -EINVAL;
+    }
+
+    uint32_t state;
+    if (strcmp(argv[2], "ON") == 0 || strcmp(argv[2], "on") == 0) 
+    {
+        state = 0x01;
+    } 
+    else 
+    if (strcmp(argv[2], "OFF") == 0 || strcmp(argv[2], "off") == 0) 
+    {
+        state = 0x00;
+    } 
+    else 
+    {
+        shell_error(sh, "Invalid state: %s (Must be ON or OFF)", argv[2]);
+        return -EINVAL;
+    }
+
+    /* 4. Выполняем безопасный атомарный Zero-Copy доступ к каналу Zbus [2] */
+    SYSTEM_BUS_SET(linpb_name[channel_num-1],state);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. РЕГИСТРАЦИЯ КОМАНДЫ В СИСТЕМЕ SHELL                             */
+/* ------------------------------------------------------------------ */
+
+SHELL_CMD_REGISTER(linpb_set, NULL, 
+                   "Set state of linpb: linpb_set <1-4> <ON/OFF>", 
+                   cmd_linpb_set);
+
+
                    
 static int cmd_can_send(const struct shell *sh, size_t argc, char **argv) {
     // Аргументы: can_send <can_num> <id_hex> <data_bytes_hex...>
@@ -314,3 +371,71 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_can,
     SHELL_SUBCMD_SET_END
 );
 SHELL_CMD_REGISTER(can, &sub_can, "CAN bus commands", NULL);
+
+
+/* 
+ * Обработчик команд консоли для отправки данных в LIN/UART каналы.
+ * Синтаксис: lin_send <канал 1-4> <байт1> [байт2] [байт3] ...
+ */
+static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
+{
+    if (argc < 3) {
+        shell_error(sh, "Ошибка: Неверное число аргументов.");
+        shell_print(sh, "Использование: lin_send <1-4> <байт1> [байт2] ...");
+        return -EINVAL;
+    }
+
+    // 1. Парсим номер канала (1, 2, 3 или 4)
+    int channel = atoi(argv[1]);
+    if (channel < 1 || channel > 4) {
+        shell_error(sh, "Ошибка: Номер канала должен быть от 1 до 4.");
+        return -EINVAL;
+    }
+
+    // 2. Определяем SYSTEM_BUS_ID для передачи в зависимости от канала
+    SYSTEM_BUS_ID target_bus_id;
+    switch (channel) {
+        case 1: target_bus_id = LIN1_TX; break; // Замени на свои реальные ID из system_bus_model.h
+        case 2: target_bus_id = LIN2_TX; break;
+        case 3: target_bus_id = LIN3_TX; break;
+        case 4: target_bus_id = LIN4_TX; break;
+        default: return -EINVAL;
+    }
+
+    shell_print(sh, "Отправка в канал LIN %d (аргументов: %zu)...", channel, argc - 2);
+
+    // 3. Парсим все последующие аргументы как байты данных
+    for (size_t i = 2; i < argc; i++) {
+        // Поддерживаем как десятичный формат (например, 255), так и hex (например, 0xFF)
+        char *endptr;
+        unsigned long byte_val = strtoul(argv[i], &endptr, 0);
+
+        if (*endptr != '\0' || byte_val > 0xFF) {
+            shell_error(sh, "Ошибка: Некорректный байт '%s' (ожидается 0..255 или 0x00..0xFF)", argv[i]);
+            return -EINVAL;
+        }
+
+        uint8_t byte_data = (uint8_t)byte_val;
+
+        // 4. Перекладываем байт через твой макрос SYSTEM_BUS_SET
+        // (Предполагается, что на стороне шины настроен обработчик u32 или raw для этих ID)
+        int err = SYSTEM_BUS_SET(target_bus_id, (uint32_t)byte_data);
+        if (err != 0) {
+            shell_error(sh, "Ошибка отправки байта 0x%02X в шину (err: %d)", byte_data, err);
+            return err;
+        }
+
+        shell_print(sh, "  -> Отправлен байт: 0x%02X (%u)", byte_data, byte_data);
+    }
+
+    shell_print(sh, "Пакет успешно передан в систему шин.");
+    return 0;
+}
+
+/* 
+ * Регистрация команды в подсистеме Zephyr Shell
+ * Синтаксис макроса: SHELL_CMD_ARG(имя_команды, табуляция_подкомманд, справка, указатель_на_функцию, мин_аргументов, макс_аргументов)
+ */
+SHELL_CMD_ARG_REGISTER(lin_send, NULL, 
+    "Отправить данные в LIN канал.\nИспользование: lin_send <1-4> <байт1> [байт2] ...", 
+    cmd_lin_send, 3, SHELL_OPT_ARG_CHECK_SKIP);

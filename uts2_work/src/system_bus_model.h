@@ -135,6 +135,14 @@ typedef enum
     CAN1_RX,
     CAN2_RX,
     CAN3_RX,
+    LIN1_TX,
+    LIN1_RX,
+    LIN2_TX,
+    LIN2_RX,
+    LIN3_TX,
+    LIN3_RX,
+    LIN4_TX,
+    LIN4_RX,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;

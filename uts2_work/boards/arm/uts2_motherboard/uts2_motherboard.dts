@@ -576,14 +576,14 @@ zephyr_udc0: &usbotg_hs {
 };
 
 
+
 / {
-    /* Описываем общий пин SLP для трансиверов TJA1027 (порт C, пин 3) */
-    lin_config {
+    lin_slp_control {
         compatible = "zephyr,user";
         slp-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
     };
 };
-
+&gpioc { status = "okay"; };
 /* Настраиваем пины и включаем нужные UART-контроллеры */
 /* Примечание: имена узлов (&usart1, &uart4 и т.д.) зависят от твоего камня STM32. 
    Здесь показан пример для четырех независимых портов. */
