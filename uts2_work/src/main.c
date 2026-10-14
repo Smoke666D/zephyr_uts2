@@ -30,8 +30,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define SPI4_NODE DT_NODELABEL(spi4)
 
 
-const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(usart1));
-static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(usart1));
+
+static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0));
 
 // Объявляем буферы глобально (в статической памяти), чтобы они не лежали на стеке
 static uint8_t wr_cmd[] = { 0x02, 0x00, 0x00, 0x55 }; // WEN/Write массив
