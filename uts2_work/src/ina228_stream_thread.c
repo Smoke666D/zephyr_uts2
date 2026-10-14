@@ -6,8 +6,8 @@
  *  @author     Dymov Igor
  *
  *  @brief      Опрос датчиков тока и напряжения INA228 через RTIO и ZBUS
- *  @details    Осуществляет асинхронный опрос группы датчиков INA228, декодирование
- *              данных из формата Q31 в физические величины и публикацию пакета в ZBUS.
+ *  @details    Быстрый асинхронный опрос U и I через RTIO + прямое точечное
+ *              чтение накопленной энергии 10 раз в секунду.
  */
 
 /***************************************************************************************************
@@ -15,6 +15,7 @@
  **************************************************************************************************/
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -23,29 +24,25 @@
 #include <zephyr/rtio/rtio.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
-#include "system_bus_model.h"
+
 #include <zephyr/dt-bindings/sensor/ina237.h>
 #include <zephyr/drivers/sensor/ina2xx.h>
 
+#include "system_bus_model.h"
 #include "ina228_stream_thread.h"
-
 
 /***************************************************************************************************
  *                                           DEFINITIONS
  **************************************************************************************************/
-#define POLL_INTERVAL_MS          100
+LOG_MODULE_REGISTER(ina_rtio_poller, LOG_LEVEL_INF);
+
+#define FAST_POLL_INTERVAL_MS     1   /* Быстрый опрос U и I каждые 10 мс (100 Гц) */
+#define SLOW_ENERGY_POLL_TICKS    10   /* Опрос энергии каждые 10 тиков (100 мс / 10 Гц) */
+
 #define INA228_THREAD_STACK_SIZE  3072
 #define INA228_THREAD_PRIORITY    4
 
-
-LOG_MODULE_REGISTER(ina_rtio_poller, LOG_LEVEL_INF);
-
-ZBUS_SUBSCRIBER_DEFINE(energy_sub, 1);
-
-
-static struct k_work_delayable ina_sensor_poll_dwork;
-
-// Канал ZBUS для периодических быстрых данных (U, I)
+// Канал ZBUS для быстрых данных (U, I)
 ZBUS_CHAN_DEFINE(ina_batch_chan,
                  ina_batch_msg_t,
                  NULL,
@@ -53,40 +50,29 @@ ZBUS_CHAN_DEFINE(ina_batch_chan,
                  ZBUS_OBSERVERS_EMPTY,
                  ZBUS_MSG_INIT(0));
 
-// Новый канал ZBUS для асинхронной публикации энергии по запросу
+// Канал ZBUS для накопленной энергии
 ZBUS_CHAN_DEFINE(ina_energy_chan,
                  ina_energy_msg_t,
                  NULL,
                  NULL,
-                 ZBUS_OBSERVERS(energy_sub),
+                 ZBUS_OBSERVERS_EMPTY,
                  ZBUS_MSG_INIT(0));
-
-/***************************************************************************************************
- *                                          PRIVATE TYPES
- **************************************************************************************************/
-typedef struct ina_param_map 
-{
-    uint8_t sensor_idx; // Индекс датчика 0..7 в пакете ZBUS
-    bool    is_voltage; // Флаг измерения напряжения (true - напряжение, false - ток)
-} ina_param_map_t;
 
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
-
 static double _q31_to_double(int32_t _value, int8_t _shift);
-static void   _process_energy_chain(bool _publish_to_zbus);
 static void   _process_fast_measurements(ina_batch_msg_t *_batch);
+static void   _process_slow_energy_fetch(void);
 static void   _rti_poller_thread(void *_p1, void *_p2, void *_p3);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-static K_SEM_DEFINE(sem_read_energy,  0, 1);
-static K_SEM_DEFINE(sem_reset_energy, 0, 1);
-static K_MUTEX_DEFINE(energy_read_mutex);
+// Программный аккумулятор энергии в Джоулях для 8 датчиков
+static double total_energy[CUR_SENS_NUM_SENSORS] = {0};
 
-// 1. Каналы для быстрого периодического опроса (U, I)
+// Каналы для быстрого опроса U и I через RTIO
 #define INA_FAST_CHANNELS \
     { SENSOR_CHAN_VOLTAGE, 0 }, \
     { SENSOR_CHAN_CURRENT, 0 }
@@ -104,25 +90,6 @@ static const struct rtio_iodev *const fast_iodevs[CUR_SENS_NUM_SENSORS] =
 {
     &ina_iodev_0, &ina_iodev_1, &ina_iodev_2, &ina_iodev_3,
     &ina_iodev_4, &ina_iodev_5, &ina_iodev_6, &ina_iodev_7
-};
-
-// 2. Отдельные IODEV для чтения энергии (энергия сбрасывается аппаратно при чтении)
-#define INA_ENERGY_CHANNELS \
-    { (enum sensor_channel)SENSOR_CHAN_INA2XX_ENERGY, 0 }
-
-SENSOR_DT_READ_IODEV(ina_energy_iodev_0, DT_NODELABEL(cur_sens_brd_low),   INA_ENERGY_CHANNELS);
-SENSOR_DT_READ_IODEV(ina_energy_iodev_1, DT_NODELABEL(cur_sens_brd_high),  INA_ENERGY_CHANNELS);
-SENSOR_DT_READ_IODEV(ina_energy_iodev_2, DT_NODELABEL(cur_sens_vdut2),     INA_ENERGY_CHANNELS);
-SENSOR_DT_READ_IODEV(ina_energy_iodev_3, DT_NODELABEL(cur_sens_vdut3),     INA_ENERGY_CHANNELS);
-SENSOR_DT_READ_IODEV(ina_energy_iodev_4, DT_NODELABEL(cur_sens_vin),       INA_ENERGY_CHANNELS);
-SENSOR_DT_READ_IODEV(ina_energy_iodev_5, DT_NODELABEL(cur_sens_3_3_dcdc),  INA_ENERGY_CHANNELS);
-SENSOR_DT_READ_IODEV(ina_energy_iodev_6, DT_NODELABEL(cur_sens_vdout_pwr), INA_ENERGY_CHANNELS);
-SENSOR_DT_READ_IODEV(ina_energy_iodev_7, DT_NODELABEL(cur_sens_5vd),       INA_ENERGY_CHANNELS);
-
-static const struct rtio_iodev *const energy_iodevs[CUR_SENS_NUM_SENSORS] = 
-{
-    &ina_energy_iodev_0, &ina_energy_iodev_1, &ina_energy_iodev_2, &ina_energy_iodev_3,
-    &ina_energy_iodev_4, &ina_energy_iodev_5, &ina_energy_iodev_6, &ina_energy_iodev_7
 };
 
 // Общие структуры устройств
@@ -151,130 +118,20 @@ RTIO_DEFINE_WITH_MEMPOOL(ina_rtio,
                          128, 
                          sizeof(void *));
 
-static uint8_t  __attribute__((section("DTCM"), aligned(32))) 
-    rti_poller_stack[INA228_THREAD_STACK_SIZE];
-
-static struct k_thread rti_poller_thread_data;
-static k_tid_t         rti_poller_tid;
+// Объявление стека в секции DTCM
+K_THREAD_STACK_DEFINE(rti_poller_stack, INA228_THREAD_STACK_SIZE) __attribute__((section(".dtcm_noinit")));
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
  **************************************************************************************************/
 
-/**
- *  @brief      Преобразование формата Q31 в вещественное число
- *  @details    Принимает 32-битное число со знаком в формате с фиксированной 
- *              точкой и преобразует его в формат double с учетом сдвига.
- *
- *  @param      _value - Исходное значение в формате Q31
- *  @param      _shift - Вес двоичной точки (число знаков после запятой)
- *
- *  @return     double - Преобразованное вещественное число
- */
 static inline double _q31_to_double(int32_t _value, int8_t _shift)
 {
     return (double)_value / (double)(1ULL << (31 - _shift));
 }
 
-/*
-static void _process_energy_chain(bool _publish_to_zbus)
-{
-    int expected_completions = 0;
-
-    // Асинхронный запуск чтения канала энергии
-    for (int i = 0; i < CUR_SENS_NUM_SENSORS; i++) 
-    {
-        int rc = sensor_read_async_mempool(energy_iodevs[i], &ina_rtio, (void *)(uintptr_t)i);
-        if (rc < 0) 
-        {
-            LOG_ERR("Не удалось запустить чтение энергии для %s: %d", sensor_names[i], rc);
-        }
-        else
-        {
-            expected_completions++;
-        }
-    }
-
-    ina_energy_msg_t energy_msg = {0};
-    int completions_received = 0;
-
-    while (completions_received < expected_completions) 
-    {
-        struct rtio_cqe *cqe = rtio_cqe_consume_block(&ina_rtio);
-        if (cqe == NULL) 
-        {
-            break;
-        }
-
-        int idx = (int)(uintptr_t)cqe->userdata;
-
-        if (cqe->result >= 0) 
-        {
-            uint8_t *buf = NULL;
-            uint32_t buf_len = 0;
-            rtio_cqe_get_mempool_buffer(&ina_rtio, cqe, &buf, &buf_len);
-
-            // Если запрашивалось именно чтение, декодируем данные
-            if (_publish_to_zbus) 
-            {
-                const struct sensor_decoder_api *decoder = NULL;
-                int dec_err = sensor_get_decoder(devices[idx], &decoder);
-
-                if (true
-                    && dec_err == 0 
-                    && decoder != NULL 
-                    && buf != NULL
-                   ) 
-                {
-                    uint32_t fit = 0;
-                    struct sensor_q31_data e_data = {0};
-                    struct sensor_chan_spec chan_spec = 
-                    {
-                        .chan_type = (uint16_t)SENSOR_CHAN_INA2XX_ENERGY, 
-                        .chan_idx  = 0
-                    };
-
-                    int dec_rc = decoder->decode(buf, chan_spec, &fit, 1, &e_data);
-                    
-                    if (dec_rc > 0) 
-                    {
-                        energy_msg.energy[idx] = _q31_to_double(
-                            e_data.readings[0].value, 
-                            e_data.shift
-                        );
-                    }
-                }
-            }
-
-            rtio_release_buffer(&ina_rtio, buf, buf_len);
-        } 
-        else 
-        {
-            LOG_ERR("Сбой чтения энергии %s с ошибкой: %d", sensor_names[idx], cqe->result);
-        }
-
-        rtio_cqe_release(&ina_rtio, cqe);
-        completions_received++;
-    }
-
-    // Если это было чтение, отправляем данные в ZBUS
-    if (_publish_to_zbus) 
-    {
-        zbus_chan_pub(&ina_energy_chan, &energy_msg, K_NO_WAIT);
-        LOG_INF("Пакет накопленной энергии опубликован в ZBUS.");
-    } 
-    else 
-    {
-        LOG_INF("Аппаратные накопители энергии сброшены.");
-    }
-}
-
 /**
- *  @brief      Стандартная циклическая цепочка опроса U и I
- *  @details    Асинхронно считывает каналы напряжения и тока со всех датчиков,
- *              декодирует их и отправляет пакет в ZBUS.
- *
- *  @param      _batch - Указатель на структуру для записи результатов опроса
+ * @brief Быстрый асинхронный опрос U и I через RTIO
  */
 static void _process_fast_measurements(ina_batch_msg_t *_batch)
 {
@@ -313,46 +170,25 @@ static void _process_fast_measurements(ina_batch_msg_t *_batch)
             const struct sensor_decoder_api *decoder = NULL;
             int dec_err = sensor_get_decoder(devices[idx], &decoder);
 
-            if (true
-                && dec_err == 0 
-                && decoder != NULL 
-                && buf != NULL
-               ) 
+            if (dec_err == 0 && decoder != NULL && buf != NULL) 
             {
                 uint32_t fit = 0;
                 struct sensor_q31_data v_data = {0};
                 struct sensor_q31_data i_data = {0};
-                struct sensor_chan_spec  v_spec = 
-                {
-                    .chan_type = SENSOR_CHAN_VOLTAGE, 
-                    .chan_idx  = 0
-                };
 
-                // Декодирование напряжения
-                int dec_rc = decoder->decode(buf, v_spec, &fit, 1, &v_data);
-                if (dec_rc > 0) 
+                // 1. Напряжение
+                struct sensor_chan_spec v_spec = { .chan_type = SENSOR_CHAN_VOLTAGE, .chan_idx = 0 };
+                if (decoder->decode(buf, v_spec, &fit, 1, &v_data) > 0) 
                 {
-                    _batch->sensors[idx*2] = _q31_to_double(
-                        v_data.readings[0].value, 
-                        v_data.shift
-                    );
+                    _batch->sensors[idx * 2] = _q31_to_double(v_data.readings[0].value, v_data.shift);
                 }
 
-                // Декодирование тока
+                // 2. Ток
                 fit = 0;
-                struct sensor_chan_spec  i_spec = 
+                struct sensor_chan_spec i_spec = { .chan_type = SENSOR_CHAN_CURRENT, .chan_idx = 0 };
+                if (decoder->decode(buf, i_spec, &fit, 1, &i_data) > 0) 
                 {
-                    .chan_type = SENSOR_CHAN_CURRENT, 
-                    .chan_idx  = 0
-                };
-
-                dec_rc = decoder->decode(buf, i_spec, &fit, 1, &i_data);
-                if (dec_rc > 0) 
-                {
-                    _batch->sensors[idx*2 + 1] = _q31_to_double(
-                        i_data.readings[0].value, 
-                        i_data.shift
-                    );
+                    _batch->sensors[idx * 2 + 1] = _q31_to_double(i_data.readings[0].value, i_data.shift);
                 }
             }
 
@@ -370,7 +206,39 @@ static void _process_fast_measurements(ina_batch_msg_t *_batch)
     zbus_chan_pub(&ina_batch_chan, _batch, K_NO_WAIT);
 }
 
+/**
+ * @brief Медленное прямое чтение аппаратного регистра энергии 10 раз в секунду (раз в 100 мс)
+ */
+static void _process_slow_energy_fetch(void)
+{
+    ina_energy_msg_t energy_msg;
 
+    for (int i = 0; i < CUR_SENS_NUM_SENSORS; i++) 
+    {
+        struct sensor_value e_val;
+        
+        // Точечное прямое чтение регистра энергии INA228
+        int rc = sensor_sample_fetch_chan(devices[i], (enum sensor_channel)SENSOR_CHAN_INA2XX_ENERGY);
+        if (rc == 0) 
+        {
+            rc = sensor_channel_get(devices[i], (enum sensor_channel)SENSOR_CHAN_INA2XX_ENERGY, &e_val);
+            if (rc == 0) 
+            {
+                double delta_e = sensor_value_to_double(&e_val);
+                total_energy[i] += delta_e; // Накапливаем в суммарный счетчик
+            }
+        }
+        
+        energy_msg.energy[i] = total_energy[i];
+    }
+
+    // Публикация накопленной энергии в ZBUS
+    zbus_chan_pub(&ina_energy_chan, &energy_msg, K_NO_WAIT);
+}
+
+/**
+ * @brief Главный поток планировщика
+ */
 static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
 {
     ARG_UNUSED(_p1); ARG_UNUSED(_p2); ARG_UNUSED(_p3);
@@ -387,30 +255,23 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
     LOG_INF("Все датчики INA228 готовы. Запуск гибридного цикла RTIO/ZBUS.");
 
     ina_batch_msg_t batch;
-    // Инициализируем структуру один раз, чтобы сохранять предыдущие значения при сбоях
     memset(&batch, 0, sizeof(batch)); 
 
+    uint32_t poll_tick = 0;
+
     while (1) 
-    {
-        // Проверяем семафоры запросов
-       // bool do_read_energy  = (k_sem_take(&sem_read_energy, K_NO_WAIT) == 0);
-       // bool do_reset_energy = (k_sem_take(&sem_reset_energy, K_NO_WAIT) == 0);
+    {  
+        // 1. Быстрый опрос U и I каждые FAST_POLL_INTERVAL_MS (10 мс)
+        _process_fast_measurements(&batch);
 
-        //if (false
-          //  || do_read_energy 
-           // || do_reset_energy
-       //) 
-       // {
-       //     // Выполняем внеочередную цепочку работы с энергией
-       //     _process_energy_chain(do_read_energy);
-       // } 
-      //  else 
-      //  {
-            // Обычный циклический опрос быстрых параметров
-            _process_fast_measurements(&batch);
-        //}
+        // 2. Опрос энергии раз в 10 тиков (каждые 100 мс)
+        if (++poll_tick >= SLOW_ENERGY_POLL_TICKS) 
+        {
+            poll_tick = 0;
+            _process_slow_energy_fetch();
+        }
 
-        k_msleep(POLL_INTERVAL_MS);
+        k_msleep(FAST_POLL_INTERVAL_MS);
     }
 }
 
@@ -418,28 +279,76 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
  *                                        PUBLIC FUNCTIONS
  **************************************************************************************************/
 
+/**
+ * @brief Запрос сброса накопленной энергии для всех датчиков
+ */
+void ina228_request_energy_reset(void)
+{
+    int err = zbus_chan_claim(&ina_energy_chan, K_MSEC(100));
+    if (err == 0) 
+    {
+        ina_energy_msg_t *msg = zbus_chan_msg(&ina_energy_chan);
+        for (int i = 0; i < CUR_SENS_NUM_SENSORS; i++) 
+        {
+            total_energy[i] = 0.0;
+            msg->energy[i] = 0.0;
+        }
+        zbus_chan_finish(&ina_energy_chan);
+        zbus_chan_notify(&ina_energy_chan, K_MSEC(100));
+    }
+}
 
+/**
+ * @brief Запрос сброса накопленной энергии для конкретного датчика (0..7)
+ */
+void ina228_reset_sensor_energy(uint8_t sensor_idx)
+{
+    if (sensor_idx < CUR_SENS_NUM_SENSORS) 
+    {
+        int err = zbus_chan_claim(&ina_energy_chan, K_MSEC(100));
+        if (err == 0) 
+        {
+            ina_energy_msg_t *msg = zbus_chan_msg(&ina_energy_chan);
+            total_energy[sensor_idx] = 0.0;
+            msg->energy[sensor_idx] = 0.0;
+            zbus_chan_finish(&ina_energy_chan);
+            zbus_chan_notify(&ina_energy_chan, K_MSEC(100));
+        }
+    }
+}
+
+// Запуск потока с использованием стека в DTCM
 K_THREAD_DEFINE(ina_thread_id, INA228_THREAD_STACK_SIZE, _rti_poller_thread, 
-            NULL, NULL, NULL, 
+                NULL, NULL, NULL, 
                 INA228_THREAD_PRIORITY, 0, 0);
 
+// Регистрация путей шины параметров для Токов и Напряжений
+PARAM_ROUTE_DEFINE(SENS_BRD_LOW_CURRENT,   &ina_batch_chan, 0,  ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_BRD_LOW_VOLTAGE,   &ina_batch_chan, 1,  ARRAY_DATA);  
+PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_CURRENT,  &ina_batch_chan, 2,  ARRAY_DATA); 
+PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_VOLTAGE,  &ina_batch_chan, 3,  ARRAY_DATA); 
+PARAM_ROUTE_DEFINE(SENS_VDUT2_CURRENT,     &ina_batch_chan, 4,  ARRAY_DATA);   
+PARAM_ROUTE_DEFINE(SENS_VDUT2_VOLTAGE,     &ina_batch_chan, 5,  ARRAY_DATA);  
+PARAM_ROUTE_DEFINE(SENS_VDUT3_CURRENT,     &ina_batch_chan, 6,  ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_VDUT3_VOLTAGE,     &ina_batch_chan, 7,  ARRAY_DATA);  
+PARAM_ROUTE_DEFINE(SENS_VIN_CURRENT,       &ina_batch_chan, 8,  ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_VIN_VOLTAGE,       &ina_batch_chan, 9,  ARRAY_DATA);    
+PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_CURRENT,  &ina_batch_chan, 10, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_VOLTAGE,  &ina_batch_chan, 11, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_CURRENT, &ina_batch_chan, 12, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_VOLTAGE, &ina_batch_chan, 13, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_VD5_CURRENT,       &ina_batch_chan, 14, ARRAY_DATA);      
+PARAM_ROUTE_DEFINE(SENS_VD5_VOLTAGE,       &ina_batch_chan, 15, ARRAY_DATA); 
 
-PARAM_ROUTE_DEFINE(SENS_BRD_LOW_CURRENT,&ina_batch_chan,0,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_BRD_LOW_VOLTAGE,&ina_batch_chan,1,ARRAY_DATA);  
-PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_CURRENT,&ina_batch_chan,2,ARRAY_DATA); 
-PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_VOLTAGE,&ina_batch_chan,3,ARRAY_DATA); 
-PARAM_ROUTE_DEFINE(SENS_VDUT2_CURRENT,&ina_batch_chan,4,ARRAY_DATA);   
-PARAM_ROUTE_DEFINE(SENS_VDUT2_VOLTAGE,&ina_batch_chan,5,ARRAY_DATA);  
-PARAM_ROUTE_DEFINE(SENS_VDUT3_CURRENT,&ina_batch_chan,6,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VDUT3_VOLTAGE,&ina_batch_chan,7,ARRAY_DATA);  
-PARAM_ROUTE_DEFINE(SENS_VIN_CURRENT,&ina_batch_chan,8,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VIN_VOLTAGE,&ina_batch_chan,9,ARRAY_DATA);    
-PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_CURRENT,&ina_batch_chan,10,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_VOLTAGE,&ina_batch_chan,11,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_CURRENT,&ina_batch_chan,12,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_VOLTAGE,&ina_batch_chan,13,ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VD5_CURRENT,&ina_batch_chan,14,ARRAY_DATA);      
-PARAM_ROUTE_DEFINE(SENS_VD5_VOLTAGE,&ina_batch_chan,15,ARRAY_DATA); 
+// Регистрация путей шины параметров для Накопленной Энергии
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_LOW,   &ina_energy_chan, 0, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_HIGH,  &ina_energy_chan, 1, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT2,     &ina_energy_chan, 2, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT3,     &ina_energy_chan, 3, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VIN,       &ina_energy_chan, 4, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_DCDC_3_3,  &ina_energy_chan, 5, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDOUT_PWR, &ina_energy_chan, 6, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VD5,       &ina_energy_chan, 7, ARRAY_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

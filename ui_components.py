@@ -449,21 +449,37 @@ def build_dashboard(ports_refs, ui_labels):
         for i in range(6):
           create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
 
-    # --- БЛОК 9: ОТДЕЛЬНАЯ ПАНЕЛЬ ДАТЧИКОВ ТОКА И НАПРЯЖЕНИЯ (1-8) ---
+ # --- БЛОК 9: ПАНЕЛЬ ДАТЧИКОВ ТОКА, НАПРЯЖЕНИЯ И ЭНЕРГИИ (1-8) ---
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      ui.label('Панель датчиков тока и напряжения (1-8)').classes(
-          'text-xs font-semibold text-yellow-300 mb-1.5'
-      )
+      with ui.row().classes('w-full justify-between items-center mb-1'):
+        ui.label('Панель датчиков тока, напряжения и энергии (1-8)').classes(
+            'text-xs font-semibold text-yellow-300'
+        )
+
+      def make_energy_reset_handler(d_idx):
+        def handler():
+          cmd = f'energy_reset {d_idx}\r\n'
+          curr_shell = shell_ref.get('ser')
+          if curr_shell and curr_shell.is_open:
+            curr_shell.write(cmd.encode('utf-8'))
+            ui.notify(f'[Датчик {d_idx}] Сброс энергии отправлен', type='info')
+          else:
+            ui.notify('Shell порт закрыт!', type='warning')
+        return handler
 
       with ui.grid(columns=4).classes('w-full gap-1.5'):
         for i in range(1, 9):
-          with ui.card().classes('bg-slate-700 py-1.5 px-2.5 rounded'):
-            ui.label(f'Датчик {i}').classes(
-                'text-[11px] text-yellow-300 font-bold leading-none mb-1'
-            )
+          with ui.card().classes('bg-slate-700 py-1.5 px-2.5 rounded flex flex-col justify-between'):
+            
+            # Шапка карточки датчика с кнопкой сброса
+            with ui.row().classes('w-full justify-between items-center mb-1'):
+              ui.label(f'Датчик {i}').classes('text-[11px] text-yellow-300 font-bold leading-none')
+              ui.button('Сброс', on_click=make_energy_reset_handler(i)).classes(
+                  'bg-red-700 text-white text-[9px] py-0.5 px-1.5 rounded'
+              )
 
             # Строка Напряжения
-            with ui.row().classes('w-full justify-between items-center'):
+            with ui.row().classes('w-full justify-between items-center mt-0.5'):
               ui.label('U:').classes('text-[10px] text-slate-300 leading-none')
               with ui.row().classes('items-center gap-1'):
                 ui_labels[f'curr_v_{i}'] = ui.label('0.00').classes(
@@ -472,15 +488,22 @@ def build_dashboard(ports_refs, ui_labels):
                 ui.label('В').classes('text-[10px] text-slate-400 leading-none')
 
             # Строка Тока
-            with ui.row().classes(
-                'w-full justify-between items-center mt-1'
-            ):
+            with ui.row().classes('w-full justify-between items-center mt-1'):
               ui.label('I:').classes('text-[10px] text-slate-300 leading-none')
               with ui.row().classes('items-center gap-1'):
                 ui_labels[f'curr_i_{i}'] = ui.label('0.0000').classes(
                     'text-xs font-mono text-sky-400 font-bold leading-none'
                 )
                 ui.label('А').classes('text-[10px] text-slate-400 leading-none')
+
+            # Строка Энергии (6 знаков после запятой)
+            with ui.row().classes('w-full justify-between items-center mt-1'):
+              ui.label('E:').classes('text-[10px] text-slate-300 leading-none')
+              with ui.row().classes('items-center gap-1'):
+                ui_labels[f'curr_e_{i}'] = ui.label('0.000000').classes(
+                    'text-xs font-mono text-amber-400 font-bold leading-none'
+                )
+                ui.label('Дж').classes('text-[10px] text-slate-400 leading-none')
     # ==========================================
     # 7. ИНТЕРФЕЙСЫ LIN (1-4)
     # ==========================================

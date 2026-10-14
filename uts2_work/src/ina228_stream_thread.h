@@ -64,7 +64,7 @@ typedef struct ina_batch_msg
  */
 typedef struct ina_energy_msg 
 {
-    double energy[CUR_SENS_NUM_SENSORS];
+    float energy[CUR_SENS_NUM_SENSORS];
 } ina_energy_msg_t;
 
 /***************************************************************************************************

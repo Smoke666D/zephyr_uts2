@@ -32,7 +32,7 @@ struct telemetry_packet {
     // Environment (P3V3, P5V0, VIN, VDOUT1, P40V, USB, VDOUT2, VDOUT3)
     float    env[8];
 
-    float    current_sensors[16]; 
+    float    current_sensors[24]; 
         // --- Напряжения LIN интерфейсов (4 шт) ---
     // lin_voltages[0] -> LIN 1, lin_voltages[1] -> LIN 2, и т.д.
     float    lin_voltages[4];

@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   10
+#define SLEEP_TIME_MS   1
 
 #define SPI4_NODE DT_NODELABEL(spi4)
 
@@ -364,20 +364,36 @@ void send_binary_telemetry(const struct device *uart_dev) {
 
     SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,   &pkt.current_sensors[0]);
     SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[1]);
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &pkt.current_sensors[2]);
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &pkt.current_sensors[3]);
-    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,    &pkt.current_sensors[4]);
-    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,   &pkt.current_sensors[5]);
-    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,   &pkt.current_sensors[6]);
-    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,   &pkt.current_sensors[7]);
-    SYSTEM_BUS_GET(SENS_VIN_CURRENT,     &pkt.current_sensors[8]);
-    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,     &pkt.current_sensors[9]);
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT, &pkt.current_sensors[10]);
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE, &pkt.current_sensors[11]);
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &pkt.current_sensors[12]);
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &pkt.current_sensors[13]);
-    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &pkt.current_sensors[14]);
-    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &pkt.current_sensors[15]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_LOW,       &pkt.current_sensors[2]);
+
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &pkt.current_sensors[3]);
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &pkt.current_sensors[4]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_HIGH,       &pkt.current_sensors[5]);
+
+    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,    &pkt.current_sensors[6]);
+    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,   &pkt.current_sensors[7]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT2,       &pkt.current_sensors[8]);
+
+    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,   &pkt.current_sensors[9]);
+    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,   &pkt.current_sensors[10]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT3,       &pkt.current_sensors[11]);
+
+    SYSTEM_BUS_GET(SENS_VIN_CURRENT,     &pkt.current_sensors[12]);
+    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,     &pkt.current_sensors[13]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VIN,       &pkt.current_sensors[14]);
+
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT, &pkt.current_sensors[15]);
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE, &pkt.current_sensors[16]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_DCDC_3_3,       &pkt.current_sensors[17]);
+
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &pkt.current_sensors[18]);
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &pkt.current_sensors[19]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR,       &pkt.current_sensors[20]);
+
+    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &pkt.current_sensors[21]);
+    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &pkt.current_sensors[22]);                    
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,       &pkt.current_sensors[23]);
+
 
 
     SYSTEM_BUS_GET(LIN_AO1,       &pkt.lin_voltages[0]);
@@ -565,7 +581,7 @@ int main(void)
             send_uart_stream_to_dashboard(lin_msg.iface_id,&data,1);            
         }
 
-        k_msleep(SLEEP_TIME_MS);      
+    
         send_binary_telemetry(telemetry_uart);         
         k_msleep(SLEEP_TIME_MS);   
     }

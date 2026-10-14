@@ -303,7 +303,11 @@
     status = "okay";
 	pinctrl-0 = <&i2c2_scl_pb10 &i2c2_sda_pb11>;
 	pinctrl-names = "default";
-    clock-frequency = <400000>; /* 400 kHz (Fast Mode) */
+    clock-frequency = <I2C_BITRATE_FAST_PLUS>; /* 1 MHz  */
+/* Точные тайминги для реально измеренной частоты шины 96 МГц */
+    timings = <96000000 I2C_BITRATE_STANDARD  0x20D09BEE>,
+              <96000000 I2C_BITRATE_FAST      0x00A0329E>,
+              <96000000 I2C_BITRATE_FAST_PLUS 0x00501043>;
 
     CUR_SENS_BRD_LOW: ina228@40 {
         compatible = "ti,ina228";
