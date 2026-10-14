@@ -1,5 +1,6 @@
 import asyncio
 from nicegui import ui
+from oscilloscope import build_oscilloscope_panel
 import serial
 from serial.tools import list_ports
 
@@ -19,7 +20,6 @@ LED_LINES = [
     {'id': 3, 'name': 'Синий'},
 ]
 
-# Глобальные словари для связи логов с фоновым потоком
 can_logs_dict = {}
 lin_logs_dict = {}
 raw_logs_dict = {}
@@ -36,7 +36,9 @@ def build_dashboard(ports_refs, ui_labels):
 
   with ui.column().classes('w-full gap-2') as container:
 
-    # --- БЛОК 1: ПОРТЫ ---
+    # ==========================================
+    # 1. БЛОК УПРАВЛЕНИЯ ПОРТАМИ
+    # ==========================================
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       with ui.row().classes('w-full gap-2'):
         # Телеметрия
@@ -98,7 +100,7 @@ def build_dashboard(ports_refs, ui_labels):
               curr.close()
               shell_ref['ser'] = None
               shell_btn.text = 'Открыть'
-              shell_btn.classes(remove='bg-red-600', add='bg-emerald-600')
+              shell_btn.classes(remove='bg-emerald-600', add='bg-emerald-600')
               ui.notify('Shell закрыт', type='warning')
             else:
               try:
@@ -187,7 +189,9 @@ def build_dashboard(ports_refs, ui_labels):
             'bg-amber-600 text-white font-bold text-xs py-1 px-2'
         )
 
-    # --- БЛОК 2: ENABLE ---
+    # ==========================================
+    # 2. ЛИНИИ ENABLE
+    # ==========================================
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       ui.label('Управление линиями enable').classes(
           'text-xs font-semibold text-yellow-300 mb-1'
@@ -215,7 +219,9 @@ def build_dashboard(ports_refs, ui_labels):
               on_change=make_en_handler(ch_num, name),
           ).classes('text-white text-xs')
 
-    # --- БЛОК 3: СВЕТОДИОДЫ ---
+    # ==========================================
+    # 3. СВЕТОДИОДЫ
+    # ==========================================
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       ui.label('Управление светодиодами').classes(
           'text-xs font-semibold text-yellow-300 mb-1'
@@ -244,7 +250,9 @@ def build_dashboard(ports_refs, ui_labels):
               on_change=make_led_handler(led['id'], led['name']),
           ).classes('text-white text-xs')
 
-    # --- БЛОК 4: IO (1-18) ---
+    # ==========================================
+    # 4. ЛИНИИ IO (1-18)
+    # ==========================================
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
           'text-xs font-semibold text-yellow-300 mb-1'
@@ -277,7 +285,9 @@ def build_dashboard(ports_refs, ui_labels):
                 lambda e, c=i, s=io_select: on_io_change(c, s),
             )
 
-    # --- БЛОК 5: ЦАП И РЕЗИСТОРЫ ---
+    # ==========================================
+    # 5. ЦАП И РЕЗИСТОРЫ
+    # ==========================================
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       ui.label('Управление ЦАП и подстроечными резисторами').classes(
           'text-xs font-semibold text-yellow-300 mb-1.5'
@@ -386,7 +396,173 @@ def build_dashboard(ports_refs, ui_labels):
               'bg-emerald-600 text-white text-xs py-1 px-2'
           )
 
-    # --- БЛОК 6: 3 CAN ИНФЕЙСА ---
+# --- БЛОК 7: ДАШБОРД ДАТЧИКОВ (Без дубля датчиков тока) ---
+    def create_metric_card(title, key, unit=''):
+      with ui.card().classes(
+          'bg-slate-700 py-3 px-3 flex-1 min-w-[130px] rounded flex flex-row justify-between items-center cursor-default'
+      ):
+        ui.label(title).classes(
+            'text-xs text-slate-300 font-medium leading-none m-0'
+        )
+        with ui.row().classes('items-center gap-1 m-0'):
+          lbl = ui.label('0.00').classes(
+              'text-base font-mono text-emerald-400 font-bold leading-none m-0'
+          )
+          if unit:
+            ui.label(unit).classes(
+                'text-xs text-slate-400 font-medium leading-none m-0'
+            )
+        ui_labels[key] = lbl
+
+    with ui.column().classes('w-full gap-2 cursor-grab'):
+      ui.label('Дашборд датчиков').classes('text-sm font-bold text-sky-300')
+      with ui.row().classes('w-full gap-1'):
+        create_metric_card('RF Power', 'rf_power', unit='дБ')
+        create_metric_card('NTC', 'ntc')
+        create_metric_card('Ext VSense', 'ext_vsense')
+        create_metric_card('Brd Detect', 'brd_detect')
+        create_metric_card('Температура МУ', 'temp_gnd', unit='°C')
+        create_metric_card('Температура ИУ', 'temp_vdd', unit='°C')
+        create_metric_card('Освещенность (DA22)', 'light_gnd', unit='лк')
+        create_metric_card('Освещенность (DA23)', 'light_vdd', unit='лк')
+
+      ui.label('Environment Voltages').classes(
+          'text-xs font-semibold text-slate-400 mt-1'
+      )
+      with ui.row().classes('w-full gap-1'):
+        for idx, name in enumerate(
+            ['P3V3', 'P5V0', 'VIN', 'VDOUT1', 'P40V', 'USB', 'VDOUT2', 'VDOUT3']
+        ):
+          create_metric_card(name, f'env_{idx}', unit='В')
+
+      ui.label('AO Channels (1-18)').classes(
+          'text-xs font-semibold text-slate-400 mt-1'
+      )
+      with ui.grid(columns=6).classes('w-full gap-1'):
+        for i in range(18):
+          create_metric_card(f'AO {i+1}', f'ao_{i}', unit='В')
+
+      ui.label('AIN VSense (1-6)').classes(
+          'text-xs font-semibold text-slate-400 mt-1'
+      )
+      with ui.grid(columns=6).classes('w-full gap-1'):
+        for i in range(6):
+          create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
+
+    # --- БЛОК 9: ОТДЕЛЬНАЯ ПАНЕЛЬ ДАТЧИКОВ ТОКА И НАПРЯЖЕНИЯ (1-8) ---
+    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+      ui.label('Панель датчиков тока и напряжения (1-8)').classes(
+          'text-xs font-semibold text-yellow-300 mb-1.5'
+      )
+
+      with ui.grid(columns=4).classes('w-full gap-1.5'):
+        for i in range(1, 9):
+          with ui.card().classes('bg-slate-700 py-1.5 px-2.5 rounded'):
+            ui.label(f'Датчик {i}').classes(
+                'text-[11px] text-yellow-300 font-bold leading-none mb-1'
+            )
+
+            # Строка Напряжения
+            with ui.row().classes('w-full justify-between items-center'):
+              ui.label('U:').classes('text-[10px] text-slate-300 leading-none')
+              with ui.row().classes('items-center gap-1'):
+                ui_labels[f'curr_v_{i}'] = ui.label('0.00').classes(
+                    'text-xs font-mono text-emerald-400 font-bold leading-none'
+                )
+                ui.label('В').classes('text-[10px] text-slate-400 leading-none')
+
+            # Строка Тока
+            with ui.row().classes(
+                'w-full justify-between items-center mt-1'
+            ):
+              ui.label('I:').classes('text-[10px] text-slate-300 leading-none')
+              with ui.row().classes('items-center gap-1'):
+                ui_labels[f'curr_i_{i}'] = ui.label('0.0000').classes(
+                    'text-xs font-mono text-sky-400 font-bold leading-none'
+                )
+                ui.label('А').classes('text-[10px] text-slate-400 leading-none')
+    # ==========================================
+    # 7. ИНТЕРФЕЙСЫ LIN (1-4)
+    # ==========================================
+    ui.label('Интерфейсы LIN (1-4)').classes(
+        'text-sm font-bold text-sky-300 mt-3'
+    )
+
+    def make_lin_block(l_idx):
+      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+        with ui.row().classes('w-full justify-between items-center mb-1'):
+          ui.label(f'LIN Интерфейс {l_idx}').classes(
+              'text-xs font-semibold text-yellow-300'
+          )
+
+          def handle_pull_down(e, idx=l_idx):
+            state = 'ON' if e.value else 'OFF'
+            cmd = f'linpb_set {idx} {state}\r\n'
+            curr_shell = shell_ref.get('ser')
+            if curr_shell and curr_shell.is_open:
+              curr_shell.write(cmd.encode('utf-8'))
+              ui.notify(f'[LIN{idx} PULL_DOWN] {state}', type='info')
+            else:
+              ui.notify('Shell порт закрыт!', type='warning')
+
+          ui.checkbox(
+              'PULL_DOWN', value=False, on_change=handle_pull_down
+          ).classes('text-white text-xs')
+
+          with ui.row().classes('items-center gap-1'):
+            ui.label('U:').classes('text-[11px] text-slate-300')
+            lin_v_lbl = ui.label('0.00').classes(
+                'text-xs font-mono text-emerald-400 font-bold'
+            )
+            ui.label('В').classes('text-[11px] text-slate-400')
+            ui_labels[f'lin_v_{l_idx}'] = lin_v_lbl
+
+        ui.label('Входящие пакеты:').classes(
+            'text-[10px] text-slate-400 mt-1 mb-0.5'
+        )
+        lin_log = ui.log(max_lines=20).classes(
+            'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1 rounded'
+        )
+        lin_log.push(f'LIN{l_idx} готов...')
+        lin_logs_dict[l_idx] = lin_log
+
+        with ui.row().classes('w-full gap-2 items-center mt-1.5'):
+          lin_data_input = ui.input(
+              placeholder='Данные через пробел (например: 10 20 AA)'
+          ).props('dark outlined dense input-class="text-xs"').classes(
+              'flex-1 bg-slate-700 text-xs text-white rounded'
+          )
+
+          def send_lin_msg(idx=l_idx, data_inp=lin_data_input, log=lin_log):
+            ldata = data_inp.value.strip()
+            if not ldata:
+              ui.notify(f'LIN{idx}: Введите данные для отправки!', type='warning')
+              return
+
+            cmd = f'lin_send {idx} {ldata}\r\n'
+            curr_shell = shell_ref.get('ser')
+
+            if curr_shell and curr_shell.is_open:
+              curr_shell.write(cmd.encode('utf-8'))
+              log.push(f'TX -> {ldata}')
+              data_inp.set_value('')
+            else:
+              ui.notify('Shell порт закрыт!', type='warning')
+
+          lin_data_input.on('keydown.enter', send_lin_msg)
+          ui.button('Отправить', on_click=send_lin_msg).classes(
+              'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
+          )
+
+    for lin_idx in range(1, 5):
+      make_lin_block(lin_idx)
+
+    # ==========================================
+    # 8. CAN ИНФЕЙСЫ (1-3)
+    # ==========================================
+    ui.label('Интерфейсы CAN (1-3)').classes(
+        'text-sm font-bold text-sky-300 mt-3'
+    )
     for can_idx in range(1, 4):
       with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
         ui.label(f'CAN Интерфейс {can_idx}').classes(
@@ -479,164 +655,11 @@ def build_dashboard(ports_refs, ui_labels):
               'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
           )
 
-    # --- БЛОК 7: ДАШБОРД ДАТЧИКОВ ---
-    def create_metric_card(title, key, unit=''):
-      with ui.card().classes(
-          'bg-slate-700 py-3 px-3 flex-1 min-w-[130px] rounded flex flex-row justify-between items-center cursor-default'
-      ):
-        ui.label(title).classes(
-            'text-xs text-slate-300 font-medium leading-none m-0'
-        )
-        with ui.row().classes('items-center gap-1 m-0'):
-          lbl = ui.label('0.00').classes(
-              'text-base font-mono text-emerald-400 font-bold leading-none m-0'
-          )
-          if unit:
-            ui.label(unit).classes(
-                'text-xs text-slate-400 font-medium leading-none m-0'
-            )
-        ui_labels[key] = lbl
-
-    with ui.column().classes('w-full gap-2 cursor-grab'):
-      ui.label('Дашборд датчиков').classes('text-sm font-bold text-sky-300')
-      with ui.row().classes('w-full gap-1'):
-        create_metric_card('RF Power', 'rf_power', unit='дБ')
-        create_metric_card('NTC', 'ntc')
-        create_metric_card('Ext VSense', 'ext_vsense')
-        create_metric_card('Brd Detect', 'brd_detect')
-        create_metric_card('Температура МУ', 'temp_gnd', unit='°C')
-        create_metric_card('Температура ИУ', 'temp_vdd', unit='°C')
-        create_metric_card('Освещенность (DA22)', 'light_gnd', unit='лк')
-        create_metric_card('Освещенность (DA23)', 'light_vdd', unit='лк')
-
-      ui.label('Environment Voltages').classes(
-          'text-xs font-semibold text-slate-400 mt-1'
-      )
-      with ui.row().classes('w-full gap-1'):
-        for idx, name in enumerate(
-            ['P3V3', 'P5V0', 'VIN', 'VDOUT1', 'P40V', 'USB', 'VDOUT2', 'VDOUT3']
-        ):
-          create_metric_card(name, f'env_{idx}', unit='В')
-
-      ui.label('AO Channels (1-18)').classes(
-          'text-xs font-semibold text-slate-400 mt-1'
-      )
-      with ui.grid(columns=6).classes('w-full gap-1'):
-        for i in range(18):
-          create_metric_card(f'AO {i+1}', f'ao_{i}', unit='В')
-
-      ui.label('AIN VSense (1-6)').classes(
-          'text-xs font-semibold text-slate-400 mt-1'
-      )
-      with ui.grid(columns=6).classes('w-full gap-1'):
-        for i in range(6):
-          create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
-
-      # Датчики тока
-      ui.label('Датчики тока и напряжения (1-8)').classes(
-          'text-xs font-semibold text-slate-400 mt-1'
-      )
-      with ui.grid(columns=4).classes('w-full gap-1'):
-        for i in range(1, 9):
-          with ui.card().classes(
-              'bg-slate-700 py-2.5 px-3 rounded flex flex-col justify-between cursor-default'
-          ):
-            ui.label(f'Датчик тока {i}').classes(
-                'text-xs text-yellow-300 font-bold leading-none mb-1.5'
-            )
-            with ui.row().classes('w-full justify-between items-center'):
-              ui.label('U:').classes('text-[11px] text-slate-300 leading-none')
-              with ui.row().classes('items-center gap-1'):
-                ui_labels[f'curr_v_{i}'] = ui.label('0.00').classes(
-                    'text-sm font-mono text-emerald-400 font-bold leading-none'
-                )
-                ui.label('В').classes('text-[11px] text-slate-400 leading-none')
-            with ui.row().classes('w-full justify-between items-center mt-1.5'):
-              ui.label('I:').classes('text-[11px] text-slate-300 leading-none')
-              with ui.row().classes('items-center gap-1'):
-                ui_labels[f'curr_i_{i}'] = ui.label('0.0000').classes(
-                    'text-sm font-mono text-sky-400 font-bold leading-none'
-                )
-                ui.label('А').classes(
-                    'text-[11px] text-slate-400 leading-none'
-                )
-
-    # --- БЛОК 8: 4 LIN ИНФЕЙСА ---
-# --- БЛОК 8: 4 LIN ИНФЕЙСА ---
-    ui.label('Интерфейсы LIN (1-4)').classes(
-        'text-sm font-bold text-sky-300 mt-2'
-    )
-
-    def make_lin_block(l_idx):
-      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-        with ui.row().classes('w-full justify-between items-center mb-1'):
-          ui.label(f'LIN Интерфейс {l_idx}').classes(
-              'text-xs font-semibold text-yellow-300'
-          )
-
-          # Функция-обработчик для конкретного индекса l_idx через аргумент по умолчанию
-          def handle_pull_down(e, idx=l_idx):
-            state = 'ON' if e.value else 'OFF'
-            cmd = f'linpb_set {idx} {state}\r\n'
-            curr_shell = shell_ref.get('ser')
-            if curr_shell and curr_shell.is_open:
-              curr_shell.write(cmd.encode('utf-8'))
-              ui.notify(f'[LIN{idx} PULL_DOWN] {state}', type='info')
-            else:
-              ui.notify('Shell порт закрыт!', type='warning')
-
-          # Используем штатный on_change для корректной поимки клика
-          ui.checkbox(
-              'PULL_DOWN', value=False, on_change=handle_pull_down
-          ).classes('text-white text-xs')
-
-          with ui.row().classes('items-center gap-1'):
-            ui.label('U:').classes('text-[11px] text-slate-300')
-            lin_v_lbl = ui.label('0.00').classes(
-                'text-xs font-mono text-emerald-400 font-bold'
-            )
-            ui.label('В').classes('text-[11px] text-slate-400')
-            ui_labels[f'lin_v_{l_idx}'] = lin_v_lbl
-
-        ui.label('Входящие пакеты:').classes(
-            'text-[10px] text-slate-400 mt-1 mb-0.5'
-        )
-        lin_log = ui.log(max_lines=20).classes(
-            'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1 rounded'
-        )
-        lin_log.push(f'LIN{l_idx} готов...')
-        lin_logs_dict[l_idx] = lin_log
-
-        with ui.row().classes('w-full gap-2 items-center mt-1.5'):
-          lin_data_input = ui.input(
-              placeholder='Данные через пробел (например: 10 20 AA)'
-          ).props('dark outlined dense input-class="text-xs"').classes(
-              'flex-1 bg-slate-700 text-xs text-white rounded'
-          )
-
-          def send_lin_msg(idx=l_idx, data_inp=lin_data_input, log=lin_log):
-            ldata = data_inp.value.strip()
-            if not ldata:
-              ui.notify(f'LIN{idx}: Введите данные для отправки!', type='warning')
-              return
-
-            cmd = f'lin_send {idx} {ldata}\r\n'
-            curr_shell = shell_ref.get('ser')
-
-            if curr_shell and curr_shell.is_open:
-              curr_shell.write(cmd.encode('utf-8'))
-              log.push(f'TX -> {ldata}')
-              data_inp.set_value('')
-            else:
-              ui.notify('Shell порт закрыт!', type='warning')
-
-          lin_data_input.on('keydown.enter', send_lin_msg)
-          ui.button('Отправить', on_click=send_lin_msg).classes(
-              'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
-          )
-
-    for lin_idx in range(1, 5):
-      make_lin_block(lin_idx)
+    # ==========================================
+    # 9. ОСЦИЛЛОГРАФ (В самом конце)
+    # ==========================================
+    ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
+    build_oscilloscope_panel()
 
   container.make_sortable()
-  return can_logs_dict, lin_logs_dict
+  return can_logs_dict, lin_logs_dict, raw_logs_dict

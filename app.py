@@ -10,14 +10,14 @@ ui.label('UTS2 Embedded Dashboard').classes(
     'text-xl font-bold mb-2 text-sky-400'
 )
 
-# Получаем из билдера все три словаря (can, lin, а также общую структуру)
-can_logs_dict, lin_logs_dict = build_dashboard(ports_refs, ui_labels)
+# Строим интерфейс и получаем словари логов
+can_logs, lin_logs, raw_logs = build_dashboard(ports_refs, ui_labels)
 
-# Запускаем фоновый цикл телеметрии, передавая туда словари логов CAN и LIN
+# Запускаем фоновый процесс чтения телеметрии
 ui.timer(
     0.1,
     lambda: telemetry_reader_loop(
-        ports_refs['tel'], ui_labels, can_logs_dict, lin_logs_dict
+        ports_refs['tel'], ui_labels, can_logs, lin_logs, raw_logs
     ),
     once=True,
 )
