@@ -69,7 +69,7 @@ def build_dashboard(ports_refs, ui_labels):
                 if not p_name or p_name == 'Нет портов':
                   raise ValueError('Порт не выбран!')
                 tel_ref['ser'] = serial.Serial(
-                    p_name, baudrate=115200, timeout=0.01
+                    p_name, baudrate=3000000, timeout=0.01
                 )
                 tel_btn.text = 'Закрыть'
                 tel_btn.classes(remove='bg-sky-600', add='bg-red-600')
@@ -677,7 +677,35 @@ def build_dashboard(ports_refs, ui_labels):
           ui.button('Отправить', on_click=send_can_msg).classes(
               'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
           )
+# --- БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL ---
+    from logger import start_logger, stop_logger
 
+    with ui.card().classes('bg-slate-800 p-2 w-full'):
+      ui.label('Логирование данных в файл (CSV/Excel)').classes(
+          'text-xs font-semibold text-sky-400 mb-1'
+      )
+
+      with ui.row().classes('gap-2 items-center'):
+
+        def toggle_log():
+          if btn_log.text.startswith('Старт'):
+            start_logger()
+            btn_log.text = 'Стоп записи'
+            btn_log.classes(remove='bg-emerald-600', add='bg-red-600')
+            ui.notify('Запись лога в файл начата', type='positive')
+          else:
+            stop_logger()
+            btn_log.text = 'Старт записи лога'
+            btn_log.classes(remove='bg-red-600', add='bg-emerald-600')
+            ui.notify('Запись остановлена. Файл сохранен в /logs', type='info')
+
+        btn_log = ui.button('Старт записи лога', on_click=toggle_log).classes(
+            'bg-emerald-600 text-white text-xs font-bold py-1 px-3'
+        )
+        ui.label(
+            'Данные сохраняются в папку /logs в формате CSV (открывается в'
+            ' Excel)'
+        ).classes('text-[10px] text-slate-400')
     # ==========================================
     # 9. ОСЦИЛЛОГРАФ (В самом конце)
     # ==========================================
