@@ -6,7 +6,7 @@ from filters import MovingAverageFilter
 from globals_data import telemetry_data_cache
 from logger import log_packet
 from nicegui import ui
-from oscilloscope import update_oscilloscope_data
+
 
 # 1 байт (magic 0xBE) + 78 полей float
 TELEMETRY_FORMAT = '<B' + 'f' * 78
@@ -103,7 +103,7 @@ def telemetry_reader_loop(
         log_packet(unpacked)
 
         # Передаем в осциллограф ВСЕ точки (чтобы график не был рваным)
-        update_oscilloscope_data(unpacked[9], unpacked[10])
+      
 
       # --- ЭТАП 2: ОБНОВЛЕНИЕ ТЕКСТОВЫХ ИНДИКАТОРОВ (UI) ---
       # Для текстовых label-ов берем только САМЫЙ СВЕЖИЙ пакет из пачки, чтобы браузер не лагал

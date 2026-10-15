@@ -49,7 +49,7 @@ static inline int  _dma_init(const struct scan_cont_adc_config *_config,
                              ADC_TypeDef *_adc_inst, 
                              const struct device *_dev);
 static inline int  _tmr_init(TIM_TypeDef *_tmr_inst);
-static inline void _adc_init(ADC_TypeDef *_adc_inst);
+static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source);
 static int         _seq_mux_adc_init(const struct device *_dev);
 
 /***************************************************************************************************
@@ -273,26 +273,24 @@ static inline int _tmr_init(TIM_TypeDef *_tmr_inst)
 
     uint32_t freq = counter_get_frequency(counter_dev);
     
-    uint32_t t1_ticks = (uint32_t)((uint64_t)SEQ_ADC_DURATION_US 
-                                   * freq / 1000000ULL);
-    uint32_t t2_ticks = (uint32_t)((uint64_t)SEQ_SWITCH_DURATION_US 
+    // Период таймера задается одной настройкой SEQ_ADC_DURATION_US
+    uint32_t total_ticks = (uint32_t)((uint64_t)SEQ_ADC_DURATION_US 
                                    * freq / 1000000ULL);
 
-    uint32_t arr_val = t1_ticks + t2_ticks - 1;
-    uint32_t ccr1_val = t1_ticks;
+    uint32_t arr_val = total_ticks > 0 ? total_ticks - 1 : 0;
 
-    LL_TIM_SetPrescaler(_tmr_inst, 10000 - 1);
+
+    uint32_t psc_val = (freq / 1000000UL) > 0 ? (freq / 1000000UL) - 1 : 0;
+
+    LL_TIM_SetPrescaler(_tmr_inst, psc_val);
     LL_TIM_SetAutoReload(_tmr_inst, arr_val);
     
-    LL_TIM_OC_SetMode(_tmr_inst, LL_TIM_CHANNEL_CH1, LL_TIM_OCMODE_PWM1);
-    LL_TIM_OC_SetCompareCH1(_tmr_inst, ccr1_val);
-    LL_TIM_CC_EnableChannel(_tmr_inst, LL_TIM_CHANNEL_CH1);
+    LL_TIM_CC_DisableChannel(_tmr_inst, LL_TIM_CHANNEL_CH1);
 
     // Событие UPDATE генерирует триггер TRGO для старта АЦП3
     LL_TIM_SetTriggerOutput(_tmr_inst, LL_TIM_TRGO_UPDATE);
 
-    // Событие CC1 генерирует запрос DMA 1 для переключения ножек
-    LL_TIM_EnableDMAReq_CC1(_tmr_inst);
+  
 
     return 0;
 }
@@ -304,7 +302,7 @@ static inline int _tmr_init(TIM_TypeDef *_tmr_inst)
  *
  *  @param      _adc_inst - Указатель на регистры АЦП
  */
-static inline void _adc_init(ADC_TypeDef *_adc_inst)
+static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source)
 {
     // Включение тактирования выбранного АЦП
     if (_adc_inst == ADC3) 
@@ -336,12 +334,9 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
 #endif
 
     LL_ADC_SetCommonClock(adc_common, LL_ADC_CLOCK_ASYNC_DIV2);
-   /* LL_ADC_SetCommonPathInternalCh(
-        adc_common, 
-        LL_ADC_PATH_INTERNAL_TEMPSENSOR | LL_ADC_PATH_INTERNAL_VREFINT
-    );*/
+
     
-    LL_ADC_REG_SetTriggerSource(_adc_inst, LL_ADC_REG_TRIG_EXT_TIM3_TRGO);
+    LL_ADC_REG_SetTriggerSource(_adc_inst, trg_source);
     LL_ADC_REG_SetTriggerEdge(_adc_inst, LL_ADC_REG_TRIG_EXT_RISING);
     
     LL_ADC_REG_SetDataTransferMode(_adc_inst, LL_ADC_REG_DMA_TRANSFER_UNLIMITED);
@@ -369,14 +364,14 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
 
 
     // 7. Настройка времени выборки (Sampling Time) для каждого канала
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_7, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_9, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_10, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_11, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_4, LL_ADC_SAMPLINGTIME_64CYCLES_5);
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_8, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_7, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_9, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_10, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_11, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_4, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_8, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
 
     // 8. Установка режима Single-ended для всех четырех каналов
     LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SINGLE_ENDED);
@@ -447,8 +442,28 @@ static int _scan_cont_adc_init(const struct device *_dev)
         return ret;
     }
 
+     uint32_t auto_trigger_source = LL_ADC_REG_TRIG_EXT_TIM3_TRGO; // Дефолт на случай неизвестного таймера
+
+    if      (tmr_inst == TIM1)  auto_trigger_source = LL_ADC_REG_TRIG_EXT_TIM1_TRGO;
+    else if (tmr_inst == TIM2)  auto_trigger_source = LL_ADC_REG_TRIG_EXT_TIM2_TRGO;
+    else if (tmr_inst == TIM3)  auto_trigger_source = LL_ADC_REG_TRIG_EXT_TIM3_TRGO;
+    else if (tmr_inst == TIM4)  auto_trigger_source = LL_ADC_REG_TRIG_EXT_TIM4_TRGO;
+    else if (tmr_inst == TIM8)  auto_trigger_source = LL_ADC_REG_TRIG_EXT_TIM8_TRGO;
+    else if (tmr_inst == TIM15) auto_trigger_source = LL_ADC_REG_TRIG_EXT_TIM15_TRGO;
+#ifdef LPTIM1
+    else if (tmr_inst == LPTIM1) auto_trigger_source = LL_ADC_REG_TRIG_EXT_LPTIM1_OUT;
+#endif
+#ifdef LPTIM2
+    else if (tmr_inst == LPTIM2) auto_trigger_source = LL_ADC_REG_TRIG_EXT_LPTIM2_OUT;
+#endif
+    else 
+    {
+        // Если таймер не попал ни в один список, можно вернуть ошибку или оставить софтовый триггер
+        return -ENOTSUP; 
+    }
+
     // Инициализация модуля АЦП
-    _adc_init(adc_inst);
+     _adc_init(adc_inst, auto_trigger_source);
 
     ret = dma_start(config->dma_dev, config->adc_dma_channel);
     if (ret < 0) 

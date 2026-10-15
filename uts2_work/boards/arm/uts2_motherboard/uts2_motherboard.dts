@@ -34,7 +34,7 @@
          * Это избавляет наш Си-код драйвера от хардкода.
          */
         adc-dev = <&adc2>;
-        timer-dev = <&timers3>;
+        timer-dev = <&timers4>;
 
         channel-count = <8>;
         dmas = 
@@ -43,8 +43,8 @@
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
 
-        adc-duration-us = <1000>;     /* T1: время АЦП */
-        switch-duration-us = <1000>;  /* T2: время переключения */ 
+        adc-duration-us = <400>;     /* T1: время АЦП */
+        switch-duration-us = <400>;  /* T2: время переключения */ 
 
         status = "okay";
     };   
@@ -107,6 +107,14 @@
 	};
 };
 
+&timers4 {
+    status = "okay";
+    st,prescaler = <10000>; 
+    counter {
+        status = "okay";
+    };
+};
+
 &backup_sram {
 	status = "okay";
 };
@@ -138,6 +146,8 @@
         status = "okay";
     };
 };
+
+
 
 &gpioa {
     status = "okay";
@@ -314,6 +324,10 @@
         reg = <0x40>;
         current-lsb-microamps = <10>;
         rshunt-micro-ohms = <50000>;      /* Закрыто корректно: <50000> */
+        adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         status = "okay";
     };
 
@@ -322,6 +336,10 @@
         reg = <0x41>;
         current-lsb-microamps = <10>;
         rshunt-micro-ohms = <50000>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         status = "okay";
     };
 
@@ -329,6 +347,10 @@
         compatible = "ti,ina228";
         reg = <0x42>;
         rshunt-micro-ohms = <500000>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         current-lsb-microamps = <1>;
         status = "okay";
     };
@@ -337,6 +359,10 @@
         compatible = "ti,ina228";
         reg = <0x43>;
         rshunt-micro-ohms = <500000>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         current-lsb-microamps = <1>;
         status = "okay";
     };
@@ -345,6 +371,10 @@
         compatible = "ti,ina228";
         reg = <0x44>;
         current-lsb-microamps = <10>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };
@@ -353,6 +383,10 @@
         compatible = "ti,ina228";
         reg = <0x45>;
         current-lsb-microamps = <10>;
+        adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };
@@ -361,6 +395,10 @@
         compatible = "ti,ina228";
         reg = <0x46>;                     /* Исправлено совпадение адресов (было 0x45) */
         current-lsb-microamps = <10>;
+        adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };
@@ -369,6 +407,10 @@
         compatible = "ti,ina228";
         reg = <0x47>;
         current-lsb-microamps = <10>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };

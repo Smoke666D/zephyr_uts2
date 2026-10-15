@@ -106,91 +106,6 @@ static void FRAM_Test(void)
     }
 }
 
-/* Структура для хранения информации о датчике */
-struct ina_sensor_desc {
-    const char *name;
-    const struct device *dev;
-};
-
-
-
-/* Массив всех ваших 8 датчиков по нодлейблам из DTS */
-static const struct ina_sensor_desc ina_sensors[] = {
-    { "BRD_LOW",   DEVICE_DT_GET(DT_NODELABEL(cur_sens_brd_low)) },
-    { "BRD_HIGH",  DEVICE_DT_GET(DT_NODELABEL(cur_sens_brd_high)) },
-    { "VDUT2",     DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdut2)) },
-    { "VDUT3",     DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdut3)) },
-    { "VIN",       DEVICE_DT_GET(DT_NODELABEL(cur_sens_vin)) },
-    { "3_3_DCDC",  DEVICE_DT_GET(DT_NODELABEL(cur_sens_3_3_dcdc)) },
-    { "VDOUT_PWR", DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdout_pwr)) },
-    { "5VD",       DEVICE_DT_GET(DT_NODELABEL(cur_sens_5vd)) },
-};
-
-#define SENSORS_COUNT ARRAY_SIZE(ina_sensors)
-
-static int init_all_sensors(void)
-{
-    int ready_count = 0;
-
-    printk("\n=== Проверка инициализации датчиков INA228 ===\n");
-    for (size_t i = 0; i < SENSORS_COUNT; i++) {
-        if (!device_is_ready(ina_sensors[i].dev)) {
-            printk("[ERR] Датчик '%s' НЕ готов (нет связи по I2C)!\n", ina_sensors[i].name);
-        } else {
-            printk("[ OK] Датчик '%s' готов.\n", ina_sensors[i].name);
-            ready_count++;
-        }
-    }
-    printk("Готово: %d из %d датчиков\n\n", ready_count, SENSORS_COUNT);
-
-    return ready_count;
-}
-
-/* Функция опроса и вывода данных со всех датчиков */
-void poll_all_sensors(void)
-{
-    struct sensor_value v_bus;
-    struct sensor_value current;
-    struct sensor_value power;
-    int ret;
-
-    printk("----------------------------------------------------------------------\n");
-    printk("| %-12s | %-12s | %-14s | %-14s |\n", "Sensor", "Vbus (V)", "Current (mA)", "Power (mW)");
-    printk("----------------------------------------------------------------------\n");
-
-    for (size_t i = 0; i < SENSORS_COUNT; i++) {
-        const struct device *dev = ina_sensors[i].dev;
-
-        if (!device_is_ready(dev)) {
-            printk("| %-12s |   [ДАТЧИК НЕ ДОСТУПЕН]                            |\n", 
-                   ina_sensors[i].name);
-            continue;
-        }
-
-        /* 1. Запрашиваем новую выборку данных у микросхемы */
-        ret = sensor_sample_fetch(dev);
-        if (ret != 0) {
-            printk("| %-12s |   [ОШИБКА I2C: %d]                                 |\n", 
-                   ina_sensors[i].name, ret);
-            continue;
-        }
-
-        /* 2. Извлекаем значения каналов */
-        sensor_channel_get(dev, SENSOR_CHAN_VOLTAGE, &v_bus);
-        sensor_channel_get(dev, SENSOR_CHAN_CURRENT, &current);
-        sensor_channel_get(dev, SENSOR_CHAN_POWER, &power);
-
-        /* Переводим в double (требуется CONFIG_CBPRINTF_FP_SUPPORT=y) */
-        double v = sensor_value_to_double(&v_bus);
-        double i_ma = sensor_value_to_double(&current) * 1000.0; /* переводим А в мА */
-        double p_mw = sensor_value_to_double(&power) * 1000.0;   /* переводим Вт в мВт */
-
-        printk("| %-12s | %10.3f V | %11.3f mA | %11.3f mW |\n",
-               ina_sensors[i].name, v, i_ma, p_mw);
-    }
-    printk("----------------------------------------------------------------------\n\n");
-}
-
 
 #define EEPROM_1_NODE DT_NODELABEL(eeprom_1)
 #define EEPROM_2_NODE DT_NODELABEL(eeprom_2)
@@ -537,7 +452,18 @@ static void _can3_rx_listener_cb(const struct zbus_channel *_chan)
 
 
 
+// Семафор для синхронизации с таймером
+static K_SEM_DEFINE(telemetry_sem, 0, 1);
 
+// Обработчик таймера (вызывается аппаратно каждые 1.0 мс)
+static void telemetry_timer_handler(struct k_timer *dummy)
+{
+    // Отдаем семафор потоку телеметрии
+    k_sem_give(&telemetry_sem);
+}
+
+// Инициализация периодического таймера на 1 кГц (1 мс)
+static K_TIMER_DEFINE(telemetry_timer, telemetry_timer_handler, NULL);
 
 ZBUS_LISTENER_DEFINE(can1_rx_listener, _can1_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(can2_rx_listener, _can2_rx_listener_cb);
@@ -564,6 +490,8 @@ int main(void)
     bus_listener_attach(&lin2_rx_listener,LIN2_RX);
     bus_listener_attach(&lin3_rx_listener,LIN3_RX);
     bus_listener_attach(&lin4_rx_listener,LIN4_RX);
+
+    k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
    
     while (1) 
 	{    
@@ -583,7 +511,7 @@ int main(void)
 
     
         send_binary_telemetry(telemetry_uart);         
-        k_msleep(SLEEP_TIME_MS);   
+        k_sem_take(&telemetry_sem, K_FOREVER);  
     }
 	return 0;
 }

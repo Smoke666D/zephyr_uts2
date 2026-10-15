@@ -1,145 +1,209 @@
-from collections import deque
-from globals_data import telemetry_data_cache
+import csv
+import glob
+import os
 from nicegui import ui
 
-# Настройки истории по умолчанию
-MAX_POINTS = 300
-time_buffer = deque(maxlen=MAX_POINTS)
-data_ao1 = deque(maxlen=MAX_POINTS)
-data_ao2 = deque(maxlen=MAX_POINTS)
-counter = 0
-
 active_chart = None
-is_running = True  # По умолчанию осциллограф запущен
+log_select = None
+channels_container = None
+
+# Кэш прочитанного файла: { 'col_name': [values...] } и список временных меток
+cached_data = {}
+cached_timestamps = []
+selected_channels = []
+
+SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e', '#c084fc', '#fb923c']
 
 
-def update_oscilloscope_data(ao1_val, ao2_val):
-  global counter
-  # Если на паузе (Стоп) — игнорируем новые данные
-  if not is_running:
+def get_log_files():
+  files = glob.glob('logs/*.csv')
+  files.sort(key=os.path.getmtime, reverse=True)
+  return files if files else ['Нет файлов логов']
+
+
+def render_chart():
+  """Перерисовывает график на основе выбранных каналов из кэша"""
+  global active_chart, selected_channels, cached_data, cached_timestamps
+  if not active_chart or not cached_timestamps:
     return
 
-  counter += 1
+  series = []
+  legend = []
 
-  if len(time_buffer) >= time_buffer.maxlen:
-    time_buffer.popleft()
-    data_ao1.popleft()
-    data_ao2.popleft()
+  for idx, col_name in enumerate(selected_channels):
+    if col_name in cached_data:
+      color = SERIES_COLORS[idx % len(SERIES_COLORS)]
+      legend.append(col_name)
+      series.append({
+          'name': col_name,
+          'type': 'line',
+          'data': cached_data[col_name],
+          'showSymbol': False,
+          'itemStyle': {'color': color},
+      })
 
-  time_buffer.append(str(counter))
-  data_ao1.append(float(ao1_val))
-  data_ao2.append(float(ao2_val))
+  active_chart.options['xAxis']['data'] = cached_timestamps
+  active_chart.options['series'] = series
+  active_chart.options['legend']['data'] = legend
+  active_chart.update()
 
-  if active_chart and time_buffer:
-    try:
-      active_chart.options['xAxis']['data'] = list(time_buffer)
-      active_chart.options['series'][0]['data'] = list(data_ao1)
-      active_chart.options['series'][1]['data'] = list(data_ao2)
-      active_chart.update()
-    except Exception as e:
-      print(f'Ошибка обновления графика: {e}')
+
+def rebuild_channel_checkboxes(columns):
+  """Строит сетку чекбоксов для выбора каналов"""
+  global channels_container, selected_channels
+  if not channels_container:
+    return
+
+  channels_container.clear()
+  with channels_container:
+    ui.label('Выберите каналы для графика (максимум 4):').classes(
+        'text-xs font-semibold text-yellow-300 col-span-full mb-1'
+    )
+
+    for col in columns:
+      is_default = col in selected_channels
+
+      def make_handler(col_name):
+        def on_change(e):
+          global selected_channels
+          if e.value:
+            if len(selected_channels) >= 4:
+              e.sender.set_value(False)
+              ui.notify('Максимум 4 канала одновременно!', type='warning')
+              return
+            if col_name not in selected_channels:
+              selected_channels.append(col_name)
+          else:
+            if col_name in selected_channels:
+              selected_channels.remove(col_name)
+          render_chart()
+        return on_change
+
+      ui.checkbox(
+          col,
+          value=is_default,
+          on_change=make_handler(col),
+      ).classes('text-white text-xs')
+
+
+def load_log_to_chart(file_path):
+  global cached_data, cached_timestamps, selected_channels
+  if not file_path or file_path == 'Нет файлов логов' or not os.path.exists(file_path):
+    ui.notify('Файл лога не найден!', type='warning')
+    return
+
+  ui.notify(f'Загрузка: {os.path.basename(file_path)}...', type='info')
+
+  cached_data = {}
+  cached_timestamps = []
+
+  try:
+    with open(file_path, 'r', encoding='utf-8') as f:
+      first_line = f.readline()
+      if not first_line.startswith('sep='):
+        f.seek(0)
+
+      reader = csv.reader(f, delimiter=';')
+      header = next(reader, None)
+      if not header:
+        ui.notify('Файл пуст!', type='warning')
+        return
+
+      idx_time = header.index('Timestamp') if 'Timestamp' in header else 0
+      data_cols = [col for col in header if col != 'Timestamp']
+
+      # Инициализируем списки под каждую колонку
+      for col in data_cols:
+        cached_data[col] = []
+
+      for row_idx, row in enumerate(reader):
+        if not row:
+          continue
+        # Время
+        t_str = row[idx_time].split()[-1] if len(row) > idx_time else str(row_idx)
+        cached_timestamps.append(t_str)
+
+        # Значения колонок
+        for col in data_cols:
+          c_idx = header.index(col)
+          if len(row) > c_idx:
+            try:
+              cached_data[col].append(float(row[c_idx]))
+            except ValueError:
+              cached_data[col].append(0.0)
+          else:
+            cached_data[col].append(0.0)
+
+    # По умолчанию выбираем AO_1 и AO_2, если они есть
+    selected_channels = [c for c in ['AO_1', 'AO_2'] if c in data_cols]
+    if not selected_channels and data_cols:
+      selected_channels = data_cols[:2]
+
+    # Перерисовываем чекбоксы и график
+    rebuild_channel_checkboxes(data_cols)
+    render_chart()
+    ui.notify(f'Успешно загружено {len(cached_timestamps)} точек!', type='positive')
+
+  except Exception as e:
+    ui.notify(f'Ошибка чтения файла: {e}', type='negative')
 
 
 def build_oscilloscope_panel():
-  global active_chart
+  global active_chart, log_select, channels_container
 
   with ui.card().classes('bg-slate-800 p-3 w-full'):
-
-    # Шапка панели с кнопками управления и масштабом истории
     with ui.row().classes('w-full justify-between items-center mb-2'):
-      ui.label('Осциллограф (AO 1 & AO 2)').classes(
+      ui.label('Офлайн-осциллограф (Анализ логов)').classes(
           'text-sm font-bold text-sky-400'
       )
 
       with ui.row().classes('items-center gap-2'):
+        file_list = get_log_files()
 
-        # Кнопка Старт / Стоп
-        def toggle_run():
-          global is_running
-          is_running = not is_running
-          if is_running:
-            btn_run.text = 'Стоп'
-            btn_run.classes(remove='bg-emerald-600', add='bg-red-600')
-            ui.notify('Осциллограф запущен', type='positive')
-          else:
-            btn_run.text = 'Старт'
-            btn_run.classes(remove='bg-red-600', add='bg-emerald-600')
-            ui.notify('Осциллограф на паузе', type='warning')
+        def refresh_file_list():
+          files = get_log_files()
+          log_select.options = files
+          if files:
+            log_select.value = files[0]
+          ui.notify('Список логов обновлен', type='info')
 
-        btn_run = ui.button('Стоп', on_click=toggle_run).classes(
-            'bg-red-600 text-white text-xs font-bold py-1 px-3'
+        log_select = ui.select(
+            options=file_list,
+            value=file_list[0] if file_list else None,
+            label='Выберите лог-файл',
+        ).props('dark outlined dense').classes('w-64 bg-slate-700 text-xs text-white rounded')
+
+        ui.button('Обновить список', on_click=refresh_file_list).classes(
+            'bg-slate-700 text-white text-xs py-1 px-2'
         )
 
-        # Кнопка Очистить
-        def clear_history():
-          global counter, time_buffer, data_ao1, data_ao2
-          time_buffer.clear()
-          data_ao1.clear()
-          data_ao2.clear()
-          counter = 0
-          if active_chart:
-            active_chart.options['xAxis']['data'] = []
-            active_chart.options['series'][0]['data'] = []
-            active_chart.options['series'][1]['data'] = []
-            active_chart.update()
-          ui.notify('История графиков очищена', type='info')
+        ui.button(
+            'Открыть график',
+            on_click=lambda: load_log_to_chart(log_select.value),
+        ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
 
-        ui.button('Очистить', on_click=clear_history).classes(
-            'bg-slate-700 text-white text-xs py-1 px-3'
-        )
-
-        ui.label('|').classes('text-slate-500')
-
-        # Выбор глубины истории
-        ui.label('История:').classes('text-xs text-slate-300')
-
-        def change_history_depth(e):
-          global time_buffer, data_ao1, data_ao2
-          new_max = int(e.value)
-          time_buffer = deque(time_buffer, maxlen=new_max)
-          data_ao1 = deque(data_ao1, maxlen=new_max)
-          data_ao2 = deque(data_ao2, maxlen=new_max)
-          ui.notify(f'Глубина истории изменена на {new_max} точек', type='info')
-
-        ui.select(
-            options={100: '100', 300: '300', 500: '500', 1000: '1000'},
-            value=300,
-            on_change=change_history_depth,
-        ).props('dark outlined dense').classes(
-            'w-24 bg-slate-700 text-xs text-white rounded'
-        )
-
-    # Инициализация графика с зумом
+    # График с возможностью зума
     active_chart = ui.echart({
+        'animation': False,
         'tooltip': {'trigger': 'axis'},
         'xAxis': {'type': 'category', 'data': [], 'boundaryGap': False},
-        'yAxis': {'type': 'value'},
-        'series': [
-            {
-                'name': 'AO 1',
-                'type': 'line',
-                'data': [],
-                'showSymbol': False,
-                'itemStyle': {'color': '#38bdf8'},
-            },
-            {
-                'name': 'AO 2',
-                'type': 'line',
-                'data': [],
-                'showSymbol': False,
-                'itemStyle': {'color': '#4ade80'},
-            },
-        ],
-        'legend': {'data': ['AO 1', 'AO 2'], 'textStyle': {'color': '#fff'}},
+        'yAxis': {'type': 'value', 'scale': True},
+        'series': [],
+        'legend': {'data': [], 'textStyle': {'color': '#fff'}},
         'grid': {
             'left': '3%',
             'right': '4%',
             'bottom': '15%',
-            'top': '20%',
+            'top': '15%',
             'containLabel': True,
         },
         'dataZoom': [
             {'type': 'slider', 'xAxisIndex': 0, 'start': 0, 'end': 100},
             {'type': 'inside', 'xAxisIndex': 0},
         ],
-    }).classes('w-full h-60 bg-slate-900 rounded')
+    }).classes('w-full h-80 bg-slate-900 rounded')
+
+    # Контейнер для чекбоксов каналов (появляется после открытия файла)
+    channels_container = ui.grid(columns=6).classes(
+        'w-full gap-1 bg-slate-700/30 p-2 rounded mt-2'
+    )
