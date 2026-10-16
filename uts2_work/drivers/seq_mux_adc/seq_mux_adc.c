@@ -467,6 +467,13 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
         while (LL_ADC_IsEnabled(_adc_inst) == 1);
     }
 
+   // --- НАСТРОЙКА АППАРАТНОГО ОВЕРСЭМПЛИНГА (x4 для укладки в 60 мкс) ---
+    LL_ADC_SetOverSamplingDiscont(_adc_inst, LL_ADC_OVS_REG_CONT);
+    // Коэффициент x4 и сдвиг вправо на 2 бита (2^2 = 4)
+    LL_ADC_ConfigOverSamplingRatioShift(_adc_inst, 4, LL_ADC_OVS_SHIFT_RIGHT_2);
+    // Включаем оверсэмплинг для регулярной группы
+    LL_ADC_SetOverSamplingScope(_adc_inst, LL_ADC_OVS_GRP_REGULAR_CONTINUED);
+
     LL_ADC_StartCalibration(_adc_inst, LL_ADC_CALIB_OFFSET, 
                             LL_ADC_SINGLE_ENDED);
     while (LL_ADC_IsCalibrationOnGoing(_adc_inst)) 

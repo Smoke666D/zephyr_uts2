@@ -6,8 +6,9 @@ from nicegui import ui
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
 
-active_chart = None
+chart_container = None
 channels_container = None
+refresh_logs_callback = None
 
 cached_data = {}
 cached_timestamps = []
@@ -28,9 +29,16 @@ def get_log_files():
   return files
 
 
+def refresh_logs_ui():
+  global refresh_logs_callback
+  if refresh_logs_callback:
+    refresh_logs_callback()
+
+
 def render_chart():
-  global active_chart, selected_channels, cached_data, cached_timestamps
-  if not active_chart or not cached_timestamps:
+  """Пересоздает элемент графика внутри chart_container на основе выбранных каналов"""
+  global chart_container, selected_channels, cached_data, cached_timestamps
+  if not chart_container or not cached_timestamps:
     return
 
   series = []
@@ -45,18 +53,20 @@ def render_chart():
           'type': 'line',
           'data': cached_data[col_name],
           'showSymbol': False,
+          'sampling': 'lttb',
           'itemStyle': {'color': color},
+          'lineStyle': {'width': 1.5},
       })
 
-  # Передаем конфигурацию напрямую в движок ECharts (True = notMerge, полная перерисовка)
   chart_options = {
+      'animation': False,
       'tooltip': {'trigger': 'axis'},
       'xAxis': {'type': 'category', 'data': cached_timestamps, 'boundaryGap': False},
       'yAxis': {'type': 'value', 'scale': True},
       'series': series,
       'legend': {'data': legend, 'textStyle': {'color': '#fff'}},
       'grid': {
-          'left': '3%',
+          'left': '4%',
           'right': '4%',
           'bottom': '15%',
           'top': '15%',
@@ -67,8 +77,11 @@ def render_chart():
           {'type': 'inside', 'xAxisIndex': 0},
       ],
   }
-  
-  active_chart.run_chart_method('setOption', chart_options, True)
+
+  # Очищаем контейнер и создаем график заново со всеми данными!
+  chart_container.clear()
+  with chart_container:
+    ui.echart(chart_options).style('width: 100%; height: 320px;').classes('rounded bg-slate-900')
 
 
 def rebuild_channel_checkboxes(columns):
@@ -127,7 +140,6 @@ def load_log_to_chart(file_path):
       ui.notify('Файл пуст!', type='warning')
       return
 
-    # Отсекаем служебную строку sep=; если она первая
     if lines[0].startswith('sep='):
       lines = lines[1:]
 
@@ -135,7 +147,7 @@ def load_log_to_chart(file_path):
     header = next(reader, None)
 
     if not header:
-      ui.notify('Не удалось прочитать шапку таблицы!', type='warning')
+      ui.notify('Не удалось прочитать заголовок таблицы!', type='warning')
       return
 
     idx_time = header.index('Timestamp') if 'Timestamp' in header else 0
@@ -160,12 +172,10 @@ def load_log_to_chart(file_path):
         else:
           cached_data[col].append(0.0)
 
-    # По умолчанию выбираем AO_1 и AO_2
     selected_channels = [c for c in ['AO_1', 'AO_2'] if c in data_cols]
     if not selected_channels and data_cols:
       selected_channels = data_cols[:2]
 
-    # Строим чекбоксы и принудительно рисуем график
     rebuild_channel_checkboxes(data_cols)
     render_chart()
     ui.notify(f'Загружено {len(cached_timestamps)} точек!', type='positive')
@@ -176,7 +186,7 @@ def load_log_to_chart(file_path):
 
 
 def build_oscilloscope_panel():
-  global active_chart, channels_container
+  global chart_container, channels_container, refresh_logs_callback
 
   with ui.card().classes('bg-slate-800 p-3 w-full'):
     with ui.row().classes('w-full justify-between items-center mb-2'):
@@ -186,27 +196,25 @@ def build_oscilloscope_panel():
 
       with ui.row().classes('items-center gap-2'):
         select_box = ui.row().classes('items-center')
-        selected_file_holder = {'path': None}
+        current_select = {'widget': None}
 
         def rebuild_select_element():
           select_box.clear()
           files = get_log_files()
-          selected_file_holder['path'] = files[0] if files else None
 
           with select_box:
             opts = {f: os.path.basename(f) for f in files} if files else {'': 'Нет логов'}
-            cur_val = files[0] if files else ''
+            first_val = files[0] if files else None
 
-            def on_change(e):
-              selected_file_holder['path'] = e.value
-
-            ui.select(
+            sel = ui.select(
                 options=opts,
-                value=cur_val,
+                value=first_val,
                 label='Лог-файл',
-                on_change=on_change,
             ).props('dark outlined dense').classes('w-72 bg-slate-700 text-xs text-white rounded')
 
+            current_select['widget'] = sel
+
+        refresh_logs_callback = rebuild_select_element
         rebuild_select_element()
 
         def on_refresh_click():
@@ -218,31 +226,25 @@ def build_oscilloscope_panel():
             'bg-slate-700 text-white text-xs py-1 px-2'
         )
 
-        ui.button(
-            'Открыть график',
-            on_click=lambda: load_log_to_chart(selected_file_holder['path']),
-        ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
+        def on_open_click():
+          sel_widget = current_select.get('widget')
+          target_path = sel_widget.value if sel_widget else None
+          if target_path and os.path.exists(target_path):
+            load_log_to_chart(target_path)
+          else:
+            ui.notify('Выберите корректный лог-файл из списка!', type='warning')
 
-    # Холст графика
-    active_chart = ui.echart({
-        'animation': False,
-        'tooltip': {'trigger': 'axis'},
-        'xAxis': {'type': 'category', 'data': [], 'boundaryGap': False},
-        'yAxis': {'type': 'value', 'scale': True},
-        'series': [],
-        'legend': {'data': [], 'textStyle': {'color': '#fff'}},
-        'grid': {
-            'left': '3%',
-            'right': '4%',
-            'bottom': '15%',
-            'top': '15%',
-            'containLabel': True,
-        },
-        'dataZoom': [
-            {'type': 'slider', 'xAxisIndex': 0, 'start': 0, 'end': 100},
-            {'type': 'inside', 'xAxisIndex': 0},
-        ],
-    }).classes('w-full h-80 bg-slate-900 rounded')
+        ui.button('Открыть график', on_click=on_open_click).classes(
+            'bg-emerald-600 text-white text-xs font-bold py-1 px-3'
+        )
+
+    # Выделенный контейнер под график
+    chart_container = ui.column().classes('w-full')
+    with chart_container:
+      # Заглушка до первой загрузки
+      ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
+          'text-xs text-slate-400 italic py-10 self-center'
+      )
 
     channels_container = ui.grid(columns=6).classes(
         'w-full gap-1 bg-slate-700/30 p-2 rounded mt-2'

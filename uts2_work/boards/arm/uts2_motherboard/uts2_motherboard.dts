@@ -43,7 +43,7 @@
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
 
-        adc-duration-us = <800>;     /* T1: время АЦП */
+        adc-duration-us = <990>;     /* T1: время АЦП */
         switch-duration-us = <400>;  /* T2: время переключения */ 
 
         status = "okay";
@@ -73,8 +73,8 @@
                     <&gpioe 13 GPIO_ACTIVE_HIGH>,
                     <&gpioe 14 GPIO_ACTIVE_HIGH>;
 
-        adc-duration-us = <65>;     /* T1: время АЦП */
-        switch-duration-us = <65>;  /* T2: время переключения */ 
+        adc-duration-us = <60>;     /* T1: время АЦП */
+        switch-duration-us = <60>;  /* T2: время переключения */ 
 
         status = "okay";
     };

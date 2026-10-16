@@ -362,7 +362,7 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source)
 
     LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_3);
     LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_7);
-    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_9);  // обратите внимание: у вас PA2 это INP4!
+    LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_9);  
     LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_5);
     LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_10);
     LL_ADC_SetChannelPreSelection(_adc_inst, LL_ADC_CHANNEL_11);
@@ -382,17 +382,17 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source)
     LL_ADC_REG_SetSequencerRanks(_adc_inst, LL_ADC_REG_RANK_8, LL_ADC_CHANNEL_8);
 
 
-    // 7. Настройка времени выборки (Sampling Time) для каждого канала
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_7, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_9, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_10, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_11, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_4, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
-    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_8, LL_ADC_SAMPLINGTIME_810CYCLES_5 );
+    // 7. Настройка времени выборки (Sampling Time) уменьшена до 64.5 циклов для баланса со скоростью 1 кГц
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_7, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_9, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_5, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_10, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_11, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_4, LL_ADC_SAMPLINGTIME_64CYCLES_5);
+    LL_ADC_SetChannelSamplingTime(_adc_inst, LL_ADC_CHANNEL_8, LL_ADC_SAMPLINGTIME_64CYCLES_5);
 
-    // 8. Установка режима Single-ended для всех четырех каналов
+    // 8. Установка режима Single-ended для всех каналов
     LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_3, LL_ADC_SINGLE_ENDED);
     LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_7, LL_ADC_SINGLE_ENDED);
     LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_9, LL_ADC_SINGLE_ENDED);
@@ -403,12 +403,26 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source)
     LL_ADC_SetChannelSingleDiff(_adc_inst, LL_ADC_CHANNEL_8, LL_ADC_SINGLE_ENDED);
 
 
+    // --- 9. НАСТРОЙКА АППАРАТНОГО ОВЕРСЭМПЛИНГА (x16) ---
     if (LL_ADC_IsEnabled(_adc_inst) == 1)
     {
         LL_ADC_Disable(_adc_inst);
         while (LL_ADC_IsEnabled(_adc_inst) == 1);
     }
 
+    // Включаем оверсэмплинг для регулярной группы с непрерывным режимом
+    LL_ADC_SetOverSamplingDiscont(_adc_inst, LL_ADC_OVS_REG_CONT);
+    
+    // Настраиваем коэффициент 16 и сдвиг вправо на 4 бита (2^4 = 16)
+    // Используем правильное имя функции для STM32H7: LL_ADC_ConfigOverSamplingRatioShift
+    LL_ADC_ConfigOverSamplingRatioShift(_adc_inst, 16, LL_ADC_OVS_SHIFT_RIGHT_4);
+    
+    // Активируем оверсэмплинг в scope регулярных каналов
+    LL_ADC_SetOverSamplingScope(_adc_inst, LL_ADC_OVS_GRP_REGULAR_CONTINUED);
+    // ----------------------------------------------------
+
+
+    // 10. Калибровка АЦП
     LL_ADC_StartCalibration(_adc_inst, LL_ADC_CALIB_OFFSET, 
                             LL_ADC_SINGLE_ENDED);
     while (LL_ADC_IsCalibrationOnGoing(_adc_inst)) 
@@ -416,6 +430,7 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source)
         k_busy_wait(1);
     }
 
+    // 11. Включение АЦП
     LL_ADC_Enable(_adc_inst);
     while (!LL_ADC_IsActiveFlag_ADRDY(_adc_inst)) 
     {
