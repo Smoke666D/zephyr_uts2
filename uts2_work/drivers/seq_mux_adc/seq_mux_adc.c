@@ -42,7 +42,7 @@ static void        _dma_callback(const struct device *_dev, void *_user_data,
                                  uint32_t _channel, int _status);
 static int         _seq_mux_adc_get_channel_value_impl(const struct device *_dev, 
                                                        uint8_t _channel_idx, 
-                                                       uint32_t *_val);
+                                                       uint16_t *_val);
 static int         _seq_mux_adc_wait_for_data_impl(const struct device *_dev, 
                                                    k_timeout_t _timeout);
 static void        _fill_gpio_buffer(uint32_t *_buf);
@@ -58,9 +58,9 @@ static int         _seq_mux_adc_init(const struct device *_dev);
  *                                           PRIVATE DATA
  **************************************************************************************************/
 static uint32_t gpio_raw_buf[COMBINATIONS_CNT] __attribute__((section("SRAM4")));
-static uint32_t adc_buf_a[TOTAL_CHANNELS_CNT] __nocache;
-static uint32_t adc_buf_b[TOTAL_CHANNELS_CNT] __nocache;
-static uint32_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
+static uint16_t adc_buf_a[TOTAL_CHANNELS_CNT] __nocache;
+static uint16_t adc_buf_b[TOTAL_CHANNELS_CNT] __nocache;
+static uint16_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
 
 
 static struct k_mutex mutex_lock;
@@ -115,7 +115,7 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
  */
 static int _seq_mux_adc_get_channel_value_impl(const struct device *_dev, 
                                                uint8_t _channel_idx, 
-                                               uint32_t *_val)
+                                               uint16_t *_val)
 {
     int ret;
 
@@ -246,7 +246,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
     {
         .source_address   = (uint32_t)&(_adc_inst->DR),
         .dest_address     = (uint32_t)adc_buf_a,
-        .block_size       = TOTAL_CHANNELS_CNT * sizeof(uint32_t),
+        .block_size       = TOTAL_CHANNELS_CNT * sizeof(uint16_t),
         .source_addr_adj  = DMA_ADDR_ADJ_NO_CHANGE,
         .dest_addr_adj    = DMA_ADDR_ADJ_INCREMENT,
         .source_reload_en = 1,
@@ -257,10 +257,10 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
     {
         .dma_slot             = _config->adc_dma_slot,
         .channel_direction    = PERIPHERAL_TO_MEMORY,
-        .source_data_size     = 4,
-        .dest_data_size       = 4,
-        .source_burst_length  = 4,
-        .dest_burst_length    = 4,
+        .source_data_size     = 2,
+        .dest_data_size       = 2,
+        .source_burst_length  = 1,
+        .dest_burst_length    = 1,
         .channel_priority     = 3, // Очень высокий приоритет DMA
         .block_count          = 1,
         .head_block           = &adc_block_cfg,

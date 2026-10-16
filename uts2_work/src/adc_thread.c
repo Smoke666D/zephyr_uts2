@@ -73,15 +73,7 @@ LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 /* Получаем указатель на наш прибор из дерева устройств */
 
 
-/* Функция-помощник для считывания сырого опорного VREFINT для конкретного шага */
-static uint32_t get_vref_raw(const struct device *dev, uint8_t step)
-{
-    struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)dev->api;
-    uint32_t raw_vref = 0;
-    // Опорное напряжение VREFINT находится на 2-м канале (индекс step * 4 + 1)
-    api->get_channel_value(dev, step * 4 + 1, &raw_vref);
-    return raw_vref;
-}
+
 
 static void _adc_init()
 {
@@ -133,7 +125,7 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
          {                       
               for (int ch = 0; ch < ADC_NUM_CHANNELS; ch++) {
                  uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
-                  uint32_t raw_val = 0;
+                  uint16_t raw_val = 0;
                   api->get_channel_value(seq_dev, ch_idx, &raw_val);
                   float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
                  msg.channels_mv[ch_idx] =(v_pin_mv * coefficients[ch_idx]);

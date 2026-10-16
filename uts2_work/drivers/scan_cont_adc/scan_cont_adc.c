@@ -90,12 +90,10 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
         if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_2) == 1)
         {
             active_adc_buf = adc_buf_a;
-            //memcpy(adc_shadow_buf, adc_buf_a, sizeof(adc_shadow_buf));
         } 
         else 
         {
             active_adc_buf = adc_buf_b;
-            //memcpy(adc_shadow_buf, adc_buf_b, sizeof(adc_shadow_buf));
         }
         k_sem_give(&sem_data_ready);
     }
@@ -526,8 +524,6 @@ static struct k_sem * _seq_mux_adc_get_sem_impl(const struct device *_dev)
 
 static const struct scan_cont_adc_api driver_api = 
 {
-    .get_channel_value = _seq_mux_adc_get_channel_value_impl,
-    .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
     .get_sem           = _seq_mux_adc_get_sem_impl,
     .get_buf_pointer  = _scan_adc_get_buf_p,
 };

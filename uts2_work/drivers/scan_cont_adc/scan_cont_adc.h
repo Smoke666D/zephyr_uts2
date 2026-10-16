@@ -56,14 +56,9 @@
  */
 typedef struct  scan_cont_adc_api
 {
-    /// @brief Получение значения АЦП для указанного канала (0..31)
-    int (*get_channel_value)(const struct device *_dev, uint8_t _channel_idx, uint32_t *_val);
 
     int (*get_buf_pointer)(const struct device *_dev,  uint16_t *_user_buf);
     
-    /// @brief Ожидание готовности новых данных АЦП с учетом таймаута
-    int (*wait_for_data)(const struct device *_dev, k_timeout_t _timeout);
-
     struct k_sem *(*get_sem)(const struct device *dev);
 } scan_cont_adc_api_t;
 
