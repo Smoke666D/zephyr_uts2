@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime
 import glob
 import os
 from nicegui import ui
@@ -9,7 +10,9 @@ LOGS_DIR = os.path.join(BASE_DIR, 'logs')
 chart_container = None
 channels_container = None
 refresh_logs_callback = None
+log_info_label = None
 
+# Кэш прочитанного файла: { 'col_name': [values...] } и список временных меток
 cached_data = {}
 cached_timestamps = []
 selected_channels = []
@@ -78,13 +81,13 @@ def render_chart():
       ],
   }
 
-  # Очищаем контейнер и создаем график заново со всеми данными!
   chart_container.clear()
   with chart_container:
     ui.echart(chart_options).style('width: 100%; height: 320px;').classes('rounded bg-slate-900')
 
 
 def rebuild_channel_checkboxes(columns):
+  """Строит сетку чекбоксов для выбора каналов"""
   global channels_container, selected_channels
   if not channels_container:
     return
@@ -122,7 +125,7 @@ def rebuild_channel_checkboxes(columns):
 
 
 def load_log_to_chart(file_path):
-  global cached_data, cached_timestamps, selected_channels
+  global cached_data, cached_timestamps, selected_channels, log_info_label
   if not file_path or not os.path.exists(file_path):
     ui.notify('Файл не выбран или не существует!', type='warning')
     return
@@ -131,6 +134,7 @@ def load_log_to_chart(file_path):
 
   cached_data = {}
   cached_timestamps = []
+  raw_full_timestamps = []
 
   try:
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -159,8 +163,12 @@ def load_log_to_chart(file_path):
     for row_idx, row in enumerate(reader):
       if not row or len(row) <= idx_time:
         continue
-      t_str = row[idx_time].split()[-1]
-      cached_timestamps.append(t_str)
+      full_t_str = row[idx_time].strip()
+      raw_full_timestamps.append(full_t_str)
+
+      # Для подписи оси X берем только время (ЧЧ:ММ:СС.мс)
+      t_short = full_t_str.split()[-1] if len(full_t_str.split()) > 1 else full_t_str
+      cached_timestamps.append(t_short)
 
       for col in data_cols:
         c_idx = header.index(col)
@@ -172,13 +180,37 @@ def load_log_to_chart(file_path):
         else:
           cached_data[col].append(0.0)
 
+    # --- ВЫЧИСЛЕНИЕ ДЛИТЕЛЬНОСТИ ЛОГА ---
+    duration_str = '00:00.000'
+    if raw_full_timestamps:
+      try:
+        t_start = datetime.strptime(raw_full_timestamps[0], '%Y-%m-%d %H:%M:%S.%f')
+        t_end = datetime.strptime(raw_full_timestamps[-1], '%Y-%m-%d %H:%M:%S.%f')
+        delta = t_end - t_start
+        total_seconds = delta.total_seconds()
+        mins = int(total_seconds // 60)
+        secs = int(total_seconds % 60)
+        millis = int((total_seconds - int(total_seconds)) * 1000)
+        duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
+      except Exception:
+        # Резервный расчет по количеству точек при 1 кГц (1 точка = 1 мс)
+        total_ms = len(raw_full_timestamps)
+        mins = total_ms // 60000
+        secs = (total_ms % 60000) // 1000
+        millis = total_ms % 1000
+        duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
+
+    # Обновляем инфо-метку на экране
+    if log_info_label:
+      log_info_label.set_text(f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}')
+
     selected_channels = [c for c in ['AO_1', 'AO_2'] if c in data_cols]
     if not selected_channels and data_cols:
       selected_channels = data_cols[:2]
 
     rebuild_channel_checkboxes(data_cols)
     render_chart()
-    ui.notify(f'Загружено {len(cached_timestamps)} точек!', type='positive')
+    ui.notify(f'Загружено {len(cached_timestamps)} точек ({duration_str})', type='positive')
 
   except Exception as e:
     print(f'[ERROR] Ошибка загрузки лога: {e}')
@@ -186,13 +218,18 @@ def load_log_to_chart(file_path):
 
 
 def build_oscilloscope_panel():
-  global chart_container, channels_container, refresh_logs_callback
+  global chart_container, channels_container, refresh_logs_callback, log_info_label
 
   with ui.card().classes('bg-slate-800 p-3 w-full'):
     with ui.row().classes('w-full justify-between items-center mb-2'):
-      ui.label('Офлайн-осциллограф (Анализ логов)').classes(
-          'text-sm font-bold text-sky-400'
-      )
+      with ui.row().classes('items-center gap-2'):
+        ui.label('Офлайн-осциллограф (Анализ логов)').classes(
+            'text-sm font-bold text-sky-400'
+        )
+        # Виджет вывода длительности и объема точек
+        log_info_label = ui.label('').classes(
+            'text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700'
+        )
 
       with ui.row().classes('items-center gap-2'):
         select_box = ui.row().classes('items-center')
@@ -234,14 +271,14 @@ def build_oscilloscope_panel():
           else:
             ui.notify('Выберите корректный лог-файл из списка!', type='warning')
 
-        ui.button('Открыть график', on_click=on_open_click).classes(
-            'bg-emerald-600 text-white text-xs font-bold py-1 px-3'
-        )
+        ui.button(
+            'Открыть график',
+            on_click=on_open_click,
+        ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
 
     # Выделенный контейнер под график
     chart_container = ui.column().classes('w-full')
     with chart_container:
-      # Заглушка до первой загрузки
       ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
           'text-xs text-slate-400 italic py-10 self-center'
       )
