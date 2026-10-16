@@ -156,16 +156,17 @@ static void my_fast_adc_listener_handler(struct k_work *work)
      k_sem_reset(adc_sem);
    struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)scan_dev->api;
    struct adc_scan_msg msg; 
+    uint16_t raw_buf[ADC2_BUF_SIZE];
 
+
+    api->get_buf_pointer(scan_dev,raw_buf);
     for (int step = 0; step < ADC2_BUF_SIZE; step++) 
-       {
-           uint32_t raw_val = 0;
-           api->get_channel_value(scan_dev, step, &raw_val);
-           float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
-            msg.channels_mv[step] =(v_pin_mv * coefficients1[step]); 
-        }
-        // Публикуем тестовый 32-канальный пакет в Zbus
-        zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
+    {                      
+        float v_pin_mv = (float)raw_buf[step] * (3.3 / 65535.0f);
+        msg.channels_mv[step] =(v_pin_mv * coefficients1[step]); 
+    }
+    // Публикуем тестовый 32-канальный пакет в Zbus
+    zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
     
     /* Сбрасываем статус события в "не готово" для следующего кадра АЦП [1] */
     adc_poll_events[0].state = K_POLL_STATE_NOT_READY;

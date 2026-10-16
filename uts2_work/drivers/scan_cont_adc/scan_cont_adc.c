@@ -55,10 +55,10 @@ static int         _seq_mux_adc_init(const struct device *_dev);
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-static uint32_t adc_buf_a[ADC_CHANNELS_CNT] __nocache;
-static uint32_t adc_buf_b[ADC_CHANNELS_CNT] __nocache;
-static uint32_t adc_shadow_buf[ADC_CHANNELS_CNT];
-
+static uint16_t adc_buf_a[ADC_CHANNELS_CNT] __nocache;
+static uint16_t adc_buf_b[ADC_CHANNELS_CNT] __nocache;
+static uint16_t adc_shadow_buf[ADC_CHANNELS_CNT];
+static volatile uint16_t *active_adc_buf;
 
 static struct k_mutex mutex_lock;
 static struct k_sem   sem_data_ready;
@@ -89,14 +89,33 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
         // Копирование данных из заполненного буфера в теневой
         if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_2) == 1)
         {
-            memcpy(adc_shadow_buf, adc_buf_a, sizeof(adc_shadow_buf));
+            active_adc_buf = adc_buf_a;
+            //memcpy(adc_shadow_buf, adc_buf_a, sizeof(adc_shadow_buf));
         } 
         else 
         {
-            memcpy(adc_shadow_buf, adc_buf_b, sizeof(adc_shadow_buf));
+            active_adc_buf = adc_buf_b;
+            //memcpy(adc_shadow_buf, adc_buf_b, sizeof(adc_shadow_buf));
         }
         k_sem_give(&sem_data_ready);
     }
+}
+
+
+static int _scan_adc_get_buf_p(const struct device *_dev,  uint16_t *_user_buf)
+{
+    int ret;
+    ret = k_mutex_lock(&mutex_lock, K_MSEC(100));
+    if (ret < 0) 
+    {
+        return -EAGAIN;
+    }
+    SCB_InvalidateDCache_by_Addr((void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
+    memcpy(_user_buf, (const void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
+    
+    k_mutex_unlock(&mutex_lock);
+    return 0;
+
 }
 
 /**
@@ -130,7 +149,7 @@ static int _seq_mux_adc_get_channel_value_impl(const struct device *_dev,
         return -EAGAIN;
     }
 
-    *_val = adc_shadow_buf[_channel_idx];
+    *_val = (uint32_t)adc_shadow_buf[_channel_idx];
 
     k_mutex_unlock(&mutex_lock);
     return 0;
@@ -182,7 +201,7 @@ static inline int _dma_init(const struct scan_cont_adc_config *_config,
     {
         .source_address   = (uint32_t)&(_adc_inst->DR),
         .dest_address     = (uint32_t)adc_buf_a,
-        .block_size       = ADC_CHANNELS_CNT  * sizeof(uint32_t),
+        .block_size       = ADC_CHANNELS_CNT  * sizeof(uint16_t),
         .source_addr_adj  = DMA_ADDR_ADJ_NO_CHANGE,
         .dest_addr_adj    = DMA_ADDR_ADJ_INCREMENT,
         .source_reload_en = 1,
@@ -193,10 +212,10 @@ static inline int _dma_init(const struct scan_cont_adc_config *_config,
     {
         .dma_slot             = _config->adc_dma_slot,
         .channel_direction    = PERIPHERAL_TO_MEMORY,
-        .source_data_size     = 4,
-        .dest_data_size       = 4,
-        .source_burst_length  = 4,
-        .dest_burst_length    = 4,
+        .source_data_size     = 2,
+        .dest_data_size       = 2,
+        .source_burst_length  = 1,
+        .dest_burst_length    = 1,
         .channel_priority     = 3, // Очень высокий приоритет DMA
         .block_count          = 1,
         .head_block           = &adc_block_cfg,
@@ -495,6 +514,7 @@ static const struct scan_cont_adc_api driver_api =
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
     .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
     .get_sem           = _seq_mux_adc_get_sem_impl,
+    .get_buf_pointer  = _scan_adc_get_buf_p,
 };
 
 static const struct scan_cont_adc_config scan_config = 

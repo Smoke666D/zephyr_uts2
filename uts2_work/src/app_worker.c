@@ -58,6 +58,8 @@ static int _app_worker_system_init(void)
     k_work_queue_init(&app_work_q);
     k_work_queue_init(&app_real_time_work_q);
 
+
+
     k_work_queue_start(
         &app_work_q, 
         worker_stack,

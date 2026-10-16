@@ -43,7 +43,7 @@
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
 
-        adc-duration-us = <400>;     /* T1: время АЦП */
+        adc-duration-us = <800>;     /* T1: время АЦП */
         switch-duration-us = <400>;  /* T2: время переключения */ 
 
         status = "okay";
