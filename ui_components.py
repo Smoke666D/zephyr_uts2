@@ -1,6 +1,8 @@
 import asyncio
+import time
+from logger import start_logger, stop_logger
 from nicegui import ui
-from oscilloscope import build_oscilloscope_panel
+from oscilloscope import build_oscilloscope_panel, refresh_logs_ui
 import serial
 from serial.tools import list_ports
 
@@ -100,7 +102,7 @@ def build_dashboard(ports_refs, ui_labels):
               curr.close()
               shell_ref['ser'] = None
               shell_btn.text = 'Открыть'
-              shell_btn.classes(remove='bg-emerald-600', add='bg-emerald-600')
+              shell_btn.classes(remove='bg-red-600', add='bg-emerald-600')
               ui.notify('Shell закрыт', type='warning')
             else:
               try:
@@ -396,7 +398,9 @@ def build_dashboard(ports_refs, ui_labels):
               'bg-emerald-600 text-white text-xs py-1 px-2'
           )
 
-# --- БЛОК 7: ДАШБОРД ДАТЧИКОВ (Без дубля датчиков тока) ---
+    # ==========================================
+    # 6. ДАШБОРД ДАТЧИКОВ
+    # ==========================================
     def create_metric_card(title, key, unit=''):
       with ui.card().classes(
           'bg-slate-700 py-3 px-3 flex-1 min-w-[130px] rounded flex flex-row justify-between items-center cursor-default'
@@ -449,7 +453,9 @@ def build_dashboard(ports_refs, ui_labels):
         for i in range(6):
           create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
 
- # --- БЛОК 9: ПАНЕЛЬ ДАТЧИКОВ ТОКА, НАПРЯЖЕНИЯ И ЭНЕРГИИ (1-8) ---
+    # ==========================================
+    # 7. ДАТЧИКИ ТОКА, НАПРЯЖЕНИЯ И ЭНЕРГИИ (1-8)
+    # ==========================================
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       with ui.row().classes('w-full justify-between items-center mb-1'):
         ui.label('Панель датчиков тока, напряжения и энергии (1-8)').classes(
@@ -470,15 +476,12 @@ def build_dashboard(ports_refs, ui_labels):
       with ui.grid(columns=4).classes('w-full gap-1.5'):
         for i in range(1, 9):
           with ui.card().classes('bg-slate-700 py-1.5 px-2.5 rounded flex flex-col justify-between'):
-            
-            # Шапка карточки датчика с кнопкой сброса
             with ui.row().classes('w-full justify-between items-center mb-1'):
               ui.label(f'Датчик {i}').classes('text-[11px] text-yellow-300 font-bold leading-none')
               ui.button('Сброс', on_click=make_energy_reset_handler(i)).classes(
                   'bg-red-700 text-white text-[9px] py-0.5 px-1.5 rounded'
               )
 
-            # Строка Напряжения
             with ui.row().classes('w-full justify-between items-center mt-0.5'):
               ui.label('U:').classes('text-[10px] text-slate-300 leading-none')
               with ui.row().classes('items-center gap-1'):
@@ -487,7 +490,6 @@ def build_dashboard(ports_refs, ui_labels):
                 )
                 ui.label('В').classes('text-[10px] text-slate-400 leading-none')
 
-            # Строка Тока
             with ui.row().classes('w-full justify-between items-center mt-1'):
               ui.label('I:').classes('text-[10px] text-slate-300 leading-none')
               with ui.row().classes('items-center gap-1'):
@@ -496,7 +498,6 @@ def build_dashboard(ports_refs, ui_labels):
                 )
                 ui.label('А').classes('text-[10px] text-slate-400 leading-none')
 
-            # Строка Энергии (6 знаков после запятой)
             with ui.row().classes('w-full justify-between items-center mt-1'):
               ui.label('E:').classes('text-[10px] text-slate-300 leading-none')
               with ui.row().classes('items-center gap-1'):
@@ -504,8 +505,9 @@ def build_dashboard(ports_refs, ui_labels):
                     'text-xs font-mono text-amber-400 font-bold leading-none'
                 )
                 ui.label('Дж').classes('text-[10px] text-slate-400 leading-none')
+
     # ==========================================
-    # 7. ИНТЕРФЕЙСЫ LIN (1-4)
+    # 8. ИНТЕРФЕЙСЫ LIN (1-4)
     # ==========================================
     ui.label('Интерфейсы LIN (1-4)').classes(
         'text-sm font-bold text-sky-300 mt-3'
@@ -581,7 +583,7 @@ def build_dashboard(ports_refs, ui_labels):
       make_lin_block(lin_idx)
 
     # ==========================================
-    # 8. CAN ИНФЕЙСЫ (1-3)
+    # 9. CAN ИНТЕРФЕЙСЫ (1-3)
     # ==========================================
     ui.label('Интерфейсы CAN (1-3)').classes(
         'text-sm font-bold text-sky-300 mt-3'
@@ -677,37 +679,75 @@ def build_dashboard(ports_refs, ui_labels):
           ui.button('Отправить', on_click=send_can_msg).classes(
               'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
           )
-# --- БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL ---
-    from logger import start_logger, stop_logger
 
-    with ui.card().classes('bg-slate-800 p-2 w-full'):
+    # ==========================================
+    # 10. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
+    # ==========================================
+    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
       ui.label('Логирование данных в файл (CSV/Excel)').classes(
           'text-xs font-semibold text-sky-400 mb-1'
       )
 
-      with ui.row().classes('gap-2 items-center'):
+      with ui.row().classes('gap-3 items-center'):
+        timer_start_ts = 0.0
+        timer_active = False
+
+        timer_lbl = ui.label('00:00.000').classes(
+            'text-sm font-mono text-emerald-400 font-bold bg-slate-900 py-1 px-2.5 rounded border border-slate-700'
+        )
+
+        def update_timer_ui():
+          if timer_active:
+            elapsed = time.time() - timer_start_ts
+            mins = int(elapsed // 60)
+            secs = int(elapsed % 60)
+            millis = int((elapsed - int(elapsed)) * 1000)
+            timer_lbl.set_text(f'{mins:02d}:{secs:02d}.{millis:03d}')
+
+        log_clock_timer = ui.timer(0.05, update_timer_ui, active=False)
 
         def toggle_log():
+          nonlocal timer_start_ts, timer_active
           if btn_log.text.startswith('Старт'):
             start_logger()
+            timer_start_ts = time.time()
+            timer_active = True
+            log_clock_timer.activate()
+            timer_lbl.set_text('00:00.000')
+
             btn_log.text = 'Стоп записи'
             btn_log.classes(remove='bg-emerald-600', add='bg-red-600')
-            ui.notify('Запись лога в файл начата', type='positive')
+            ui.notify('Запись лога начата', type='positive')
           else:
             stop_logger()
+            timer_active = False
+            log_clock_timer.deactivate()
+            elapsed = time.time() - timer_start_ts
+            mins = int(elapsed // 60)
+            secs = int(elapsed % 60)
+            millis = int((elapsed - int(elapsed)) * 1000)
+            timer_lbl.set_text(f'{mins:02d}:{secs:02d}.{millis:03d}')
+
             btn_log.text = 'Старт записи лога'
             btn_log.classes(remove='bg-red-600', add='bg-emerald-600')
-            ui.notify('Запись остановлена. Файл сохранен в /logs', type='info')
+            ui.notify(
+                f'Запись завершена ({mins:02d}:{secs:02d}.{millis:03d})',
+                type='info',
+            )
+
+            # Безопасное обновление через 200 мс — ОС успевает зафиксировать файл
+            ui.timer(0.2, refresh_logs_ui, once=True)
 
         btn_log = ui.button('Старт записи лога', on_click=toggle_log).classes(
             'bg-emerald-600 text-white text-xs font-bold py-1 px-3'
         )
-        ui.label(
-            'Данные сохраняются в папку /logs в формате CSV (открывается в'
-            ' Excel)'
-        ).classes('text-[10px] text-slate-400')
+
+        ui.label('Формат: ММ:СС.мс (сохранение в logs/)').classes(
+            'text-[10px] text-slate-400'
+        )
+
     # ==========================================
-    # 9. ОСЦИЛЛОГРАФ (В самом конце)
+    # 11. ОСЦИЛЛОГРАФ (В самом конце)
     # ==========================================
     ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
     build_oscilloscope_panel()
