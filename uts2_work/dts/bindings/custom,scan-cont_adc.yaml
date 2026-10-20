@@ -20,9 +20,6 @@ properties:
     type: int
     required: true
 
-  switch-duration-us:
-    type: int
-    required: true
 
   channel-count:
     type: int

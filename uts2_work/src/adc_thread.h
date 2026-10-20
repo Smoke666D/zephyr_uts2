@@ -3,8 +3,7 @@
 extern "C" {
 #endif
 
-#define AIN_TASK_STACK_SIZE 2024
-#define AIN_TASK_PRIORITY 10
+
 
 #include "stdint.h"
 

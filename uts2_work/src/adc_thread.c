@@ -1,12 +1,17 @@
 #include "adc_thread.h"
+#include <stdint.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 #include "system_bus_model.h"
 #include <zephyr/kernel.h>
-#include "app_worker.h"
 /* Подключаем публичный заголовочный файл нашего драйвера */
 #include <seq_mux_adc.h>
 #include <scan_cont_adc.h>
+#include "filters.h"
+
+
+#define AIN_TASK_STACK_SIZE 2024
+#define AIN_TASK_PRIORITY 1
 
 
 static const uint32_t r1_resistors[TOTAL_CHANNEL_COUNT] = {
@@ -42,8 +47,11 @@ static const uint32_t r2_resistors1[ADC2_BUF_SIZE] = {
     10000, 20000, 20000
 };
 
-static float coefficients[TOTAL_CHANNEL_COUNT];
-static float coefficients1[ADC2_BUF_SIZE];
+static float _sense_coof[TOTAL_CHANNEL_COUNT] __attribute__((section("DTCM")));;
+static float _envariemen_coof[ADC2_BUF_SIZE] __attribute__((section("DTCM")));;
+channel_median_filter_t _envariemen_filters[ADC2_BUF_SIZE] __attribute__((section("DTCM")));
+channel_median_filter_t _sense_filters[TOTAL_CHANNEL_COUNT] __attribute__((section("DTCM")));
+static struct k_sem *adc_sem;
 
 /* 
  * ОПРЕДЕЛЯЕМ КАНАЛ.
@@ -70,39 +78,86 @@ ZBUS_CHAN_DEFINE(adc2_data_chan,
 
 LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 
-/* Получаем указатель на наш прибор из дерева устройств */
 
 
-
-
-static void _adc_init()
+static void _sense_adc_init()
 {
     // Рассчитываем коэффициенты делителей один раз
     for (int i = 0; i < TOTAL_CHANNEL_COUNT; i++) {
-        coefficients[i] =   (float)(r1_resistors[i] + r2_resistors[i])/(float)r2_resistors[i] ;
+        _sense_coof[i] =   (float)(r1_resistors[i] + r2_resistors[i])/(float)r2_resistors[i] ;
+        _sense_coof[i] *=  (3.3f / 65535.0f);
+        _sense_filters[i].head = 0;
+        memset(_sense_filters[i].history,0,sizeof(uint16_t)*MEDIAN_WINDOW_SIZE);
     }
 }
 
 
-static void _adc_init2()
+ 
+
+static void _envariemen_adc_init()
 {
     // Рассчитываем коэффициенты делителей один раз
-    for (int i = 0; i < ADC2_BUF_SIZE; i++) {
-        coefficients1[i] =  (float)(r1_resistors1[i] + r2_resistors1[i])/(float)r2_resistors1[i];
+    for (int i = 0; i < ADC2_BUF_SIZE; i++) 
+    {
+        _envariemen_coof[i] =  (float)(r1_resistors1[i] + r2_resistors1[i])/(float)r2_resistors1[i];
+        _envariemen_coof[i] *=  (3.3f / 65535.0f);
+        _envariemen_filters[i].head = 0;
+        memset(_envariemen_filters[i].history,0,sizeof(uint16_t)*MEDIAN_WINDOW_SIZE);
     }
 }
 
-static void my_custom_thread_entry(void *p1, void *p2, void *p3)
+
+
+static void _envariement_thread_entry(void *p1, void *p2, void *p3)
 {
-   static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
-  // Проверяем готовность драйвера перед началом работы
-    if (!device_is_ready(seq_dev)) {
-         LOG_ERR("Sequencer driver is not ready!");
-     return;
+    struct adc_scan_msg msg; 
+    uint16_t raw_buf[ADC2_BUF_SIZE];
+    static const struct device *const scan_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
+    struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)scan_dev->api;
+    
+    if (!device_is_ready(scan_dev)) 
+    {
+        LOG_ERR("scan_adc device is not ready yet!");
+        return;      
+    }            
+    // Получаем ссылку на симофро готовности данных райвера
+    adc_sem = scan_cont_adc_get_sem(scan_dev);
+    if (adc_sem == NULL) 
+    {
+        LOG_ERR("Failed to retrieve semaphore from scan_adc driver!");       
+        return;
+    }            
+    _envariemen_adc_init();
+
+     while (1) 
+     {
+        k_sem_take(adc_sem, K_FOREVER);    
+        
+        // Получаем в локальный буффер копию DMA буффера
+        api->get_buf_pointer(scan_dev,raw_buf);    
+        for (int channel = 0; channel < ADC2_BUF_SIZE; channel++) 
+        {                      
+            float v_pin_mv =(float)apply_median_filter_5(&_envariemen_filters[channel], raw_buf[channel]);
+            msg.channels_mv[channel] = v_pin_mv * _envariemen_coof[channel]; 
+        }
+        // Публикуем тестовый 32-канальный пакет в Zbus
+        zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
+    }
+}
+
+
+
+static void _sense_thread_entry(void *p1, void *p2, void *p3)
+{
+     static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
+    // Проверяем готовность драйвера перед началом работы
+    if (!device_is_ready(seq_dev)) 
+    {
+        LOG_ERR("Sequencer driver is not ready!");
+        return;
     }
     
-    
-    _adc_init();
+    _sense_adc_init();
     struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)seq_dev->api;
     /* Извлекаем интерфейс высокоуровневого API нашего драйвера */
     //struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)seq_dev->api;
@@ -110,7 +165,6 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
     k_msleep(2000);
     
    
-    
      while (1) 
      {
          // Ждем готовности на семафоре драйвера (весь цикл 32 пересылок окончен)
@@ -127,8 +181,8 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
                  uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
                   uint16_t raw_val = 0;
                   api->get_channel_value(seq_dev, ch_idx, &raw_val);
-                  float v_pin_mv = (float)raw_val * (3.3 / 65535.0f);
-                 msg.channels_mv[ch_idx] =(v_pin_mv * coefficients[ch_idx]);
+                  float v_pin_mv =  (float)apply_median_filter_5(&_sense_filters[ch_idx], raw_val); 
+                 msg.channels_mv[ch_idx] =(v_pin_mv * _sense_coof[ch_idx]);
              }             
         }
         // Публикуем тестовый 32-канальный пакет в Zbus
@@ -137,76 +191,13 @@ static void my_custom_thread_entry(void *p1, void *p2, void *p3)
 }
 
 
-static struct k_sem *adc_sem;
-static const struct device *const scan_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
-static struct k_work_poll adc_monitor_work;
-static struct k_poll_event adc_poll_events[1];
-
-
-static void my_fast_adc_listener_handler(struct k_work *work)
-{
-     k_sem_reset(adc_sem);
-   struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)scan_dev->api;
-   struct adc_scan_msg msg; 
-    uint16_t raw_buf[ADC2_BUF_SIZE];
-
-
-    api->get_buf_pointer(scan_dev,raw_buf);
-    for (int step = 0; step < ADC2_BUF_SIZE; step++) 
-    {                      
-        float v_pin_mv = (float)raw_buf[step] * (3.3 / 65535.0f);
-        msg.channels_mv[step] =(v_pin_mv * coefficients1[step]); 
-    }
-    // Публикуем тестовый 32-канальный пакет в Zbus
-    zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
-    
-    /* Сбрасываем статус события в "не готово" для следующего кадра АЦП [1] */
-    adc_poll_events[0].state = K_POLL_STATE_NOT_READY;
-
-    /* Повторно отправляем воркер следить за семафором DMA АЦП [1] */
-    app_worker_poll_submit(&adc_monitor_work, adc_poll_events,REAL_TIME_WORKER);
-    
-}
-
-
-
-
-
-
-static int adc_scan_init(void)
-{
-    /* 1. ИСПРАВЛЕНИЕ: Обязательно проверяем готовность АЦП перед работой [1] */
-    if (!device_is_ready(scan_dev)) {
-        LOG_ERR("scan_adc device is not ready yet!");
-        return -ENODEV;
-    }
-
-    _adc_init2();
-
-    /* 2. ИСПРАВЛЕНИЕ: Используем красивую безопасную inline-функцию из заголовка [1] */
-    adc_sem = scan_cont_adc_get_sem(scan_dev);
-    if (adc_sem == NULL) {
-        LOG_ERR("Failed to retrieve semaphore from scan_adc driver!");
-        return -ENOTSUP;
-    }
-
-    k_poll_event_init(&adc_poll_events[0],
-                      K_POLL_TYPE_SEM_AVAILABLE,
-                      K_POLL_MODE_NOTIFY_ONLY,
-                      adc_sem);
-
-    k_work_poll_init(&adc_monitor_work, my_fast_adc_listener_handler);                
-    app_worker_poll_submit(&adc_monitor_work, adc_poll_events,REAL_TIME_WORKER);
-    
-    return 0;
-}
-
-SYS_INIT(adc_scan_init, APPLICATION, 40);
-
-
-K_THREAD_DEFINE(my_thread_id, AIN_TASK_STACK_SIZE, my_custom_thread_entry, 
+K_THREAD_DEFINE(envariement_thread_id, AIN_TASK_STACK_SIZE, _envariement_thread_entry, 
             NULL, NULL, NULL, 
-                7, 0, 0);
+                -2, 0, 0);
+
+K_THREAD_DEFINE(sense_thread_id, AIN_TASK_STACK_SIZE, _sense_thread_entry, 
+            NULL, NULL, NULL, 
+                1, 0, 0);
 
 
 PARAM_ROUTE_DEFINE(AIN_AO1,&adc_data_chan,0,ARRAY_DATA);

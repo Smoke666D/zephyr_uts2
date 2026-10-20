@@ -2,17 +2,14 @@ import asyncio
 import struct
 import threading
 import time
-from filters import MovingAverageFilter
 from globals_data import telemetry_data_cache
 from logger import log_packet
 from nicegui import ui
 
+# 1 байт (0xBE) + 1 uint32 (timestamp_ms) + 78 float = 317 байт
+TELEMETRY_FORMAT = '<BI' + 'f' * 78
+PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)  # 317 байт
 
-# 1 байт (magic 0xBE) + 78 полей float
-TELEMETRY_FORMAT = '<B' + 'f' * 78
-PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)  # 313 байт
-
-# Потокобезопасный буфер для передачи данных в UI
 incoming_queue = []
 queue_lock = threading.Lock()
 
@@ -24,126 +21,119 @@ def telemetry_reader_loop(
     lin_logs_dict=None,
     raw_logs_dict=None,
 ):
-  """Запускает отдельный системный поток для чтения COM-порта на максимальной скорости"""
-
   def _thread_target():
     serial_buffer = bytearray()
+    synchronized = False
+
     while True:
       current_ser = tel_ser_ref.get('ser')
       if current_ser and current_ser.is_open:
         try:
-          if current_ser.in_waiting > 0:
-            chunk = current_ser.read(current_ser.in_waiting)
+          n = current_ser.in_waiting
+          if n > 0:
+            chunk = current_ser.read(max(n, 1024))
             if chunk:
               serial_buffer.extend(chunk)
 
-          # Если буфер разросся слишком сильно (отставание), чистим хвост, чтобы не было лагов
-          if len(serial_buffer) > 32768:
+          if len(serial_buffer) > 65536:
             serial_buffer = serial_buffer[-16384:]
+            synchronized = False
 
-          # Жесткий разбор строго по размеру пакета телеметрии (313 байт)
-          while len(serial_buffer) >= PACKET_SIZE:
-            # Ищем маркер 0xBE
+          # 1. Синхронизация: ищем 0xBE и проверяем шаг ровно 317 байт
+          while not synchronized and len(serial_buffer) >= (PACKET_SIZE * 2):
             idx = serial_buffer.find(b'\xbe')
             if idx == -1:
-              # Маркер не найден — очищаем весь буфер
               serial_buffer.clear()
               break
 
-            # Если маркер не в самом начале, отрезаем мусор перед ним
             if idx > 0:
               del serial_buffer[:idx]
 
-            # Проверяем, хватит ли данных на целый пакет после отсечения мусора
-            if len(serial_buffer) < PACKET_SIZE:
+            if (
+                len(serial_buffer) >= (PACKET_SIZE + 1)
+                and serial_buffer[PACKET_SIZE] == 0xBE
+            ):
+              synchronized = True
               break
+            else:
+              del serial_buffer[0]
 
-            # Вырезаем пакет
-            pkt = serial_buffer[:PACKET_SIZE]
-
-            # Дополнительная проверка целостности по первому байту
-            if pkt[0] == 0xBE:
+          # 2. Потоковый разбор пакетов
+          while synchronized and len(serial_buffer) >= PACKET_SIZE:
+            if serial_buffer[0] == 0xBE:
+              pkt = serial_buffer[:PACKET_SIZE]
               try:
                 unpacked = struct.unpack(TELEMETRY_FORMAT, pkt)
-                # Складываем в потокобезопасную очередь абсолютно все пакеты
                 with queue_lock:
                   incoming_queue.append(unpacked)
               except Exception as e:
-                print(f'Ошибка распаковки пакета: {e}')
-
-            # Сдвигаем буфер на размер обработанного пакета
-            del serial_buffer[:PACKET_SIZE]
+                print(f'Ошибка распаковки: {e}')
+              del serial_buffer[:PACKET_SIZE]
+            else:
+              synchronized = False
+              break
 
         except Exception as e:
-          print(f'Ошибка в потоке чтения порта: {e}')
-          time.sleep(0.01)
+          print(f'Ошибка чтения COM: {e}')
+          time.sleep(0.005)
       else:
         time.sleep(0.05)
 
-  # Стартуем фоновый демон-поток
-  t = threading.Thread(target=_thread_target, daemon=True)
-  t.start()
+  threading.Thread(target=_thread_target, daemon=True).start()
 
-  # Функция пакетного обновления UI (вызывается таймером NiceGUI с частотой ~20 Гц)
   def ui_update_callback():
-    # 1. Забираем ВСЕ накопившиеся пакеты из очереди за эти 50 мс
     with queue_lock:
       if not incoming_queue:
         return
-      packets_batch = list(
-          incoming_queue
-      )  # Копируем всё, что успело прилететь (~50 пакетов при 1000 Гц)
-      incoming_queue.clear()  # Очищаем очередь для новых данных
+      packets_batch = list(incoming_queue)
+      incoming_queue.clear()
 
     try:
-      # --- ЭТАП 1: ОБРАБОТКА ВСЕХ ДАННЫХ (БЕЗ UI) ---
-      # Мы обязаны сохранить и прогнать через математику КАЖДЫЙ пакет, чтобы не терять точки
+      # Записываем в логгер абсолютно все пакеты
       for unpacked in packets_batch:
-        # Пишем в лог на диск абсолютно ВСЕ пакеты (1000 раз в сек)
         log_packet(unpacked)
 
-        # Передаем в осциллограф ВСЕ точки (чтобы график не был рваным)
-      
-
-      # --- ЭТАП 2: ОБНОВЛЕНИЕ ТЕКСТОВЫХ ИНДИКАТОРОВ (UI) ---
-      # Для текстовых label-ов берем только САМЫЙ СВЕЖИЙ пакет из пачки, чтобы браузер не лагал
+      # Для текстовых виджетов берем последний срез
+      # unpacked[0] = magic (0xBE)
+      # unpacked[1] = timestamp_ms (uint32)
+      # unpacked[2..] = float поля
       latest_pkt = packets_batch[-1]
 
-      ui_labels['rf_power'].set_text(f'{latest_pkt[1]:.2f}')
-      ui_labels['ntc'].set_text(f'{latest_pkt[2]:.2f}')
-      ui_labels['ext_vsense'].set_text(f'{latest_pkt[3]:.2f}')
-      ui_labels['brd_detect'].set_text(f'{latest_pkt[4]:.2f}')
-      ui_labels['temp_gnd'].set_text(f'{latest_pkt[5]:.2f}')
-      ui_labels['temp_vdd'].set_text(f'{latest_pkt[6]:.2f}')
-      ui_labels['light_gnd'].set_text(f'{latest_pkt[7]:.2f}')
-      ui_labels['light_vdd'].set_text(f'{latest_pkt[8]:.2f}')
+      ui_labels['rf_power'].set_text(f'{latest_pkt[2]:.2f}')
+      ui_labels['ntc'].set_text(f'{latest_pkt[3]:.2f}')
+      ui_labels['ext_vsense'].set_text(f'{latest_pkt[4]:.2f}')
+      ui_labels['brd_detect'].set_text(f'{latest_pkt[5]:.2f}')
+      ui_labels['temp_gnd'].set_text(f'{latest_pkt[6]:.2f}')
+      ui_labels['temp_vdd'].set_text(f'{latest_pkt[7]:.2f}')
+      ui_labels['light_gnd'].set_text(f'{latest_pkt[8]:.2f}')
+      ui_labels['light_vdd'].set_text(f'{latest_pkt[9]:.2f}')
 
+      # AO каналы (смещены на +1 из-за timestamp_ms: индексы 10..27)
       for i in range(18):
-        val = latest_pkt[9 + i]
+        val = latest_pkt[10 + i]
         ui_labels[f'ao_{i}'].set_text(f'{val:.2f}')
 
       for i in range(6):
-        ui_labels['vsense_%d' % i].set_text(f'{latest_pkt[27+i]:.2f}')
+        ui_labels['vsense_%d' % i].set_text(f'{latest_pkt[28 + i]:.2f}')
       for i in range(8):
-        ui_labels['env_%d' % i].set_text(f'{latest_pkt[43+i]:.2f}')
+        ui_labels['env_%d' % i].set_text(f'{latest_pkt[44 + i]:.2f}')
 
-      curr_offset = 51
+      curr_offset = 52
       for i in range(1, 9):
         v_val = latest_pkt[curr_offset]
         i_val = latest_pkt[curr_offset + 1]
         e_val = latest_pkt[curr_offset + 2]
-        ui_labels['curr_v_%d' % i].set_text(f'{v_val:.2f}')
-        ui_labels['curr_i_%d' % i].set_text(f'{i_val:.4f}')
-        ui_labels['curr_e_%d' % i].set_text(f'{e_val:.6f}')
+        ui_labels[f'curr_v_{i}'].set_text(f'{v_val:.2f}')
+        ui_labels[f'curr_i_{i}'].set_text(f'{i_val:.4f}')
+        ui_labels[f'curr_e_{i}'].set_text(f'{e_val:.6f}')
         curr_offset += 3
 
       for i in range(1, 5):
-        lin_v = latest_pkt[74 + i]
+        lin_v = latest_pkt[75 + i]
         if f'lin_v_{i}' in ui_labels:
           ui_labels[f'lin_v_{i}'].set_text(f'{lin_v:.2f}')
 
     except Exception as e:
-      print(f'Ошибка обработки пакета/UI: {e}')
+      print(f'Ошибка обновления UI: {e}')
 
-  # Регистрируем таймер обновления интерфейса (20 раз в секунду — плавно для глаз и без лагов)
   ui.timer(0.05, ui_update_callback)

@@ -32,6 +32,7 @@ target_sources(app PRIVATE
        src/main.c
        src/settings.c
        src/shell_cmd.c
+       src/filters.c
       ${APP_SOURCES} 
 )
 

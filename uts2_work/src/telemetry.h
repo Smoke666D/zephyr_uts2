@@ -6,6 +6,7 @@
 // 1. Описываем структуру пакета телеметрии (выравнивание по байтам __packed)
 struct telemetry_packet {
     uint8_t  magic;          // Байт синхронизации, например 0xBE (Binary End)
+    uint32_t timestamp_ms;   // Аппаратный таймстамп ядра (k_uptime_get_32())
     
     // ADS1115
     float    rf_power;

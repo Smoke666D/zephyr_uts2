@@ -255,6 +255,20 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val);
     float:    bus_get_real  \
 )((id), (val))
 
+
+int bus_get_bool_ch(SYSTEM_BUS_ID id, bool * _val,uint8_t size);
+int bus_get_u32_ch(SYSTEM_BUS_ID id,  uint32_t * _val,uint8_t size);
+int bus_get_real_ch(SYSTEM_BUS_ID id, float * _val,uint8_t size);
+
+// 2. Пишем макрос, который смотрит на тип указателя `val`
+#define SYSTEM_BUS_GET_CHANNEL(id, val, size) _Generic(*(val), \
+    bool:     bus_get_bool_ch, \
+    int:      bus_get_u32_ch,  \
+    unsigned: bus_get_u32_ch,  \
+    float:    bus_get_real_ch  \
+)((id), (val), (size))
+
+
  int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
 #define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
@@ -282,8 +296,6 @@ int bus_set_real_arr(float val, const SYSTEM_BUS_ID *ids, size_t count);
 
 int bus_listener_attach(const struct zbus_observer *listener, SYSTEM_BUS_ID id);
 
-
-    
 
 #ifdef __cplusplus
 }

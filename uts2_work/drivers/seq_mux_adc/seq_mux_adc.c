@@ -277,7 +277,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
 
     LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_1, (uint32_t)adc_buf_b);
     LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_1);
-
+     LL_DMA_DisableIT_HT(DMA1, LL_DMA_STREAM_1);
     return 0;
 }
 

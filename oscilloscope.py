@@ -1,5 +1,4 @@
 import csv
-from datetime import datetime
 import glob
 import os
 from nicegui import ui
@@ -9,6 +8,7 @@ LOGS_DIR = os.path.join(BASE_DIR, 'logs')
 
 chart_container = None
 channels_container = None
+stats_container = None
 refresh_logs_callback = None
 log_info_label = None
 
@@ -21,6 +21,7 @@ SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e', '#c084fc', '#fb923c
 
 
 def update_oscilloscope_data(*args, **kwargs):
+  """Заглушка для совместимости с внешними модулями"""
   pass
 
 
@@ -38,11 +39,67 @@ def refresh_logs_ui():
     refresh_logs_callback()
 
 
+def update_stats_panel():
+  """Вычисляет среднее, мин и макс с процентами отклонения и выводит над графиком"""
+  global stats_container, selected_channels, cached_data
+  if not stats_container:
+    return
+
+  stats_container.clear()
+  if not selected_channels:
+    return
+
+  with stats_container:
+    with ui.row().classes('w-full gap-2 items-center'):
+      for idx, col_name in enumerate(selected_channels):
+        if col_name in cached_data and cached_data[col_name]:
+          vals = cached_data[col_name]
+          color = SERIES_COLORS[idx % len(SERIES_COLORS)]
+
+          v_avg = sum(vals) / len(vals)
+          v_max = max(vals)
+          v_min = min(vals)
+
+          # Расчет отклонений от среднего в процентах
+          if abs(v_avg) > 1e-9:
+            dev_max_pct = ((v_max - v_avg) / abs(v_avg)) * 100.0
+            dev_min_pct = ((v_min - v_avg) / abs(v_avg)) * 100.0
+            str_dev_max = f'{dev_max_pct:+.1f}%'
+            str_dev_min = f'{dev_min_pct:+.1f}%'
+          else:
+            str_dev_max = '0.0%'
+            str_dev_min = '0.0%'
+
+          with ui.card().classes(
+              'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border border-slate-700/80 shadow-md flex flex-col justify-between'
+          ):
+            with ui.row().classes('w-full justify-between items-center mb-1'):
+              ui.label(col_name).style(f'color: {color};').classes(
+                  'text-xs font-bold leading-none truncate'
+              )
+              ui.label(f'Avg: {v_avg:.3f}').classes(
+                  'text-[11px] font-mono text-slate-200 font-semibold'
+              )
+
+            with ui.row().classes('w-full justify-between items-center text-[10px] font-mono leading-none'):
+              with ui.row().classes('items-center gap-1'):
+                ui.label('Max:').classes('text-slate-400')
+                ui.label(f'{v_max:.3f}').classes('text-emerald-400 font-bold')
+                ui.label(f'({str_dev_max})').classes('text-emerald-500/80 text-[9px]')
+
+              with ui.row().classes('items-center gap-1'):
+                ui.label('Min:').classes('text-slate-400')
+                ui.label(f'{v_min:.3f}').classes('text-rose-400 font-bold')
+                ui.label(f'({str_dev_min})').classes('text-rose-500/80 text-[9px]')
+
+
 def render_chart():
   """Пересоздает элемент графика внутри chart_container на основе выбранных каналов"""
   global chart_container, selected_channels, cached_data, cached_timestamps
   if not chart_container or not cached_timestamps:
     return
+
+  update_stats_panel()
 
   series = []
   legend = []
@@ -134,7 +191,7 @@ def load_log_to_chart(file_path):
 
   cached_data = {}
   cached_timestamps = []
-  raw_full_timestamps = []
+  mcu_ms_timestamps = []
 
   try:
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -154,8 +211,21 @@ def load_log_to_chart(file_path):
       ui.notify('Не удалось прочитать заголовок таблицы!', type='warning')
       return
 
-    idx_time = header.index('Timestamp') if 'Timestamp' in header else 0
-    data_cols = [col.strip() for col in header if col.strip() and col.strip() != 'Timestamp']
+    # Определение индексов временных колонок
+    idx_time = 0
+    if 'Time' in header:
+      idx_time = header.index('Time')
+    elif 'Timestamp' in header:
+      idx_time = header.index('Timestamp')
+
+    idx_mcu_ms = header.index('MCU_Time_ms') if 'MCU_Time_ms' in header else -1
+
+    # Исключаем служебные временные колонки из параметров для построения графиков
+    data_cols = [
+        col.strip()
+        for col in header
+        if col.strip() and col.strip() not in ('Time', 'Timestamp', 'MCU_Time_ms')
+    ]
 
     for col in data_cols:
       cached_data[col] = []
@@ -163,12 +233,15 @@ def load_log_to_chart(file_path):
     for row_idx, row in enumerate(reader):
       if not row or len(row) <= idx_time:
         continue
-      full_t_str = row[idx_time].strip()
-      raw_full_timestamps.append(full_t_str)
 
-      # Для подписи оси X берем только время (ЧЧ:ММ:СС.мс)
-      t_short = full_t_str.split()[-1] if len(full_t_str.split()) > 1 else full_t_str
-      cached_timestamps.append(t_short)
+      t_str = row[idx_time].strip()
+      cached_timestamps.append(t_str)
+
+      if idx_mcu_ms != -1 and len(row) > idx_mcu_ms:
+        try:
+          mcu_ms_timestamps.append(int(row[idx_mcu_ms]))
+        except ValueError:
+          pass
 
       for col in data_cols:
         c_idx = header.index(col)
@@ -180,27 +253,21 @@ def load_log_to_chart(file_path):
         else:
           cached_data[col].append(0.0)
 
-    # --- ВЫЧИСЛЕНИЕ ДЛИТЕЛЬНОСТИ ЛОГА ---
+    # Расчет точной длительности по реальному таймстампу MCU
     duration_str = '00:00.000'
-    if raw_full_timestamps:
-      try:
-        t_start = datetime.strptime(raw_full_timestamps[0], '%Y-%m-%d %H:%M:%S.%f')
-        t_end = datetime.strptime(raw_full_timestamps[-1], '%Y-%m-%d %H:%M:%S.%f')
-        delta = t_end - t_start
-        total_seconds = delta.total_seconds()
-        mins = int(total_seconds // 60)
-        secs = int(total_seconds % 60)
-        millis = int((total_seconds - int(total_seconds)) * 1000)
-        duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
-      except Exception:
-        # Резервный расчет по количеству точек при 1 кГц (1 точка = 1 мс)
-        total_ms = len(raw_full_timestamps)
-        mins = total_ms // 60000
-        secs = (total_ms % 60000) // 1000
-        millis = total_ms % 1000
-        duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
+    if mcu_ms_timestamps:
+      total_ms = mcu_ms_timestamps[-1] - mcu_ms_timestamps[0]
+      mins = (total_ms // 1000) // 60
+      secs = (total_ms // 1000) % 60
+      millis = total_ms % 1000
+      duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
+    elif cached_timestamps:
+      total_ms = len(cached_timestamps)
+      mins = total_ms // 60000
+      secs = (total_ms % 60000) // 1000
+      millis = total_ms % 1000
+      duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
 
-    # Обновляем инфо-метку на экране
     if log_info_label:
       log_info_label.set_text(f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}')
 
@@ -218,15 +285,15 @@ def load_log_to_chart(file_path):
 
 
 def build_oscilloscope_panel():
-  global chart_container, channels_container, refresh_logs_callback, log_info_label
+  global chart_container, channels_container, stats_container, refresh_logs_callback, log_info_label
 
   with ui.card().classes('bg-slate-800 p-3 w-full'):
+    # Шапка управления
     with ui.row().classes('w-full justify-between items-center mb-2'):
       with ui.row().classes('items-center gap-2'):
         ui.label('Офлайн-осциллограф (Анализ логов)').classes(
             'text-sm font-bold text-sky-400'
         )
-        # Виджет вывода длительности и объема точек
         log_info_label = ui.label('').classes(
             'text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700'
         )
@@ -276,13 +343,17 @@ def build_oscilloscope_panel():
             on_click=on_open_click,
         ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
 
-    # Выделенный контейнер под график
+    # Панель статистических карточек над графиком
+    stats_container = ui.row().classes('w-full mb-1.5')
+
+    # Контейнер для холста графика
     chart_container = ui.column().classes('w-full')
     with chart_container:
       ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
           'text-xs text-slate-400 italic py-10 self-center'
       )
 
+    # Контейнер для чекбоксов каналов
     channels_container = ui.grid(columns=6).classes(
         'w-full gap-1 bg-slate-700/30 p-2 rounded mt-2'
     )

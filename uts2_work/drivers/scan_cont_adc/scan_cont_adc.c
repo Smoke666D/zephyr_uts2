@@ -22,7 +22,8 @@
 #include <zephyr/drivers/counter.h>
 #include <zephyr/cache.h>
 #include <zephyr/dt-bindings/dma/stm32_dma.h>
-
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <stm32_ll_tim.h>
 #include <stm32_ll_adc.h>
 #include <stm32_ll_bus.h>
@@ -90,10 +91,12 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
         if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_2) == 1)
         {
             active_adc_buf = adc_buf_a;
+            memcpy(adc_shadow_buf, (const void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
         } 
         else 
         {
             active_adc_buf = adc_buf_b;
+            memcpy(adc_shadow_buf, (const void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
         }
         k_sem_give(&sem_data_ready);
     }
@@ -102,74 +105,21 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
 
 static int _scan_adc_get_buf_p(const struct device *_dev,  uint16_t *_user_buf)
 {
-    int ret;
-    ret = k_mutex_lock(&mutex_lock, K_MSEC(100));
-    if (ret < 0) 
-    {
-        return -EAGAIN;
-    }
-    SCB_InvalidateDCache_by_Addr((void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
+    ARG_UNUSED(_dev);
     memcpy(_user_buf, (const void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
-    
-    k_mutex_unlock(&mutex_lock);
     return 0;
 
 }
 
-/**
- *  @brief      Получение значения АЦП для указанного канала
- *  @details    Блокирует доступ с помощью мьютекса и считывает 
- *              сохраненное значение канала.
- *
- *  @param      _dev         - Указатель на устройство
- *  @param      _channel_idx - Индекс канала
- *  @param      _val         - Указатель для записи значения
- *
- *  @return     int - Ноль в случае успеха, код ошибки в противном случае
- */
-static int _seq_mux_adc_get_channel_value_impl(const struct device *_dev, 
-                                               uint8_t _channel_idx, 
-                                               uint32_t *_val)
-{
-    int ret;
 
-    if (false
-        || _channel_idx >= ADC_CHANNELS_CNT
-        || _val == NULL
-       ) 
-    {
-        return -EINVAL;
-    }
 
-    ret = k_mutex_lock(&mutex_lock, K_MSEC(100));
-    if (ret < 0) 
-    {
-        return -EAGAIN;
-    }
-
-    *_val = (uint32_t)adc_shadow_buf[_channel_idx];
-
-    k_mutex_unlock(&mutex_lock);
-    return 0;
-}
-
-/**
- *  @brief      Ожидание готовности новых данных АЦП
- *  @details    Ожидает освобождение семафора готовности данных 
- *              в течение заданного таймаута.
- *
- *  @param      _dev     - Указатель на устройство
- *  @param      _timeout - Время ожидания
- *
- *  @return     int - Ноль при успехе, код ошибки при таймауте
- */
-static int _seq_mux_adc_wait_for_data_impl(const struct device *_dev, 
-                                           k_timeout_t _timeout)
+static struct k_sem * _seq_mux_adc_get_sem_impl(const struct device *_dev)
 {
     ARG_UNUSED(_dev);
-    return k_sem_take(&sem_data_ready, _timeout);
-}
 
+    /* Возвращаем адрес нашего системного семафора, который выдается в dma_callback */
+    return &sem_data_ready;
+}
 
 
 /**
@@ -230,7 +180,10 @@ static inline int _dma_init(const struct scan_cont_adc_config *_config,
 
     LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_2, (uint32_t)adc_buf_b);
     LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_2);
+LL_DMA_EnableIT_TC(DMA1, LL_DMA_STREAM_2);
 
+// Убедитесь, что HT выключено:
+LL_DMA_DisableIT_HT(DMA1, LL_DMA_STREAM_2);
     return 0;
 }
 
@@ -280,36 +233,46 @@ static inline void _gpio_init(void)
  */
 static inline int _tmr_init(TIM_TypeDef *_tmr_inst)
 {
-    const struct device *counter_dev = 
-        DEVICE_DT_GET(DT_CHILD(SEQ_TIM_NODE, counter));
-    
-    if (!device_is_ready(counter_dev)) 
-    {
-        return -ENODEV;
-    }
+     const struct device *counter_dev =
+DEVICE_DT_GET(DT_CHILD(SEQ_TIM_NODE, counter));
+if (!device_is_ready(counter_dev)) 
+{
+    return -ENODEV;
+}
 
-    uint32_t freq = counter_get_frequency(counter_dev);
-    
-    // Период таймера задается одной настройкой SEQ_ADC_DURATION_US
-    uint32_t total_ticks = (uint32_t)((uint64_t)SEQ_ADC_DURATION_US 
-                                   * freq / 1000000ULL);
+   LL_TIM_DisableCounter(_tmr_inst);
 
-    uint32_t arr_val = total_ticks > 0 ? total_ticks - 1 : 0;
+// 2. Явно задаем режим счета ВВЕРХ (Up-counting), чтобы исключить удвоение частоты TRGO
+LL_TIM_SetCounterMode(_tmr_inst, LL_TIM_COUNTERMODE_UP);
+
+uint32_t freq = counter_get_frequency(counter_dev);
+
+// Период таймера задается одной настройкой SEQ_ADC_DURATION_US
+uint32_t total_ticks = (uint32_t)((uint64_t)SEQ_ADC_DURATION_US 
+                               * freq / 1000000ULL);
+
+uint32_t arr_val = total_ticks > 0 ? total_ticks - 1 : 0;
 
 
-    uint32_t psc_val = (freq / 1000000UL) > 0 ? (freq / 1000000UL) - 1 : 0;
+//uint32_t psc_val = (freq / 1000000UL) > 0 ? (freq / 1000000UL) - 1 : 0;
 
-    LL_TIM_SetPrescaler(_tmr_inst, psc_val);
-    LL_TIM_SetAutoReload(_tmr_inst, arr_val);
-    
-    LL_TIM_CC_DisableChannel(_tmr_inst, LL_TIM_CHANNEL_CH1);
+//LL_TIM_SetPrescaler(_tmr_inst, psc_val);
+LL_TIM_SetAutoReload(_tmr_inst, arr_val);
 
-    // Событие UPDATE генерирует триггер TRGO для старта АЦП3
-    LL_TIM_SetTriggerOutput(_tmr_inst, LL_TIM_TRGO_UPDATE);
+LL_TIM_CC_DisableChannel(_tmr_inst, LL_TIM_CHANNEL_CH1);
 
-  
+// Событие UPDATE генерирует триггер TRGO для старта АЦП3
+LL_TIM_SetTriggerOutput(_tmr_inst, LL_TIM_TRGO_UPDATE);
 
-    return 0;
+  LL_TIM_GenerateEvent_UPDATE(_tmr_inst);
+
+// Очищаем случайный флаг обновления, если он взвелся программно
+LL_TIM_ClearFlag_UPDATE(_tmr_inst);
+
+// 5. Запускаем таймер
+LL_TIM_EnableCounter(_tmr_inst);
+
+return 0;
 }
 
 /**
@@ -428,6 +391,9 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source)
         k_busy_wait(1);
     }
 
+    LL_ADC_REG_SetContinuousMode(_adc_inst, LL_ADC_REG_CONV_SINGLE);
+  
+
     // 11. Включение АЦП
     LL_ADC_Enable(_adc_inst);
     while (!LL_ADC_IsActiveFlag_ADRDY(_adc_inst)) 
@@ -458,8 +424,7 @@ static int _scan_cont_adc_init(const struct device *_dev)
 
     _gpio_init();
 
-  
-    
+
     // Конфигурация DMA
     ret = _dma_init(config, adc_inst, _dev);
     if (ret < 0) 
@@ -509,13 +474,7 @@ static int _scan_cont_adc_init(const struct device *_dev)
     return 0;
 }
 
-static struct k_sem * _seq_mux_adc_get_sem_impl(const struct device *_dev)
-{
-    ARG_UNUSED(_dev);
-    
-    /* Возвращаем адрес нашего системного семафора, который выдается в dma_callback */
-    return &sem_data_ready;
-}
+
 
 
 /***************************************************************************************************

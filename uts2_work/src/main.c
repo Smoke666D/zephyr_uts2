@@ -208,10 +208,15 @@ void send_can_message_binary(const struct device *uart_dev, uint8_t can_num, con
     }
 }
 
+  struct telemetry_packet pkt;
+
+K_MSGQ_DEFINE(telemetry_queue, sizeof(struct telemetry_packet), 4, 4);
+
 void send_binary_telemetry(const struct device *uart_dev) {
-    struct telemetry_packet pkt;
+  
     pkt.magic = TELEMETRY_MAGIC_BYTE;
 
+    pkt.timestamp_ms = k_uptime_get_32();
     // Заполняем данными из твоего системного буфера
     SYSTEM_BUS_GET(RF_POWER, &pkt.rf_power);
     SYSTEM_BUS_GET(NTC, &pkt.ntc);
@@ -267,7 +272,11 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(AIN_DA41_test2, &pkt.step8[4]);
 
     // Env (8 шт)
-    SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
+
+    SYSTEM_BUS_GET_CHANNEL(ENV_P3V3,&pkt.env[0],sizeof(float)*8);
+
+ 
+   /* SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
     SYSTEM_BUS_GET(ENV_P5V0,  &pkt.env[1]);
     SYSTEM_BUS_GET(ENV_VIN,   &pkt.env[2]);
     SYSTEM_BUS_GET(ENV_VDOUT1, &pkt.env[3]);
@@ -275,7 +284,7 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(ENV_USB,   &pkt.env[5]);
     SYSTEM_BUS_GET(ENV_VDOUT2, &pkt.env[6]);
     SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
-
+*/
 
     SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,   &pkt.current_sensors[0]);
     SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[1]);
@@ -316,11 +325,8 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(LIN_AO3,       &pkt.lin_voltages[2]);
     SYSTEM_BUS_GET(LIN_AO4,       &pkt.lin_voltages[3]);
 
-    // Отправляем всю структуру байт за байтом в UART
-    uint8_t *ptr = (uint8_t *)&pkt;
-    for (size_t i = 0; i < sizeof(pkt); i++) {
-        uart_poll_out(uart_dev, ptr[i]);
-    }
+     k_msgq_put(&telemetry_queue,&pkt,K_NO_WAIT);
+
 }
 
 
@@ -450,20 +456,16 @@ static void _can3_rx_listener_cb(const struct zbus_channel *_chan)
 
 
 
-
-
-// Семафор для синхронизации с таймером
-static K_SEM_DEFINE(telemetry_sem, 0, 1);
-
-// Обработчик таймера (вызывается аппаратно каждые 1.0 мс)
-static void telemetry_timer_handler(struct k_timer *dummy)
+static void telemetry_timer_expiry(struct k_timer *timer)
 {
-    // Отдаем семафор потоку телеметрии
-    k_sem_give(&telemetry_sem);
+
+    send_binary_telemetry(telemetry_uart);  
+
+
 }
 
 // Инициализация периодического таймера на 1 кГц (1 мс)
-static K_TIMER_DEFINE(telemetry_timer, telemetry_timer_handler, NULL);
+static K_TIMER_DEFINE(telemetry_timer, telemetry_timer_expiry, NULL);
 
 ZBUS_LISTENER_DEFINE(can1_rx_listener, _can1_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(can2_rx_listener, _can2_rx_listener_cb);
@@ -473,10 +475,16 @@ ZBUS_LISTENER_DEFINE(lin2_rx_listener, _lin2_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(lin3_rx_listener, _lin3_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(lin4_rx_listener, _lin4_rx_listener_cb);
 
+
+
+
+
+
+
 int main(void)
 {
 	LOG_INF("SYSTETM START 3");	
-
+    struct telemetry_packet _packet_to_send;
 /*	int ret;
     EEPROM_Test();
 	FRAM_Test();
@@ -491,14 +499,15 @@ int main(void)
     bus_listener_attach(&lin3_rx_listener,LIN3_RX);
     bus_listener_attach(&lin4_rx_listener,LIN4_RX);
 
+  
     k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
-   
+    bool state = true;
     while (1) 
 	{    
         can_queue_message_t rx_msg;       
         while (k_msgq_get(&all_can_rx_queue, &rx_msg, K_NO_WAIT) == 0) 
         {
-             send_can_message_binary(telemetry_uart, rx_msg.iface_id, &rx_msg.msg);        
+            send_can_message_binary(telemetry_uart, rx_msg.iface_id, &rx_msg.msg);        
         }
         uint8_t ch = 0;
         lin_queue_message_t lin_msg;
@@ -508,10 +517,17 @@ int main(void)
             data = lin_msg.msg;
             send_uart_stream_to_dashboard(lin_msg.iface_id,&data,1);            
         }
-
-    
-        send_binary_telemetry(telemetry_uart);         
-        k_sem_take(&telemetry_sem, K_FOREVER);  
+        if (k_msgq_get(&telemetry_queue,&_packet_to_send, K_FOREVER)==0)
+        {            
+            uint8_t *ptr = (uint8_t *)&_packet_to_send;
+            for (size_t i = 0; i < sizeof(_packet_to_send); i++) 
+            {
+                uart_poll_out(telemetry_uart , ptr[i]);
+            }
+        }      
     }
 	return 0;
 }
+
+
+

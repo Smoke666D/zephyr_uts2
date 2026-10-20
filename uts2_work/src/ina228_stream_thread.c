@@ -319,7 +319,7 @@ void ina228_reset_sensor_energy(uint8_t sensor_idx)
 
 // Запуск потока с использованием стека в DTCM
 K_THREAD_DEFINE(ina_thread_id, INA228_THREAD_STACK_SIZE, _rti_poller_thread, 
-                NULL, NULL, NULL, 
+               NULL, NULL, NULL, 
                 INA228_THREAD_PRIORITY, 0, 0);
 
 // Регистрация путей шины параметров для Токов и Напряжений

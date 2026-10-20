@@ -1,10 +1,7 @@
 from collections import deque
-from datetime import datetime, timedelta
 import os
 import threading
 import time
-
-__all__ = ['start_logger', 'stop_logger', 'log_packet']
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
@@ -13,20 +10,30 @@ log_queue = deque()
 is_logging = False
 log_file_path = None
 file_handle = None
-start_time_real = None
-packet_counter = 0
 writer_thread_obj = None
 
 
 def log_packet(unpacked_data):
-  """Вызывается из телеметрии при приеме каждого пакета."""
-  global start_time_real, packet_counter
-  if is_logging:
-    packet_time = start_time_real + timedelta(milliseconds=packet_counter)
-    timestamp = packet_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-    packet_counter += 1
+  """Записывает пакет в лог.
 
-    row = [timestamp] + list(unpacked_data[1:])
+  unpacked_data[0] = 0xBE
+  unpacked_data[1] = timestamp_ms (uint32_t с микроконтроллера)
+  unpacked_data[2:] = 78 полей float
+  """
+  global is_logging
+  if is_logging:
+    mcu_ms = int(unpacked_data[1])
+
+    # Формируем читаемое время: ММ:СС.мс
+    total_sec = mcu_ms // 1000
+    mins = (total_sec // 60) % 60
+    hours = (total_sec // 3600)
+    secs = total_sec % 60
+    millis = mcu_ms % 1000
+    time_str = f'{hours:02d}:{mins:02d}:{secs:02d}.{millis:03d}'
+
+    # Пишем: Time_Formatted; MCU_Time_ms; все_остальные_параметры
+    row = [time_str, mcu_ms] + list(unpacked_data[2:])
     row_str = [str(x) for x in row]
     log_queue.append(';'.join(row_str) + '\n')
 
@@ -49,21 +56,22 @@ def _writer_thread():
 
 
 def start_logger():
-  global is_logging, log_file_path, file_handle, start_time_real, packet_counter, writer_thread_obj
+  global is_logging, log_file_path, file_handle, writer_thread_obj
   if is_logging:
     return
 
   os.makedirs(LOGS_DIR, exist_ok=True)
-  timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-  log_file_path = os.path.join(LOGS_DIR, f'telemetry_{timestamp}.csv')
+  from datetime import datetime
+
+  ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+  log_file_path = os.path.join(LOGS_DIR, f'telemetry_{ts}.csv')
 
   file_handle = open(log_file_path, mode='w', newline='', encoding='utf-8')
-
-  # Спец-строка для Excel (разделитель ;)
   file_handle.write('sep=;\n')
 
   header = [
-      'Timestamp',
+      'Time',
+      'MCU_Time_ms',
       'RF_Power',
       'NTC',
       'Ext_VSense',
@@ -95,10 +103,7 @@ def start_logger():
   file_handle.write(';'.join(header) + '\n')
   file_handle.flush()
 
-  start_time_real = datetime.now()
-  packet_counter = 0
   log_queue.clear()
-
   is_logging = True
   writer_thread_obj = threading.Thread(target=_writer_thread, daemon=True)
   writer_thread_obj.start()

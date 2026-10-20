@@ -102,6 +102,12 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
     return -ENOTSUP; /* Тип данных не поддерживается этой функцией */
 }
 
+
+
+
+
+
+
  int bus_set_real(SYSTEM_BUS_ID id, float _val)
 {
     const struct system_bus_handler *handler = _get_valid_handler(id);
@@ -113,7 +119,7 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
     if (handler->channel_type == ARRAY_DATA)
     {            
         // Захватываем данные канала
-        if (zbus_chan_claim(handler->channel, K_MSEC(50)) == 0)
+        if (zbus_chan_claim(handler->channel, K_MSEC(1)) == 0)
         {
             float *msg = (float *)zbus_chan_msg(handler->channel);                
             msg[handler->system_index] = _val;
@@ -221,10 +227,88 @@ const struct system_bus_handler *handler = _get_valid_handler(id);
    
 }
 
+
+int bus_get_bool_ch(SYSTEM_BUS_ID id, bool * _val,uint8_t size)
+{
+    if (id >= SYSTEM_BUS_COUNT)
+    {
+        return -EINVAL;
+    }
+
+    const struct system_bus_handler *handler = cache[id];
+    if (true
+        && handler != NULL     
+    )
+    {
+        if (handler->channel_type == ARRAY_DATA)
+        {            
+            // Захватываем данные канала
+            if (zbus_chan_claim(handler->channel,K_MSEC(50)) == 0 )
+            {
+                BOOLEAN_ARRAY_CHANNEL_t * msg = zbus_chan_msg(handler->channel);                
+                msg->value[handler->system_index] = _val;
+                zbus_chan_finish(handler->channel);
+                zbus_chan_notify(handler->channel,K_NO_WAIT); 
+                return 0;
+            }
+        }         
+    }
+   return -ENODEV; /* Модуль обслуживания параметра не скомпилирован */
+}
+
+ int bus_get_u32_ch(SYSTEM_BUS_ID id, uint32_t * _val,uint8_t size)
+{
+    const struct system_bus_handler *handler = _get_valid_handler(id);
+    if (handler == NULL)
+    {
+        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
+    }
+
+
+
+    const uint32_t *channel_msg = (const uint32_t *)zbus_chan_msg(handler->channel);
+    if (channel_msg == NULL)
+    {
+        return -ENODEV;
+    }   
+     
+            
+     *_val = channel_msg [handler->system_index];
+        
+     return 0;
+               
+    
+   
+}
+
+
+int bus_get_real_ch(SYSTEM_BUS_ID id, float * _val, uint8_t size)
+{
+
+    const struct system_bus_handler *handler = _get_valid_handler(id);
+    if (handler == NULL)
+    {
+        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
+    }
+
+    size_t msg_size = zbus_chan_msg_size(handler->channel);    
+    if (size > msg_size)    
+    {
+            return -ENOMEM; 
+    }
+    const float * _float_msg;
+    _float_msg = (const float *)zbus_chan_msg(handler->channel);                     
+    memcpy(_val,_float_msg,size*sizeof(float));            
+    return 0;
+   
+    
+   
+}
+
+
+
 int bus_get_real(SYSTEM_BUS_ID id, float * _val)
 {
- 
-
     const struct system_bus_handler *handler = _get_valid_handler(id);
     if (handler == NULL)
     {
@@ -237,17 +321,11 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val)
             return -ENOMEM; 
     }
 
-    // Захватываем данные канала
-   if (zbus_chan_read(handler->channel, raw_msg_buffer, K_MSEC(50)) == 0)
-        {
-            // 3. Интерпретируем данные как массив float и берем нужное по индексу
-            float *values = (float *)raw_msg_buffer;
-            
-            *_val = values[handler->system_index];
-            return 0;
-        }          
-    
-   return -ENODEV; /* Модуль обслуживания параметра не скомпилирован */
+    const float * _float_msg;
+    _float_msg = (const float *)zbus_chan_msg(handler->channel);
+          
+    *_val = _float_msg[handler->system_index];
+    return 0;   
 }
 
 int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count)

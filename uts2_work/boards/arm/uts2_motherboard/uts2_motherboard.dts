@@ -43,8 +43,8 @@
 
         /* Ссылка на аппаратный pinctrl управляющих пинов */
 
-        adc-duration-us = <990>;     /* T1: время АЦП */
-        switch-duration-us = <400>;  /* T2: время переключения */ 
+        adc-duration-us = <1000>;     /* T1: время АЦП */
+
 
         status = "okay";
     };   
@@ -109,7 +109,7 @@
 
 &timers4 {
     status = "okay";
-    st,prescaler = <10000>; 
+    st,prescaler = <10000>;    
     counter {
         status = "okay";
     };
