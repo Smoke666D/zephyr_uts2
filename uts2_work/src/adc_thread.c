@@ -137,19 +137,55 @@ static void _envariement_listener_handler(struct k_work *work)
     
 }
 
+
+static void _sense_listener_handler(struct k_work *work)
+{    
+
+    struct adc_data_msg msg;
+    uint16_t raw_buf[ADC_BUF_SIZE];
+
+    k_sem_reset(_sec_mux_adc_sem);
+   
+    seq_mux_adc_get_buf_copy(seq_dev,raw_buf);
+    // Выполняем тестовое заполнение буфера
+    for (int step = 0; step < ADC_SAMPLES_PER_CH; step++) 
+    {                       
+        for (int ch = 0; ch < ADC_NUM_CHANNELS; ch++) 
+        {
+            uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
+            float v_pin_mv =  (float)apply_median_filter_5(&_sense_filters[ch_idx], raw_buf[ch_idx]); 
+            msg.channels_mv[ch_idx] =(v_pin_mv * _sense_coof[ch_idx]);
+        }             
+    }
+        // Публикуем тестовый 32-канальный пакет в Zbus
+    zbus_chan_pub(&adc_data_chan, &msg, K_NO_WAIT);
+
+    /* Сбрасываем статус события в "не готово" для следующего кадра АЦП [1] */
+    _sense_adc_poll_events[0].state = K_POLL_STATE_NOT_READY;
+
+    /* Повторно отправляем воркер следить за семафором DMA АЦП [1] */
+    app_worker_poll_submit(&_sense_adc_monitor_work, _sense_adc_poll_events,REAL_TIME_WORKER);
+    
+}
+
+
 static int adc_scan_init(void)
 {
     /* 1. ИСПРАВЛЕНИЕ: Обязательно проверяем готовность АЦП перед работой [1] */
-    if (!device_is_ready(scan_dev)) 
+    if (false
+        || !device_is_ready(scan_dev)
+        || !device_is_ready(seq_dev)
+    ) 
     {
-        LOG_ERR("scan_adc device is not ready yet!");
+        LOG_ERR("adc device is not ready yet!");
         return -ENODEV;
     }
 
+    _sense_adc_init();
     _envariemen_adc_init();
 
     _scan_adc_sem = scan_cont_adc_get_sem(scan_dev);
-    _sec_mux_adc_sem = scan_cont_adc_get_sem(seq_dev);
+    _sec_mux_adc_sem = seq_mux_adc_get_sem(seq_dev);
     if (false
         || _scan_adc_sem == NULL
         || _sec_mux_adc_sem == NULL
@@ -170,8 +206,8 @@ static int adc_scan_init(void)
 
     k_work_poll_init(&_envariemen_adc_monitor_work, _envariement_listener_handler);                
     app_worker_poll_submit(&_envariemen_adc_monitor_work,_envariemen_adc_poll_events,REAL_TIME_WORKER);
-    //k_work_poll_init(&_sense_adc_monitor_work, __sense_listener_handler);                
-    //app_worker_poll_submit(&__sense_adc_monitor_work,__sense_adc_poll_events,REAL_TIME_WORKER);
+    k_work_poll_init(&_sense_adc_monitor_work, _sense_listener_handler);                
+    app_worker_poll_submit(&_sense_adc_monitor_work,_sense_adc_poll_events,REAL_TIME_WORKER);
     
     return 0;
 }
@@ -182,12 +218,7 @@ SYS_INIT(adc_scan_init, APPLICATION, 40);
 static void _sense_thread_entry(void *p1, void *p2, void *p3)
 {
       uint16_t raw_buf[ADC_BUF_SIZE];
-    // Проверяем готовность драйвера перед началом работы
-    if (!device_is_ready(seq_dev)) 
-    {
-        LOG_ERR("Sequencer driver is not ready!");
-        return;
-    }
+    
     
     _sense_adc_init();
     struct seq_mux_adc_api *api = (struct seq_mux_adc_api *)seq_dev->api;
@@ -227,9 +258,9 @@ static void _sense_thread_entry(void *p1, void *p2, void *p3)
 
 
 
-K_THREAD_DEFINE(sense_thread_id, AIN_TASK_STACK_SIZE, _sense_thread_entry, 
-            NULL, NULL, NULL, 
-                1, 0, 0);
+//K_THREAD_DEFINE(sense_thread_id, AIN_TASK_STACK_SIZE, _sense_thread_entry, 
+  //          NULL, NULL, NULL, 
+ //               1, 0, 0);
 
 
 PARAM_ROUTE_DEFINE(AIN_AO1,&adc_data_chan,0,ARRAY_DATA);

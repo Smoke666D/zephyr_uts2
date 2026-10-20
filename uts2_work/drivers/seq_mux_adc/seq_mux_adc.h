@@ -93,6 +93,17 @@ typedef struct seq_mux_adc_config
     uint32_t             adc_dma_slot;     ///< Слот аппаратного триггера DMA для АЦП
 } seq_mux_adc_config_t;
 
+
+static inline struct k_sem *seq_mux_adc_get_sem(const struct device *dev)
+{
+    const struct seq_mux_adc_api *api = (const struct seq_mux_adc_api *)dev->api;
+    
+    if (api->get_sem == NULL) {
+        return NULL;
+    }
+    return api->get_sem(dev);
+}
+
 static inline int seq_mux_adc_get_buf_copy(const struct device *dev, uint16_t *_user_buf)
 {
     const struct seq_mux_adc_api *api = (const struct seq_mux_adc_api *)dev->api; 
