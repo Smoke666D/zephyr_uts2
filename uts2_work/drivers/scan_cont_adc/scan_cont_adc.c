@@ -41,11 +41,6 @@
  **************************************************************************************************/
 static void        _dma_callback(const struct device *_dev, void *_user_data, 
                                  uint32_t _channel, int _status);
-static int         _seq_mux_adc_get_channel_value_impl(const struct device *_dev, 
-                                                       uint8_t _channel_idx, 
-                                                       uint32_t *_val);
-static int         _seq_mux_adc_wait_for_data_impl(const struct device *_dev, 
-                                                   k_timeout_t _timeout);
 static inline int  _dma_init(const struct scan_cont_adc_config *_config, 
                              ADC_TypeDef *_adc_inst, 
                              const struct device *_dev);
@@ -58,10 +53,8 @@ static int         _seq_mux_adc_init(const struct device *_dev);
  **************************************************************************************************/
 static uint16_t adc_buf_a[ADC_CHANNELS_CNT] __nocache;
 static uint16_t adc_buf_b[ADC_CHANNELS_CNT] __nocache;
-static uint16_t adc_shadow_buf[ADC_CHANNELS_CNT];
 static volatile uint16_t *active_adc_buf;
 
-static struct k_mutex mutex_lock;
 static struct k_sem   sem_data_ready;
 
 /***************************************************************************************************
@@ -91,12 +84,10 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
         if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_2) == 1)
         {
             active_adc_buf = adc_buf_a;
-            memcpy(adc_shadow_buf, (const void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
         } 
         else 
         {
             active_adc_buf = adc_buf_b;
-            memcpy(adc_shadow_buf, (const void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
         }
         k_sem_give(&sem_data_ready);
     }
@@ -144,7 +135,6 @@ static inline int _dma_init(const struct scan_cont_adc_config *_config,
         return -ENODEV;
     }
 
-
     struct dma_block_config adc_block_cfg = 
     {
         .source_address   = (uint32_t)&(_adc_inst->DR),
@@ -180,10 +170,10 @@ static inline int _dma_init(const struct scan_cont_adc_config *_config,
 
     LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_2, (uint32_t)adc_buf_b);
     LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_2);
-LL_DMA_EnableIT_TC(DMA1, LL_DMA_STREAM_2);
+    LL_DMA_EnableIT_TC(DMA1, LL_DMA_STREAM_2);
 
-// Убедитесь, что HT выключено:
-LL_DMA_DisableIT_HT(DMA1, LL_DMA_STREAM_2);
+    // Убедитесь, что HT выключено:
+    LL_DMA_DisableIT_HT(DMA1, LL_DMA_STREAM_2);
     return 0;
 }
 
@@ -419,7 +409,6 @@ static int _scan_cont_adc_init(const struct device *_dev)
     ADC_TypeDef *adc_inst = (ADC_TypeDef *)SEQ_ADC_BASE;
     TIM_TypeDef *tmr_inst = (TIM_TypeDef *)SEQ_TIM_BASE;
 
-    k_mutex_init(&mutex_lock);
     k_sem_init(&sem_data_ready, 0, 1);
 
     _gpio_init();

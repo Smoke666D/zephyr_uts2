@@ -58,7 +58,6 @@ typedef struct  scan_cont_adc_api
 {
 
     int (*get_buf_pointer)(const struct device *_dev,  uint16_t *_user_buf);
-    
     struct k_sem *(*get_sem)(const struct device *dev);
 } scan_cont_adc_api_t;
 
@@ -90,6 +89,18 @@ static inline struct k_sem *scan_cont_adc_get_sem(const struct device *dev)
         return NULL;
     }
     return api->get_sem(dev);
+}
+
+static inline int scan_cont_adc_get_buf_copy(const struct device *dev, uint16_t *_user_buf)
+{
+    const struct scan_cont_adc_api *api = (const struct scan_cont_adc_api *)dev->api;
+    
+    if (api->get_buf_pointer == NULL)
+    {
+        return -EINVAL;
+    }
+    return api->get_buf_pointer(dev,_user_buf);
+
 }
 
 /***************************************************************************************************

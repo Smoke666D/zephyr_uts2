@@ -8,7 +8,7 @@
 #include <seq_mux_adc.h>
 #include <scan_cont_adc.h>
 #include "filters.h"
-
+#include "app_worker.h"
 
 #define AIN_TASK_STACK_SIZE 2024
 #define AIN_TASK_PRIORITY 1
@@ -51,7 +51,8 @@ static float _sense_coof[TOTAL_CHANNEL_COUNT] __attribute__((section("DTCM")));;
 static float _envariemen_coof[ADC2_BUF_SIZE] __attribute__((section("DTCM")));;
 channel_median_filter_t _envariemen_filters[ADC2_BUF_SIZE] __attribute__((section("DTCM")));
 channel_median_filter_t _sense_filters[TOTAL_CHANNEL_COUNT] __attribute__((section("DTCM")));
-static struct k_sem *adc_sem;
+static struct k_sem *_scan_adc_sem;
+static struct k_sem *_sec_mux_adc_sem;
 
 /* 
  * ОПРЕДЕЛЯЕМ КАНАЛ.
@@ -91,8 +92,13 @@ static void _sense_adc_init()
     }
 }
 
+static const struct device *const scan_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
 
- 
+static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
+static struct k_work_poll _envariemen_adc_monitor_work;
+static struct k_poll_event _envariemen_adc_poll_events[1];
+static struct k_work_poll _sense_adc_monitor_work;
+static struct k_poll_event _sense_adc_poll_events[1];
 
 static void _envariemen_adc_init()
 {
@@ -107,49 +113,75 @@ static void _envariemen_adc_init()
 }
 
 
+static void _envariement_listener_handler(struct k_work *work)
+{    
 
-static void _envariement_thread_entry(void *p1, void *p2, void *p3)
-{
     struct adc_scan_msg msg; 
     uint16_t raw_buf[ADC2_BUF_SIZE];
-    static const struct device *const scan_dev = DEVICE_DT_GET(DT_NODELABEL(scan_adc));
-    struct scan_cont_adc_api *api = (struct scan_cont_adc_api *)scan_dev->api;
+
+    k_sem_reset(_scan_adc_sem);
+    scan_cont_adc_get_buf_copy(scan_dev,raw_buf);
+    for (int channel = 0; channel < ADC2_BUF_SIZE; channel++) 
+    {                      
+        float v_pin_mv =(float)apply_median_filter_5(&_envariemen_filters[channel], raw_buf[channel]);
+          msg.channels_mv[channel] = v_pin_mv * _envariemen_coof[channel]; 
+    }
+    // Публикуем тестовый 32-канальный пакет в Zbus
+    zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
     
+    /* Сбрасываем статус события в "не готово" для следующего кадра АЦП [1] */
+    _envariemen_adc_poll_events[0].state = K_POLL_STATE_NOT_READY;
+
+    /* Повторно отправляем воркер следить за семафором DMA АЦП [1] */
+    app_worker_poll_submit(&_envariemen_adc_monitor_work, _envariemen_adc_poll_events,REAL_TIME_WORKER);
+    
+}
+
+static int adc_scan_init(void)
+{
+    /* 1. ИСПРАВЛЕНИЕ: Обязательно проверяем готовность АЦП перед работой [1] */
     if (!device_is_ready(scan_dev)) 
     {
         LOG_ERR("scan_adc device is not ready yet!");
-        return;      
-    }            
-    // Получаем ссылку на симофро готовности данных райвера
-    adc_sem = scan_cont_adc_get_sem(scan_dev);
-    if (adc_sem == NULL) 
-    {
-        LOG_ERR("Failed to retrieve semaphore from scan_adc driver!");       
-        return;
-    }            
+        return -ENODEV;
+    }
+
     _envariemen_adc_init();
 
-     while (1) 
-     {
-        k_sem_take(adc_sem, K_FOREVER);    
-        
-        // Получаем в локальный буффер копию DMA буффера
-        api->get_buf_pointer(scan_dev,raw_buf);    
-        for (int channel = 0; channel < ADC2_BUF_SIZE; channel++) 
-        {                      
-            float v_pin_mv =(float)apply_median_filter_5(&_envariemen_filters[channel], raw_buf[channel]);
-            msg.channels_mv[channel] = v_pin_mv * _envariemen_coof[channel]; 
-        }
-        // Публикуем тестовый 32-канальный пакет в Zbus
-        zbus_chan_pub(&adc2_data_chan, &msg, K_NO_WAIT);
+    _scan_adc_sem = scan_cont_adc_get_sem(scan_dev);
+    _sec_mux_adc_sem = scan_cont_adc_get_sem(seq_dev);
+    if (false
+        || _scan_adc_sem == NULL
+        || _sec_mux_adc_sem == NULL
+    ) 
+    {
+        LOG_ERR("Failed to retrieve semaphore from adc drivers!");
+        return -ENOTSUP;
     }
+
+    k_poll_event_init(&_envariemen_adc_poll_events[0],
+                      K_POLL_TYPE_SEM_AVAILABLE,
+                      K_POLL_MODE_NOTIFY_ONLY,
+                      _scan_adc_sem);
+    k_poll_event_init(&_sense_adc_poll_events[0],
+                      K_POLL_TYPE_SEM_AVAILABLE,
+                      K_POLL_MODE_NOTIFY_ONLY,
+                      _sec_mux_adc_sem);
+
+    k_work_poll_init(&_envariemen_adc_monitor_work, _envariement_listener_handler);                
+    app_worker_poll_submit(&_envariemen_adc_monitor_work,_envariemen_adc_poll_events,REAL_TIME_WORKER);
+    //k_work_poll_init(&_sense_adc_monitor_work, __sense_listener_handler);                
+    //app_worker_poll_submit(&__sense_adc_monitor_work,__sense_adc_poll_events,REAL_TIME_WORKER);
+    
+    return 0;
 }
 
+SYS_INIT(adc_scan_init, APPLICATION, 40);
 
 
 static void _sense_thread_entry(void *p1, void *p2, void *p3)
 {
-     static const struct device *const seq_dev = DEVICE_DT_GET(DT_NODELABEL(my_sequencer));
+      uint16_t raw_buf[ADC_BUF_SIZE];
     // Проверяем готовность драйвера перед началом работы
     if (!device_is_ready(seq_dev)) 
     {
@@ -169,21 +201,23 @@ static void _sense_thread_entry(void *p1, void *p2, void *p3)
      {
          // Ждем готовности на семафоре драйвера (весь цикл 32 пересылок окончен)
         int ret = api->wait_for_data(seq_dev, K_FOREVER);
-        if (ret < 0) {
+        if (ret < 0) 
+        {
             LOG_ERR("Failed to wait for data! Error: %d", ret);
             continue;
         }
 
+
+        seq_mux_adc_get_buf_copy(seq_dev,raw_buf);
         // Выполняем тестовое заполнение буфера
-         for (int step = 0; step < ADC_SAMPLES_PER_CH; step++) 
-         {                       
-              for (int ch = 0; ch < ADC_NUM_CHANNELS; ch++) {
-                 uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
-                  uint16_t raw_val = 0;
-                  api->get_channel_value(seq_dev, ch_idx, &raw_val);
-                  float v_pin_mv =  (float)apply_median_filter_5(&_sense_filters[ch_idx], raw_val); 
-                 msg.channels_mv[ch_idx] =(v_pin_mv * _sense_coof[ch_idx]);
-             }             
+        for (int step = 0; step < ADC_SAMPLES_PER_CH; step++) 
+        {                       
+            for (int ch = 0; ch < ADC_NUM_CHANNELS; ch++) 
+            {
+                uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
+                float v_pin_mv =  (float)apply_median_filter_5(&_sense_filters[ch_idx], raw_buf[ch_idx]); 
+                msg.channels_mv[ch_idx] =(v_pin_mv * _sense_coof[ch_idx]);
+            }             
         }
         // Публикуем тестовый 32-канальный пакет в Zbus
         zbus_chan_pub(&adc_data_chan, &msg, K_NO_WAIT);
@@ -191,9 +225,7 @@ static void _sense_thread_entry(void *p1, void *p2, void *p3)
 }
 
 
-K_THREAD_DEFINE(envariement_thread_id, AIN_TASK_STACK_SIZE, _envariement_thread_entry, 
-            NULL, NULL, NULL, 
-                -2, 0, 0);
+
 
 K_THREAD_DEFINE(sense_thread_id, AIN_TASK_STACK_SIZE, _sense_thread_entry, 
             NULL, NULL, NULL, 

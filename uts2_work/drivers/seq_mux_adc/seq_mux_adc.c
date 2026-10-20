@@ -61,7 +61,7 @@ static uint32_t gpio_raw_buf[COMBINATIONS_CNT] __attribute__((section("SRAM4")))
 static uint16_t adc_buf_a[TOTAL_CHANNELS_CNT] __nocache;
 static uint16_t adc_buf_b[TOTAL_CHANNELS_CNT] __nocache;
 static uint16_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
-
+static volatile uint16_t *active_adc_buf;
 
 static struct k_mutex mutex_lock;
 static struct k_sem   sem_data_ready;
@@ -92,14 +92,24 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
         // Копирование данных из заполненного буфера в теневой
         if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_1) == 1)
         {
+            active_adc_buf = adc_buf_a;
             memcpy(adc_shadow_buf, adc_buf_a, sizeof(adc_shadow_buf));
         } 
         else 
         {
+            active_adc_buf = adc_buf_b;
             memcpy(adc_shadow_buf, adc_buf_b, sizeof(adc_shadow_buf));
         }
         k_sem_give(&sem_data_ready);
     }
+}
+
+static int _seq_mux_adc_get_buf_p(const struct device *_dev,  uint16_t *_user_buf)
+{
+    ARG_UNUSED(_dev);
+    memcpy(_user_buf, (const void *)active_adc_buf, TOTAL_CHANNELS_CNT*sizeof(uint16_t));
+    return 0;
+
 }
 
 /**
@@ -154,6 +164,15 @@ static int _seq_mux_adc_wait_for_data_impl(const struct device *_dev,
 {
     ARG_UNUSED(_dev);
     return k_sem_take(&sem_data_ready, _timeout);
+}
+
+
+static struct k_sem * _seq_mux_adc_get_sem_impl(const struct device *_dev)
+{
+    ARG_UNUSED(_dev);
+
+    /* Возвращаем адрес нашего системного семафора, который выдается в dma_callback */
+    return &sem_data_ready;
 }
 
 /**
@@ -557,6 +576,8 @@ static const struct seq_mux_adc_api driver_api =
 {
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
     .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
+    .get_sem           = _seq_mux_adc_get_sem_impl,
+    .get_buf_pointer   = _seq_mux_adc_get_buf_p,
 };
 
 static const struct seq_mux_adc_config seq_config = 

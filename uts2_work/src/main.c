@@ -273,10 +273,10 @@ void send_binary_telemetry(const struct device *uart_dev) {
 
     // Env (8 шт)
 
-    SYSTEM_BUS_GET_CHANNEL(ENV_P3V3,&pkt.env[0],sizeof(float)*8);
+   
 
  
-   /* SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
+    SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
     SYSTEM_BUS_GET(ENV_P5V0,  &pkt.env[1]);
     SYSTEM_BUS_GET(ENV_VIN,   &pkt.env[2]);
     SYSTEM_BUS_GET(ENV_VDOUT1, &pkt.env[3]);
@@ -284,7 +284,7 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(ENV_USB,   &pkt.env[5]);
     SYSTEM_BUS_GET(ENV_VDOUT2, &pkt.env[6]);
     SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
-*/
+
 
     SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,   &pkt.current_sensors[0]);
     SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[1]);
