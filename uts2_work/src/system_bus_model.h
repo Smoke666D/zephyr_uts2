@@ -16,6 +16,12 @@ extern "C" {
 
 #define TOTAL_DAC_COUNT 3
 
+
+
+
+
+
+
 typedef enum
 {   AIN_AO1,
     AIN_AO7,

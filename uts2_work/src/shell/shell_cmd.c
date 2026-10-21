@@ -6,6 +6,7 @@
 #include "system_bus_model.h"
 #include <zephyr/zbus/zbus.h>
 #include "out_and_power_control.h"
+#include "shell_common.h"
 
  /* ------------------------------------------------------------------ */
 /*  Аналогоавые выхода                                                */
@@ -419,7 +420,7 @@ static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
 
         // 4. Перекладываем байт через твой макрос SYSTEM_BUS_SET
         // (Предполагается, что на стороне шины настроен обработчик u32 или raw для этих ID)
-        int err = SYSTEM_BUS_SET(target_bus_id, (uint32_t)byte_data);
+        int err = SYSTEM_BUS_SET(target_bus_id, (float)byte_data);
         if (err != 0) {
             shell_error(sh, "Ошибка отправки байта 0x%02X в шину (err: %d)", byte_data, err);
             return err;
@@ -432,6 +433,8 @@ static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
+
+
 /* 
  * Регистрация команды в подсистеме Zephyr Shell
  * Синтаксис макроса: SHELL_CMD_ARG(имя_команды, табуляция_подкомманд, справка, указатель_на_функцию, мин_аргументов, макс_аргументов)
@@ -439,3 +442,4 @@ static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
 SHELL_CMD_ARG_REGISTER(lin_send, NULL, 
     "Отправить данные в LIN канал.\nИспользование: lin_send <1-4> <байт1> [байт2] ...", 
     cmd_lin_send, 3, SHELL_OPT_ARG_CHECK_SKIP);
+
