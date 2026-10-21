@@ -12,16 +12,15 @@ stats_container = None
 refresh_logs_callback = None
 log_info_label = None
 
-# Кэш прочитанного файла: { 'col_name': [values...] } и список временных меток
 cached_data = {}
 cached_timestamps = []
 selected_channels = []
 
-SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e', '#c084fc', '#fb923c']
+# Цвета для 4 каналов: Голубой, Зеленый, Желтый, Розовый
+SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e']
 
 
 def update_oscilloscope_data(*args, **kwargs):
-  """Заглушка для совместимости с внешними модулями"""
   pass
 
 
@@ -40,7 +39,6 @@ def refresh_logs_ui():
 
 
 def update_stats_panel():
-  """Вычисляет среднее, мин и макс с процентами отклонения и выводит над графиком"""
   global stats_container, selected_channels, cached_data
   if not stats_container:
     return
@@ -60,7 +58,6 @@ def update_stats_panel():
           v_max = max(vals)
           v_min = min(vals)
 
-          # Расчет отклонений от среднего в процентах
           if abs(v_avg) > 1e-9:
             dev_max_pct = ((v_max - v_avg) / abs(v_avg)) * 100.0
             dev_min_pct = ((v_min - v_avg) / abs(v_avg)) * 100.0
@@ -94,7 +91,7 @@ def update_stats_panel():
 
 
 def render_chart():
-  """Пересоздает элемент графика внутри chart_container на основе выбранных каналов"""
+  """Перерисовывает график со своей независимой осью Y для каждого выбранного канала"""
   global chart_container, selected_channels, cached_data, cached_timestamps
   if not chart_container or not cached_timestamps:
     return
@@ -103,14 +100,42 @@ def render_chart():
 
   series = []
   legend = []
+  y_axes = []
+
+  # Настройки позиционирования осей:
+  # Канал 0: Слева, отступ 0
+  # Канал 1: Справа, отступ 0
+  # Канал 2: Слева, смещение 55px дальше
+  # Канал 3: Справа, смещение 55px дальше
+  axis_positions = [
+      {'position': 'left', 'offset': 0},
+      {'position': 'right', 'offset': 0},
+      {'position': 'left', 'offset': 55},
+      {'position': 'right', 'offset': 55},
+  ]
 
   for idx, col_name in enumerate(selected_channels):
     if col_name in cached_data:
       color = SERIES_COLORS[idx % len(SERIES_COLORS)]
+      pos_cfg = axis_positions[idx % len(axis_positions)]
       legend.append(col_name)
+
+      # 1. Создаем персональную ось Y для этого канала
+      y_axes.append({
+          'type': 'value',
+          'scale': True, # Автомасштаб под размах сигнала
+          'position': pos_cfg['position'],
+          'offset': pos_cfg['offset'],
+          'axisLine': {'show': True, 'lineStyle': {'color': color}},
+          'axisLabel': {'color': color, 'fontSize': 10},
+          'splitLine': {'show': (idx == 0), 'lineStyle': {'color': '#334155'}}, # Сетка только от первой оси, чтоб не пестрило
+      })
+
+      # 2. Привязываем линию к ее номеру оси через yAxisIndex
       series.append({
           'name': col_name,
           'type': 'line',
+          'yAxisIndex': idx,
           'data': cached_data[col_name],
           'showSymbol': False,
           'sampling': 'lttb',
@@ -118,16 +143,20 @@ def render_chart():
           'lineStyle': {'width': 1.5},
       })
 
+  # Раздвигаем боковые отступы grid, если осей больше 2, чтобы подписи не накладывались
+  left_margin = '7%' if len(selected_channels) > 2 else '4%'
+  right_margin = '7%' if len(selected_channels) > 1 else '4%'
+
   chart_options = {
       'animation': False,
       'tooltip': {'trigger': 'axis'},
       'xAxis': {'type': 'category', 'data': cached_timestamps, 'boundaryGap': False},
-      'yAxis': {'type': 'value', 'scale': True},
+      'yAxis': y_axes if y_axes else [{'type': 'value'}],
       'series': series,
       'legend': {'data': legend, 'textStyle': {'color': '#fff'}},
       'grid': {
-          'left': '4%',
-          'right': '4%',
+          'left': left_margin,
+          'right': right_margin,
           'bottom': '15%',
           'top': '15%',
           'containLabel': True,
@@ -140,18 +169,17 @@ def render_chart():
 
   chart_container.clear()
   with chart_container:
-    ui.echart(chart_options).style('width: 100%; height: 320px;').classes('rounded bg-slate-900')
+    ui.echart(chart_options).style('width: 100%; height: 340px;').classes('rounded bg-slate-900')
 
 
 def rebuild_channel_checkboxes(columns):
-  """Строит сетку чекбоксов для выбора каналов"""
   global channels_container, selected_channels
   if not channels_container:
     return
 
   channels_container.clear()
   with channels_container:
-    ui.label('Выберите каналы для графика (максимум 4):').classes(
+    ui.label('Выберите каналы для графика (до 4 каналов с раздельными осями Y):').classes(
         'text-xs font-semibold text-yellow-300 col-span-full mb-1'
     )
 
@@ -211,7 +239,6 @@ def load_log_to_chart(file_path):
       ui.notify('Не удалось прочитать заголовок таблицы!', type='warning')
       return
 
-    # Определение индексов временных колонок
     idx_time = 0
     if 'Time' in header:
       idx_time = header.index('Time')
@@ -220,7 +247,6 @@ def load_log_to_chart(file_path):
 
     idx_mcu_ms = header.index('MCU_Time_ms') if 'MCU_Time_ms' in header else -1
 
-    # Исключаем служебные временные колонки из параметров для построения графиков
     data_cols = [
         col.strip()
         for col in header
@@ -253,7 +279,6 @@ def load_log_to_chart(file_path):
         else:
           cached_data[col].append(0.0)
 
-    # Расчет точной длительности по реальному таймстампу MCU
     duration_str = '00:00.000'
     if mcu_ms_timestamps:
       total_ms = mcu_ms_timestamps[-1] - mcu_ms_timestamps[0]
@@ -288,7 +313,6 @@ def build_oscilloscope_panel():
   global chart_container, channels_container, stats_container, refresh_logs_callback, log_info_label
 
   with ui.card().classes('bg-slate-800 p-3 w-full'):
-    # Шапка управления
     with ui.row().classes('w-full justify-between items-center mb-2'):
       with ui.row().classes('items-center gap-2'):
         ui.label('Офлайн-осциллограф (Анализ логов)').classes(
@@ -343,17 +367,14 @@ def build_oscilloscope_panel():
             on_click=on_open_click,
         ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
 
-    # Панель статистических карточек над графиком
     stats_container = ui.row().classes('w-full mb-1.5')
 
-    # Контейнер для холста графика
     chart_container = ui.column().classes('w-full')
     with chart_container:
       ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
           'text-xs text-slate-400 italic py-10 self-center'
       )
 
-    # Контейнер для чекбоксов каналов
     channels_container = ui.grid(columns=6).classes(
         'w-full gap-1 bg-slate-700/30 p-2 rounded mt-2'
     )
