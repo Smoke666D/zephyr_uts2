@@ -6,9 +6,9 @@ from globals_data import telemetry_data_cache
 from logger import log_packet
 from nicegui import ui
 
-# 1 байт (0xBE) + 1 uint32 (timestamp_ms) + 78 float = 317 байт
-TELEMETRY_FORMAT = '<BI' + 'f' * 78
-PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)  # 317 байт
+# 1 байт (0xBE) + 1 uint32 (timestamp_ms) + 68 float = 277 байт
+TELEMETRY_FORMAT = '<BI' + 'f' * 68
+PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)  # 277 байт
 
 incoming_queue = []
 queue_lock = threading.Lock()
@@ -39,7 +39,7 @@ def telemetry_reader_loop(
             serial_buffer = serial_buffer[-16384:]
             synchronized = False
 
-          # 1. Синхронизация: ищем 0xBE и проверяем шаг ровно 317 байт
+          # 1. Синхронизация: ищем 0xBE и проверяем шаг ровно 277 байт
           while not synchronized and len(serial_buffer) >= (PACKET_SIZE * 2):
             idx = serial_buffer.find(b'\xbe')
             if idx == -1:
@@ -96,7 +96,13 @@ def telemetry_reader_loop(
       # Для текстовых виджетов берем последний срез
       # unpacked[0] = magic (0xBE)
       # unpacked[1] = timestamp_ms (uint32)
-      # unpacked[2..] = float поля
+      # unpacked[2..5] = rf_power, ntc, ext_vsense, brd_detect (4 float)
+      # unpacked[6..9] = temp_gnd, temp_vdd, light_gnd, light_vdd (4 float)
+      # unpacked[10..27] = ao[18]
+      # unpacked[28..33] = vsense[6]
+      # unpacked[34..41] = env[8] (сместилось назад на 10 позиций!)
+      # unpacked[42..65] = current_sensors[24]
+      # unpacked[66..69] = lin_voltages[4]
       latest_pkt = packets_batch[-1]
 
       ui_labels['rf_power'].set_text(f'{latest_pkt[2]:.2f}')
@@ -108,17 +114,21 @@ def telemetry_reader_loop(
       ui_labels['light_gnd'].set_text(f'{latest_pkt[8]:.2f}')
       ui_labels['light_vdd'].set_text(f'{latest_pkt[9]:.2f}')
 
-      # AO каналы (смещены на +1 из-за timestamp_ms: индексы 10..27)
+      # AO каналы (10..27)
       for i in range(18):
         val = latest_pkt[10 + i]
         ui_labels[f'ao_{i}'].set_text(f'{val:.2f}')
 
+      # VSense (28..33)
       for i in range(6):
         ui_labels['vsense_%d' % i].set_text(f'{latest_pkt[28 + i]:.2f}')
-      for i in range(8):
-        ui_labels['env_%d' % i].set_text(f'{latest_pkt[44 + i]:.2f}')
 
-      curr_offset = 52
+      # Environment (34..41) — было 44..51
+      for i in range(8):
+        ui_labels['env_%d' % i].set_text(f'{latest_pkt[34 + i]:.2f}')
+
+      # Датчики тока (42..65) — было 52..75
+      curr_offset = 42
       for i in range(1, 9):
         v_val = latest_pkt[curr_offset]
         i_val = latest_pkt[curr_offset + 1]
@@ -128,8 +138,9 @@ def telemetry_reader_loop(
         ui_labels[f'curr_e_{i}'].set_text(f'{e_val:.6f}')
         curr_offset += 3
 
+      # Напряжения LIN (66..69) — было 75..78
       for i in range(1, 5):
-        lin_v = latest_pkt[75 + i]
+        lin_v = latest_pkt[65 + i]
         if f'lin_v_{i}' in ui_labels:
           ui_labels[f'lin_v_{i}'].set_text(f'{lin_v:.2f}')
 

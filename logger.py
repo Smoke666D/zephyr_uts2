@@ -83,8 +83,6 @@ def start_logger():
   ]
   header.extend([f'AO_{i}' for i in range(1, 19)])
   header.extend([f'VSense_{i}' for i in range(1, 7)])
-  header.extend([f'Step7_{i}' for i in range(1, 6)])
-  header.extend([f'Step8_{i}' for i in range(1, 6)])
   env_names = [
       'P3V3',
       'P5V0',

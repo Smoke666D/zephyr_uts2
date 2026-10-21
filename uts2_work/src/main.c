@@ -258,24 +258,9 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(AIN_AVsense5, &pkt.vsense[4]);
     SYSTEM_BUS_GET(AIN_AVsense6, &pkt.vsense[5]);
 
-    // Step 7 & 8
-    SYSTEM_BUS_GET(AIN_DA11_test1, &pkt.step7[0]);
-    SYSTEM_BUS_GET(AIN_DA20_test1, &pkt.step7[1]);
-    SYSTEM_BUS_GET(AIN_DA33_test1, &pkt.step7[2]);
-    SYSTEM_BUS_GET(AIN_DA44_test1, &pkt.step7[3]);
-    SYSTEM_BUS_GET(AIN_DA41_test1, &pkt.step7[4]);
-
-    SYSTEM_BUS_GET(AIN_DA11_test2, &pkt.step8[0]);
-    SYSTEM_BUS_GET(AIN_DA20_test2, &pkt.step8[1]);
-    SYSTEM_BUS_GET(AIN_DA33_test2, &pkt.step8[2]);
-    SYSTEM_BUS_GET(AIN_DA44_test2, &pkt.step8[3]);
-    SYSTEM_BUS_GET(AIN_DA41_test2, &pkt.step8[4]);
+  
 
     // Env (8 шт)
-
-   
-
- 
     SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
     SYSTEM_BUS_GET(ENV_P5V0,  &pkt.env[1]);
     SYSTEM_BUS_GET(ENV_VIN,   &pkt.env[2]);
