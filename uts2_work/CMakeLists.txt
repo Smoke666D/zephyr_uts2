@@ -15,14 +15,12 @@ target_include_directories(app PRIVATE
     src/drivers
     src/logic_signal
     src/shell
- #   src/lua
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"  
     "src/works/*.c"  
-    "src/shell/*.c"  
-#"src/lua/*.c"    
+    "src/shell/*.c"    
 )
 
 target_sources(app PRIVATE 

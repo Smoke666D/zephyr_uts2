@@ -104,10 +104,6 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
 
 
 
-
-
-
-
  int bus_set_real(SYSTEM_BUS_ID id, float _val)
 {
     const struct system_bus_handler *handler = _get_valid_handler(id);
