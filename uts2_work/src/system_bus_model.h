@@ -74,8 +74,6 @@ typedef enum
     LED1,
     LED2,
     LED3,
-    BUTTON1,
-    BUTTON2,
     I2C1_TEMP1,
     I2C1_TEMP2,
     I2C1_LUX1,

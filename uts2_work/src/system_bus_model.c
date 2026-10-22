@@ -170,27 +170,29 @@ const struct system_bus_handler *handler = _get_valid_handler(id);
 
 
     
- int bus_get_bool(SYSTEM_BUS_ID id, bool * _val)
+int bus_get_bool(SYSTEM_BUS_ID id, bool * _val)
 {
     if (id >= SYSTEM_BUS_COUNT)
     {
         return -EINVAL;
     }
+    const struct system_bus_handler *handler = cache[id];    
 
-    const struct system_bus_handler *handler = cache[id];
-    if (true
-        && handler != NULL     
-    )
+    // Проверка, существует ли в кэше дискриптор канала
+    if (handler != NULL)
     {
-        if (handler->channel_type == ARRAY_DATA)
+        size_t msg_size = zbus_chan_msg_size(handler->channel);
+        // Проверяем что индекс канала попадет в данные канала ZBUS
+        if (handler->system_index*sizeof(bool) < msg_size)
         {            
             // Захватываем данные канала
             if (zbus_chan_claim(handler->channel,K_MSEC(50)) == 0 )
             {
-                BOOLEAN_ARRAY_CHANNEL_t * msg = zbus_chan_msg(handler->channel);                
-                msg->value[handler->system_index] = _val;
-                zbus_chan_finish(handler->channel);
-                zbus_chan_notify(handler->channel,K_NO_WAIT); 
+                // Читаем данные из канал
+                bool * msg = (const bool *)zbus_chan_msg(handler->channel);                
+                *_val = msg[handler->system_index];
+                // Освобождаем канал
+                zbus_chan_finish(handler->channel);                
                 return 0;
             }
         }         
@@ -318,9 +320,12 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val)
     }
 
     const float * _float_msg;
-    _float_msg = (const float *)zbus_chan_msg(handler->channel);
-          
-    *_val = _float_msg[handler->system_index];
+    if (zbus_chan_claim(handler->channel, K_MSEC(1)) == 0)
+    {
+        _float_msg = (const float *)zbus_chan_msg(handler->channel);          
+        *_val = _float_msg[handler->system_index];
+        zbus_chan_finish(handler->channel);
+    }
     return 0;   
 }
 

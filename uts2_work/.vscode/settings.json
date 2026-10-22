@@ -3,7 +3,8 @@
     {
       "name": "primary",
       "board": "uts2_motherboard",
-      "active": "true"
+      "active": "true",
+      "default-runner": "jlink"
     }
   ],
   "zephyr-workbench.westWorkspace": "${workspaceFolder}/../../zephyr_work/zephyrproject",
