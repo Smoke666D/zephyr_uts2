@@ -49,9 +49,9 @@ LOG_MODULE_REGISTER(led_manager, LOG_LEVEL_INF);
  *                                          PRIVATE TYPES
  **************************************************************************************************/
 typedef struct 
-{ 
-    bool led_state[32];
-} led_command_t;
+{
+    bool  value[3];    
+} led_channel_t;
 
 /**
  *  @brief Структура дескриптора светодиода
@@ -100,7 +100,7 @@ ZBUS_LISTENER_DEFINE(led_listener, _led_zbus_listener_callback);
 
 ZBUS_CHAN_DEFINE(
     led_state_channel,
-    BOOLEAN_ARRAY_CHANNEL_t,
+    led_channel_t,
     NULL,
     NULL,
     ZBUS_OBSERVERS(led_listener),
@@ -136,7 +136,7 @@ static void _led_zbus_listener_callback(const struct zbus_channel *_chan)
 static void _led_hardware_update_handler(struct k_work *_work)
 {    
     ARG_UNUSED(_work);
-    bool led_state[32];   
+    bool led_state[3];   
 
     if (zbus_chan_read(&led_state_channel, led_state, K_MSEC(50)) == 0)
     {
@@ -187,9 +187,9 @@ static int _led_manager_system_init(void)
 
 SYS_INIT(_led_manager_system_init, APPLICATION, 40);
 
-PARAM_ROUTE_DEFINE(LED1, &led_state_channel, 0, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(LED2, &led_state_channel, 1, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(LED3, &led_state_channel, 2, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(LED1, &led_state_channel, 0, BOOL_DATA);
+PARAM_ROUTE_DEFINE(LED2, &led_state_channel, 1, BOOL_DATA);
+PARAM_ROUTE_DEFINE(LED3, &led_state_channel, 2, BOOL_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

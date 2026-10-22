@@ -28,13 +28,20 @@
 #include <hc595_chain.h>
 
 #include "system_bus_model.h"
-#include "out_and_power_control.h"
 #include "app_worker.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
  **************************************************************************************************/
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
+
+#define DISPATCHER_STACK_SIZE 2048
+
+
+
+typedef struct hc595_channels_msg {
+    uint32_t channels_mv[CHANNEL_DATA_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
+};
 
 /***********************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
@@ -65,15 +72,7 @@ ZBUS_CHAN_DEFINE(hc595_chan,
                  {0}
 );
 
-ZBUS_LISTENER_DEFINE(discret_control_line_listener, _discrete_control_line_listener_cb);
 
-ZBUS_CHAN_DEFINE(discrete_control_chan,
-                 struct discrete_control_line_msg,
-                 NULL,
-                 NULL,
-                 ZBUS_OBSERVERS(discret_control_line_listener),
-                 {0}
-);
 
 static struct spi_dt_spec spi_spec = 
     SPI_DT_SPEC_GET(DT_NODELABEL(hc595_chain),
@@ -83,19 +82,7 @@ static struct spi_dt_spec spi_spec =
 
 static const struct device *const hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));      
 
-static const struct gpio_dt_spec power_switches[CONTROL_LINE_CNT] = 
-{
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_dut2), gpios),
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_dut3), gpios),
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_p12v), gpios),
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_p24v), gpios),
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_va), gpios),
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_usb_out), gpios),
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_usb_boot), gpios),
-    GPIO_DT_SPEC_GET(DT_NODELABEL(en_usb_top), gpios)
-};
 
-static struct discrete_control_line_msg cache_enable_state = {0};
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
@@ -114,18 +101,7 @@ static void _out_zbus_listener_callback(const struct zbus_channel *_chan)
     app_worker_submit(&out_task, REAL_TIME_WORKER);
 }
 
-/**
- *  @brief      Коллбэк слушателя ZBUS для дискретных линий
- *  @details    Вызывается при публикации сообщений в канале discrete_control_chan,
- *              планируя выполнение задачи обновления выходов GPIO.
- *
- *  @param      _chan - Указатель на канал ZBUS
- */
-static void _discrete_control_line_listener_cb(const struct zbus_channel *_chan)
-{
-    ARG_UNUSED(_chan);
-    app_worker_submit(&discrete_control_task, REAL_TIME_WORKER);
-}
+
 
 /**
  *  @brief      Расчет маски для сдвигового регистра HC595
@@ -193,56 +169,7 @@ static void _out_update_handler(struct k_work *_work)
     }
 }
 
-/**
- *  @brief      Инициализация выходных портов управления питанием
- *  @details    Конфигурирует выводы GPIO силовых ключей на выход и переводит
- *              их в активное логическое состояние по умолчанию (включено).
- */
-static void _enable_port_init(void)
-{
-    if (zbus_chan_claim(&discrete_control_chan, K_FOREVER) == 0)
-    {        
-        // Получение прямого указателя на сообщение в памяти Zbus
-        struct discrete_control_line_msg *msg = 
-            (struct discrete_control_line_msg *)zbus_chan_msg(&discrete_control_chan);
-            
-        for (int i = 0; i < CONTROL_LINE_CNT; i++) 
-        {
-            if (gpio_is_ready_dt(&power_switches[i])) 
-            {
-                gpio_pin_configure_dt(&power_switches[i], GPIO_OUTPUT_ACTIVE);                        
-                cache_enable_state.state[i] = true;
-                msg->state[i] = true;
-            }
-        }
-        zbus_chan_finish(&discrete_control_chan);
-    }
-}
 
-/**
- *  @brief      Обработчик воркера обновления дискретных линий
- *  @details    Считывает состояние дискретных каналов из ZBUS, сравнивает
- *              с кэшем и обновляет физические уровни на пинах GPIO.
- *
- *  @param      _work - Указатель на структуру задачи
- */
-static void _discrete_control_update_handler(struct k_work *_work)
-{    
-    ARG_UNUSED(_work);
-    struct discrete_control_line_msg msg;
-    
-    if (zbus_chan_read(&discrete_control_chan, &msg, K_MSEC(50)) == 0)
-    {
-        for (int i = 0; i < CONTROL_LINE_CNT; i++)
-        {
-            if (cache_enable_state.state[i] != msg.state[i])
-            {
-                cache_enable_state.state[i] = msg.state[i];
-                gpio_pin_set_dt(&power_switches[i], cache_enable_state.state[i] ? 1 : 0); 
-            }
-        }
-    }
-}
 
 /**
  *  @brief      Инициализация менеджера управления выходами питания
@@ -254,9 +181,6 @@ static void _discrete_control_update_handler(struct k_work *_work)
 static int _out_manager_system_init(void)
 {
     k_work_init(&out_task, _out_update_handler);
-    k_work_init(&discrete_control_task, _discrete_control_update_handler);
-    _enable_port_init();
-    
     return 0;
 }
 
@@ -285,14 +209,7 @@ PARAM_ROUTE_DEFINE(LIN_PD2, &hc595_chan, 19, ARRAY_DATA);
 PARAM_ROUTE_DEFINE(LIN_PD3, &hc595_chan, 20, ARRAY_DATA);
 PARAM_ROUTE_DEFINE(LIN_PD4, &hc595_chan, 21, ARRAY_DATA);
 
-PARAM_ROUTE_DEFINE(EN_DUT2_PSU, &discrete_control_chan, 0, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(EN_DUT3_PSU, &discrete_control_chan, 1, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(EN_P12V,     &discrete_control_chan, 2, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(EN_P24V,     &discrete_control_chan, 3, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(EN_VA,       &discrete_control_chan, 4, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT,  &discrete_control_chan, 5, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_BOOT, &discrete_control_chan, 6, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_TOP,  &discrete_control_chan, 7, ARRAY_DATA);
+
 
 /***************************************************************************************************
  *                                           END OF FILE

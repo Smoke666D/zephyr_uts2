@@ -76,6 +76,19 @@ static float get_channel_value_by_name(const char *name)
     else if (strcmp(name, "LUX1") == 0)  { SYSTEM_BUS_GET(I2C1_LUX1,  &val); }
     else if (strcmp(name, "LUX2") == 0)  { SYSTEM_BUS_GET(I2C1_LUX2,  &val); }
 
+    else if (strcmp(name, "LED1") == 0)  { bool b = false; SYSTEM_BUS_GET(LED1, &b); val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "LED2") == 0)  { bool b = false; SYSTEM_BUS_GET(LED2, &b); val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "LED3") == 0)  { bool b = false; SYSTEM_BUS_GET(LED3, &b); val = b ? 1.0f : 0.0f; }
+
+    else if (strcmp(name, "EN_DUT2_PSU") == 0) { bool b = false; SYSTEM_BUS_GET(EN_DUT2_PSU, &b); val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "EN_DUT3_PSU") == 0) { bool b = false; SYSTEM_BUS_GET(EN_DUT3_PSU, &b); val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "EN_P12V") == 0)     { bool b = false; SYSTEM_BUS_GET(EN_P12V, &b);     val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "EN_P24V") == 0)     { bool b = false; SYSTEM_BUS_GET(EN_P24V, &b);     val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "EN_VA") == 0)       { bool b = false; SYSTEM_BUS_GET(EN_VA, &b);       val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "EN_USB_OUT") == 0)  { bool b = false; SYSTEM_BUS_GET(EN_USB_OUT, &b);  val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "EN_USB_BOOT") == 0) { bool b = false; SYSTEM_BUS_GET(EN_USB_BOOT, &b); val = b ? 1.0f : 0.0f; }
+    else if (strcmp(name, "EN_USB_TOP") == 0)  { bool b = false; SYSTEM_BUS_GET(EN_USB_TOP, &b);  val = b ? 1.0f : 0.0f; }
+
     return val;
 }
 
@@ -116,7 +129,8 @@ static void monitor_work_handler(struct k_work *item)
             written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 
                                    "%s: %.2f lx   ", ctx->channel_names[i], (double)val);
         } 
-        else if (strncmp(ctx->channel_names[i], "LED", 3) == 0) {
+         else if (strncmp(ctx->channel_names[i], "LED", 3) == 0 || strncmp(ctx->channel_names[i], "EN_", 3) == 0) {
+            // Для светодиодов (LED1-3) и силовых ключей (EN_*) выводим ON / OFF
             const char *state_str = (val >= 0.5f) ? "ON" : "OFF";
             written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 
                                    "%s: %s   ", ctx->channel_names[i], state_str);

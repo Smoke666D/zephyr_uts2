@@ -165,7 +165,17 @@ typedef enum
    LIN_PULL_DOWN_ON,
 } lin_pull_down_state_t;
 
+typedef enum
+{
+    STATE_IN = 0,
+    STATE_LOW = 1,
+    STATE_HIGH = 2,
+    STATE_SHORT = 3,
+} LOW_CUR_OUT_STATE_t;
 
+
+
+#define CONTROL_LINE_CNT 8
 
 typedef enum
 {
@@ -174,6 +184,7 @@ typedef enum
   BOOL,
   ARRAY_DATA,
   QUEUE_DATA,
+  BOOL_DATA,
 } SYSTEM_BUS_DATA_TYPE;
 
 /* Универсальный контейнер обмена данными */
@@ -196,10 +207,7 @@ typedef struct {
     uint8_t  data[64];    // Полезная нагрузка CAN-FD
 } system_can_message_t;
 
-typedef struct 
-{
-    bool  value[32];    
-} BOOLEAN_ARRAY_CHANNEL_t;
+
 
 
 typedef struct 

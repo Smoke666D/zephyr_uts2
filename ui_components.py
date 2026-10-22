@@ -202,7 +202,7 @@ def build_dashboard(ports_refs, ui_labels):
       def make_en_handler(c_num, c_name):
         def handler(e):
           state = 'ON' if e.value else 'OFF'
-          cmd = f'en_set {c_num} {state}\r\n'
+          cmd = f'PWR_CTL {c_num} {state}\r\n'
           curr_shell = shell_ref.get('ser')
           if curr_shell and curr_shell.is_open:
             curr_shell.write(cmd.encode('utf-8'))
@@ -232,7 +232,7 @@ def build_dashboard(ports_refs, ui_labels):
       def make_led_handler(l_id, l_name):
         def handler(e):
           state = 'ON' if e.value else 'OFF'
-          cmd = f'led_set {l_id} {state}\r\n'
+          cmd = f'LED {l_id} {state}\r\n'
           curr_shell = shell_ref.get('ser')
           if curr_shell and curr_shell.is_open:
             curr_shell.write(cmd.encode('utf-8'))

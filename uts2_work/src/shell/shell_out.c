@@ -24,7 +24,7 @@ static int _cmd_led(const struct shell *_sh, size_t _argc, char **_argv)
         SYSTEM_BUS_GET(LED3, &l3);
 
         shell_print(_sh, "Current LED states:");
-        shell_print(_sh, "  LED1 (Красный + Звук):     %s", l1 ? "ON" : "OFF");
+        shell_print(_sh, "  LED1 (Красный + Звук):    %s", l1 ? "ON" : "OFF");
         shell_print(_sh, "  LED2 (Зеленый):           %s", l2 ? "ON" : "OFF");
         shell_print(_sh, "  LED3 (Синий):             %s", l3 ? "ON" : "OFF");
         return 0;
@@ -60,11 +60,11 @@ static int _cmd_led(const struct shell *_sh, size_t _argc, char **_argv)
 
     switch (led_num) {
         case 1:
-             SYSTEM_BUS_SET(LED1, (bool)state); // или SYSTEM_BUS_SET
+            SYSTEM_BUS_SET(LED1, (bool)state); // или SYSTEM_BUS_SET
             shell_print(_sh, "LED1 (Красный + Звук) set to %s", state ? "ON" : "OFF");
             break;
         case 2:
-             SYSTEM_BUS_SET(LED2, (bool)state);
+            SYSTEM_BUS_SET(LED2, (bool)state);
             shell_print(_sh, "LED2 (Зеленый) set to %s", state ? "ON" : "OFF");
             break;
         case 3:
@@ -85,6 +85,152 @@ SHELL_CMD_ARG_REGISTER(
     "  LED ?              - Show status of all LEDs\n"
     "  LED <1-3> <ON|OFF> - Turn specific LED ON or OFF", 
     _cmd_led, 
+    1, 
+    2
+);
+
+/***************************************************************************************************
+ *                                           DEFINITIONS & TABLES
+ **************************************************************************************************/
+#define NUM_PWR_CHANNELS 8
+
+/* Список имен каналов для удобства индексации (с 1 по 8) */
+static const char *const pwr_channel_names[NUM_PWR_CHANNELS + 1] = {
+    "NONE",
+    "EN_DUT2_PSU",
+    "EN_DUT3_PSU",
+    "EN_P12V",
+    "EN_P24V",
+    "EN_VA",
+    "EN_USB_OUT",
+    "EN_USB_BOOT",
+    "EN_USB_TOP"
+};
+
+/* Маппинг порядкового номера (1-8) на системные ID шины */
+static inline SYSTEM_BUS_ID _get_pwr_bus_id(int num)
+{
+    switch (num) {
+        case 1:  return EN_DUT2_PSU;
+        case 2:  return EN_DUT3_PSU;
+        case 3:  return EN_P12V;
+        case 4:  return EN_P24V;
+        case 5:  return EN_VA;
+        case 6:  return EN_USB_OUT;
+        case 7:  return EN_USB_BOOT;
+        case 8:  return EN_USB_TOP;
+        default: return (SYSTEM_BUS_ID)-1;
+    }
+}
+
+/***************************************************************************************************
+ *                                        COMMAND HANDLER
+ **************************************************************************************************/
+
+static int _cmd_pwr_ctl(const struct shell *_sh, size_t _argc, char **_argv)
+{
+    // ВЕТКА 1: Вывод статуса (если вызвано как "PWR_CTL" или "PWR_CTL ?")
+    if (_argc == 1 || (_argc == 2 && strcmp(_argv[1], "?") == 0)) 
+    {
+        shell_print(_sh, "Current Power Control states:");
+        for (int i = 1; i <= NUM_PWR_CHANNELS; i++) 
+        {
+            bool state = false;
+            SYSTEM_BUS_ID id = _get_pwr_bus_id(i);
+            
+            if (bus_get_bool(id, &state) == 0) {
+                shell_print(_sh, "  %d - %-12s: %s", i, pwr_channel_names[i], state ? "ON" : "OFF");
+            } else {
+                shell_print(_sh, "  %d - %-12s: [N/A]", i, pwr_channel_names[i]);
+            }
+        }
+        return 0;
+    }
+
+    // Проверяем, передан ли глобальный параметр ON или OFF (без номера канала)
+    // Например: PWR_CTL ON  или  PWR_CTL OFF
+    if (_argc == 2) 
+    {
+        bool state = false;
+        if (strcmp(_argv[1], "ON") == 0 || strcmp(_argv[1], "1") == 0) {
+            state = true;
+        } else if (strcmp(_argv[1], "OFF") == 0 || strcmp(_argv[1], "0") == 0) {
+            state = false;
+        } else {
+            shell_error(_sh, "Error: Invalid global state. Use 'ON', 'OFF', '1', or '0'.");
+            return -EINVAL;
+        }
+
+        // Применяем состояние ко ВСЕМ каналам по очереди
+        shell_print(_sh, "Applying state %s to ALL power channels:", state ? "ON" : "OFF");
+        for (int i = 1; i <= NUM_PWR_CHANNELS; i++) {
+            SYSTEM_BUS_ID id = _get_pwr_bus_id(i);
+            int ret = bus_set_bool(id, state);
+            if (ret == 0) {
+                shell_print(_sh, "  %s -> %s", pwr_channel_names[i], state ? "ON" : "OFF");
+            } else {
+                shell_error(_sh, "  %s -> Failed (err: %d)", pwr_channel_names[i], ret);
+            }
+        }
+        return 0;
+    }
+
+    // ВЕТКА 3: Управление конкретным каналом (ожидаем: PWR_CTL <1-8> <ON|OFF>)
+    if (_argc < 3) 
+    {
+        shell_error(_sh, "Invalid arguments.");
+        shell_print(_sh, "Usage:");
+        shell_print(_sh, "  PWR_CTL                  - Show status of all channels");
+        shell_print(_sh, "  PWR_CTL ?                - Show status of all channels");
+        shell_print(_sh, "  PWR_CTL <ON|OFF>         - Turn ALL channels ON or OFF");
+        shell_print(_sh, "  PWR_CTL <1-8> <ON|OFF>   - Turn specific channel ON or OFF");
+        shell_print(_sh, "\nChannels map:");
+        for (int i = 1; i <= NUM_PWR_CHANNELS; i++) {
+            shell_print(_sh, "  %d: %s", i, pwr_channel_names[i]);
+        }
+        return -EINVAL;
+    }
+
+    int ch_num = atoi(_argv[1]);
+    if (ch_num < 1 || ch_num > NUM_PWR_CHANNELS) 
+    {
+        shell_error(_sh, "Error: Invalid channel number. Use from 1 to %d.", NUM_PWR_CHANNELS);
+        return -EINVAL;
+    }
+
+    bool state = false;
+    if (strcmp(_argv[2], "ON") == 0 || strcmp(_argv[2], "1") == 0) {
+        state = true;
+    } else if (strcmp(_argv[2], "OFF") == 0 || strcmp(_argv[2], "0") == 0) {
+        state = false;
+    } else {
+        shell_error(_sh, "Error: Invalid state value. Use 'ON' or 'OFF'.");
+        return -EINVAL;
+    }
+
+    SYSTEM_BUS_ID id = _get_pwr_bus_id(ch_num);
+    int ret = bus_set_bool(id, state);
+
+    if (ret == 0) {
+        shell_print(_sh, "%s (%d) set to %s", pwr_channel_names[ch_num], ch_num, state ? "ON" : "OFF");
+    } else {
+        shell_error(_sh, "Failed to set state for %s (err: %d)", pwr_channel_names[ch_num], ret);
+    }
+
+    return 0;
+}
+
+// Изменяем максимальное количество аргументов до 2, чтобы шелл пропускал команды вида "PWR_CTL ON"
+SHELL_CMD_ARG_REGISTER(
+    PWR_CTL, 
+    NULL, 
+    "Control power channels and supplies.\n"
+    "Usage:\n"
+    "  PWR_CTL                  - Show status of all channels\n"
+    "  PWR_CTL ?                - Show status of all channels\n"
+    "  PWR_CTL <ON|OFF>         - Turn ALL channels ON or OFF\n"
+    "  PWR_CTL <1-8> <ON|OFF>   - Turn specific channel ON or OFF", 
+    _cmd_pwr_ctl, 
     1, 
     2
 );

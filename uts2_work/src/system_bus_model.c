@@ -52,30 +52,7 @@ static inline const struct system_bus_handler * _get_valid_handler(SYSTEM_BUS_ID
 }
 
 
- int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
-{
-    const struct system_bus_handler *handler = _get_valid_handler(id);
-    if (handler == NULL)
-    {
-        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
-    }
 
-    if (handler->channel_type == ARRAY_DATA)
-    {            
-        // Захватываем данные канала
-        if (zbus_chan_claim(handler->channel, K_MSEC(50)) == 0)
-        {
-            BOOLEAN_ARRAY_CHANNEL_t *msg = zbus_chan_msg(handler->channel);                
-            msg->value[handler->system_index] = _val;
-            zbus_chan_finish(handler->channel);
-            zbus_chan_notify(handler->channel, K_NO_WAIT); 
-            return 0;
-        }
-        return -EBUSY; // Если не удалось захватить канал по тайм-ауту
-    }         
-
-    return -ENOTSUP; /* Тип данных не поддерживается этой функцией */
-}
 
 int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
 {
@@ -170,34 +147,76 @@ const struct system_bus_handler *handler = _get_valid_handler(id);
 
 
     
-int bus_get_bool(SYSTEM_BUS_ID id, bool * _val)
+/* Внутренний помощник для валидации и получения доступа к каналу */
+static inline bool _validate_and_claim_handler(SYSTEM_BUS_ID id, SYSTEM_BUS_DATA_TYPE _type, const struct system_bus_handler **out_handler, void **out_msg)
 {
-    if (id >= SYSTEM_BUS_COUNT)
+    if (id >= SYSTEM_BUS_COUNT) {
+        return false;
+    }
+
+    // Проверяем что декспритор канала существует и канал нужного типа
+    const struct system_bus_handler *handler = cache[id];
+    if (handler == NULL || handler->channel_type != _type) {
+        return false;
+    }
+
+    // Проверям что индекс канал не больше чем его размер
+    size_t msg_size = zbus_chan_msg_size(handler->channel);
+    if ((handler->system_index + 1) * sizeof(bool) > msg_size) {
+        return false;
+    }
+
+    // Захватываем данные канала Zbus с таймаутом
+    if (zbus_chan_claim(handler->channel, K_MSEC(10)) != 0) {
+        return false;
+    }
+
+    *out_handler = handler;
+    *out_msg = zbus_chan_msg(handler->channel);
+    return true;
+}
+
+int bus_get_bool(SYSTEM_BUS_ID id, bool *_val)
+{
+    if (_val == NULL) 
     {
         return -EINVAL;
     }
-    const struct system_bus_handler *handler = cache[id];    
 
-    // Проверка, существует ли в кэше дискриптор канала
-    if (handler != NULL)
-    {
-        size_t msg_size = zbus_chan_msg_size(handler->channel);
-        // Проверяем что индекс канала попадет в данные канала ZBUS
-        if (handler->system_index*sizeof(bool) < msg_size)
-        {            
-            // Захватываем данные канала
-            if (zbus_chan_claim(handler->channel,K_MSEC(50)) == 0 )
-            {
-                // Читаем данные из канал
-                bool * msg = (const bool *)zbus_chan_msg(handler->channel);                
-                *_val = msg[handler->system_index];
-                // Освобождаем канал
-                zbus_chan_finish(handler->channel);                
-                return 0;
-            }
-        }         
+    const struct system_bus_handler *handler;
+    void *raw_msg;
+
+    if (!_validate_and_claim_handler(id, BOOL_DATA,&handler, &raw_msg)) {
+        return -ENODEV;
     }
-   return -ENODEV; /* Модуль обслуживания параметра не скомпилирован */
+
+    // Читаем данные
+    const bool *msg = (const bool *)raw_msg;
+    *_val = msg[handler->system_index];
+
+    // Освобождаем канал
+    zbus_chan_finish(handler->channel);
+    return 0;
+}
+
+int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
+{
+    const struct system_bus_handler *handler;
+    void *raw_msg;
+
+    if (!_validate_and_claim_handler(id, BOOL_DATA,&handler, &raw_msg)) {
+        return -ENODEV;
+    }
+
+    // Записываем данные
+    bool *msg = (bool *)raw_msg;
+    msg[handler->system_index] = _val;
+
+    // Освобождаем канал и уведомляем подписчиков Zbus
+    zbus_chan_finish(handler->channel);
+    zbus_chan_notify(handler->channel, K_NO_WAIT);
+
+    return 0;
 }
 
  int bus_get_u32(SYSTEM_BUS_ID id, uint32_t * _val)
@@ -226,33 +245,7 @@ int bus_get_bool(SYSTEM_BUS_ID id, bool * _val)
 }
 
 
-int bus_get_bool_ch(SYSTEM_BUS_ID id, bool * _val,uint8_t size)
-{
-    if (id >= SYSTEM_BUS_COUNT)
-    {
-        return -EINVAL;
-    }
 
-    const struct system_bus_handler *handler = cache[id];
-    if (true
-        && handler != NULL     
-    )
-    {
-        if (handler->channel_type == ARRAY_DATA)
-        {            
-            // Захватываем данные канала
-            if (zbus_chan_claim(handler->channel,K_MSEC(50)) == 0 )
-            {
-                BOOLEAN_ARRAY_CHANNEL_t * msg = zbus_chan_msg(handler->channel);                
-                msg->value[handler->system_index] = _val;
-                zbus_chan_finish(handler->channel);
-                zbus_chan_notify(handler->channel,K_NO_WAIT); 
-                return 0;
-            }
-        }         
-    }
-   return -ENODEV; /* Модуль обслуживания параметра не скомпилирован */
-}
 
  int bus_get_u32_ch(SYSTEM_BUS_ID id, uint32_t * _val,uint8_t size)
 {
@@ -327,55 +320,6 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val)
         zbus_chan_finish(handler->channel);
     }
     return 0;   
-}
-
-int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count)
-{
-    if (ids == NULL || count == 0) {
-        return -EINVAL;
-    }
-
-    // Временный массив обработанных флагов, чтобы не уведомлять канал дважды
-    // Либо простой обход: если следующий ID на том же канале — не отпускаем claim
-    const struct zbus_channel *current_chan = NULL;
-    BOOLEAN_ARRAY_CHANNEL_t *msg = NULL;
-    int ret = 0;
-
-    for (size_t i = 0; i < count; i++) {
-        const struct system_bus_handler *h = _get_valid_handler(ids[i]);
-        if (h == NULL || h->channel_type != ARRAY_DATA) {
-            ret = -EINVAL;
-            continue;
-        }
-
-        // Если сменился канал, закрываем предыдущий и захватываем новый
-        if (h->channel != current_chan) {
-            if (current_chan != NULL) {
-                zbus_chan_finish(current_chan);
-                zbus_chan_notify(current_chan, K_NO_WAIT);
-            }
-
-            current_chan = h->channel;
-            if (zbus_chan_claim(current_chan, K_MSEC(50)) != 0) {
-                current_chan = NULL;
-                ret = -EBUSY;
-                continue;
-            }
-            msg = zbus_chan_msg(current_chan);
-        }
-
-        if (msg != NULL) {
-            msg->value[h->system_index] = val;
-        }
-    }
-
-    // Завершаем последний активный канал
-    if (current_chan != NULL) {
-        zbus_chan_finish(current_chan);
-        zbus_chan_notify(current_chan, K_NO_WAIT);
-    }
-
-    return ret;
 }
 
 SYS_INIT(system_bus_cache_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
