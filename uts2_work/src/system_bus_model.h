@@ -175,7 +175,7 @@ typedef enum
 
 
 
-#define CONTROL_LINE_CNT 8
+#define POWER_CONTROL_LINE_CNT 8
 
 typedef enum
 {

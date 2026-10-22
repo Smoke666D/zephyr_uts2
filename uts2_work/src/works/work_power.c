@@ -1,6 +1,5 @@
 /**
- *  @file       out_and_power_control.c
- *  @headerfile out_and_power_control.h
+ *  @file       work_power.c
  *
  *  @date       2026.10.06
  *  @author     Dymov Igor
@@ -38,7 +37,7 @@ LOG_MODULE_REGISTER(power_control_module, LOG_LEVEL_INF);
 
 typedef struct power_control_line_msg 
 {
-    bool state[CONTROL_LINE_CNT]; // Наш тестовый буфер (8 шагов * 2 канала)
+    bool state[POWER_CONTROL_LINE_CNT]; // Наш тестовый буфер (8 шагов * 2 канала)
 } power_control_line_msg ;
 
 
@@ -50,7 +49,7 @@ typedef struct power_control_line_msg
 static void _power_control_listener_cb(const struct zbus_channel *_chan);
 static void _out_update_handler(struct k_work *_work);
 static void _enable_port_init(void);
-static void _discrete_control_update_handler(struct k_work *_work);
+static void _power_control_update_handler(struct k_work *_work);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
@@ -70,7 +69,7 @@ ZBUS_CHAN_DEFINE(discrete_control_chan,
 
   
 
-static const struct gpio_dt_spec power_switches[CONTROL_LINE_CNT] = 
+static const struct gpio_dt_spec power_switches[POWER_CONTROL_LINE_CNT] = 
 {
     GPIO_DT_SPEC_GET(DT_NODELABEL(en_dut2), gpios),
     GPIO_DT_SPEC_GET(DT_NODELABEL(en_dut3), gpios),
@@ -115,13 +114,13 @@ static void _enable_port_init(void)
         struct power_control_line_msg  *msg = 
             (struct power_control_line_msg *)zbus_chan_msg(&discrete_control_chan);
             
-        for (int i = 0; i < CONTROL_LINE_CNT; i++) 
+        for (int i = 0; i < POWER_CONTROL_LINE_CNT; i++) 
         {
             if (gpio_is_ready_dt(&power_switches[i])) 
             {
-                gpio_pin_configure_dt(&power_switches[i], GPIO_OUTPUT_ACTIVE);                        
-                cache_enable_state.state[i] = true;
-                msg->state[i] = true;
+                gpio_pin_configure_dt(&power_switches[i], GPIO_OUTPUT_INACTIVE);                        
+                cache_enable_state.state[i] = false;
+                msg->state[i] = false;
             }
         }
         zbus_chan_finish(&discrete_control_chan);
@@ -135,14 +134,14 @@ static void _enable_port_init(void)
  *
  *  @param      _work - Указатель на структуру задачи
  */
-static void _discrete_control_update_handler(struct k_work *_work)
+static void _power_control_update_handler(struct k_work *_work)
 {    
     ARG_UNUSED(_work);
     struct power_control_line_msg msg;
     
     if (zbus_chan_read(&discrete_control_chan, &msg, K_MSEC(50)) == 0)
     {
-        for (int i = 0; i < CONTROL_LINE_CNT; i++)
+        for (int i = 0; i < POWER_CONTROL_LINE_CNT; i++)
         {
             if (cache_enable_state.state[i] != msg.state[i])
             {
@@ -163,7 +162,7 @@ static void _discrete_control_update_handler(struct k_work *_work)
 static int _power_control_init(void)
 {
 
-    k_work_init(&power_control_work, _discrete_control_update_handler);
+    k_work_init(&power_control_work, _power_control_update_handler);
     _enable_port_init();
     return 0;
 }
