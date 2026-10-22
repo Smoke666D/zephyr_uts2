@@ -191,16 +191,56 @@ def build_dashboard(ports_refs, ui_labels):
             'bg-amber-600 text-white font-bold text-xs py-1 px-2'
         )
 
-    # ==========================================
+# ==========================================
     # 2. ЛИНИИ ENABLE
     # ==========================================
+# ==========================================
+    # 2. ЛИНИИ ENABLE
+    # ==========================================
+# ==========================================
+    # 2. УПРАВЛЕНИЕ ПИТАНИЕМ
+    # ==========================================
     with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      ui.label('Управление линиями enable').classes(
-          'text-xs font-semibold text-yellow-300 mb-1'
+      enable_checkboxes = []
+      bulk_updating = False
+
+      # Заголовок крупнее, отцентрован строго по середине
+      ui.label('Управление питанием').classes(
+          'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
       )
+
+      def pwr_all_on():
+        nonlocal bulk_updating
+        curr_shell = shell_ref.get('ser')
+        if curr_shell and curr_shell.is_open:
+          curr_shell.write(b'PWR_CTL ON\r\n')
+          ui.notify('Отправлено: PWR_CTL ON', type='positive')
+        else:
+          ui.notify('Shell порт закрыт!', type='warning')
+
+        bulk_updating = True
+        for cb in enable_checkboxes:
+          cb.value = True
+        bulk_updating = False
+
+      def pwr_all_off():
+        nonlocal bulk_updating
+        curr_shell = shell_ref.get('ser')
+        if curr_shell and curr_shell.is_open:
+          curr_shell.write(b'PWR_CTL OFF\r\n')
+          ui.notify('Отправлено: PWR_CTL OFF', type='info')
+        else:
+          ui.notify('Shell порт закрыт!', type='warning')
+
+        bulk_updating = True
+        for cb in enable_checkboxes:
+          cb.value = False
+        bulk_updating = False
 
       def make_en_handler(c_num, c_name):
         def handler(e):
+          if bulk_updating:
+            return
           state = 'ON' if e.value else 'OFF'
           cmd = f'PWR_CTL {c_num} {state}\r\n'
           curr_shell = shell_ref.get('ser')
@@ -212,14 +252,35 @@ def build_dashboard(ports_refs, ui_labels):
 
         return handler
 
-      with ui.grid(columns=4).classes('w-full gap-1'):
-        for idx, name in enumerate(ENABLE_LINES):
-          ch_num = idx + 1
-          ui.checkbox(
-              f'{ch_num}. {name}',
-              value=True,
-              on_change=make_en_handler(ch_num, name),
-          ).classes('text-white text-xs')
+      # Горизонтальный ряд: Слева чекбоксы, Справа две крупные кнопки
+      with ui.row().classes('w-full gap-3 items-center'):
+
+        # Левая часть: Сетка с 8 чекбоксами (4 колонки x 2 ряда)
+        with ui.grid(columns=4).classes('flex-1 gap-1'):
+          for idx, name in enumerate(ENABLE_LINES):
+            ch_num = idx + 1
+            cb = ui.checkbox(
+                f'{ch_num}. {name}',
+                value=False,
+                on_change=make_en_handler(ch_num, name),
+            ).classes('text-white text-xs')
+            enable_checkboxes.append(cb)
+
+        # Правая часть: Крупные кнопки (сверху зелёная, снизу красная)
+        with ui.column().classes('gap-1.5 w-44 justify-center'):
+          ui.button(
+              'ВКЛЮЧИТЬ ВСЕ',
+              on_click=pwr_all_on,
+          ).props('color=positive text-color=white').classes(
+              'w-full font-bold text-xs py-2 rounded shadow bg-green-600'
+          )
+
+          ui.button(
+              'ВЫКЛЮЧИТЬ ВСЕ',
+              on_click=pwr_all_off,
+          ).props('color=negative text-color=white').classes(
+              'w-full font-bold text-xs py-2 rounded shadow bg-red-600'
+          )
 
     # ==========================================
     # 3. СВЕТОДИОДЫ
