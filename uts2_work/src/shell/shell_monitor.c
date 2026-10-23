@@ -89,10 +89,29 @@ static float get_channel_value_by_name(const char *name)
     else if (strcmp(name, "EN_USB_BOOT") == 0) { bool b = false; SYSTEM_BUS_GET(EN_USB_BOOT, &b); val = b ? 1.0f : 0.0f; }
     else if (strcmp(name, "EN_USB_TOP") == 0)  { bool b = false; SYSTEM_BUS_GET(EN_USB_TOP, &b);  val = b ? 1.0f : 0.0f; }
 
-    else if (strcmp(name, "LIN_PD1") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD1, &u); val = (float)u; }
-    else if (strcmp(name, "LIN_PD2") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD2, &u); val = (float)u; }
-    else if (strcmp(name, "LIN_PD3") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD3, &u); val = (float)u; }
-    else if (strcmp(name, "LIN_PD4") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD4, &u); val = (float)u; }
+    else if (strcmp(name, "LIN_PD1") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(LIN_PD1, &u); val = (float)u; }
+    else if (strcmp(name, "LIN_PD2") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(LIN_PD2, &u); val = (float)u; }
+    else if (strcmp(name, "LIN_PD3") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(LIN_PD3, &u); val = (float)u; }
+    else if (strcmp(name, "LIN_PD4") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(LIN_PD4, &u); val = (float)u; }
+
+    else if (strcmp(name, "DOUT1") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT1, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT2") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT2, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT3") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT3, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT4") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT4, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT5") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT5, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT6") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT6, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT7") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT7, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT8") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT8, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT9") == 0)  { uint32_t u = 0; SYSTEM_BUS_GET(DOUT9, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT10") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT10, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT11") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT11, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT12") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT12, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT13") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT13, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT14") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT14, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT15") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT15, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT16") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT16, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT17") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT17, &u); val = (float)u; }
+    else if (strcmp(name, "DOUT18") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT18, &u); val = (float)u; }
     return val;
 }
 
@@ -140,6 +159,17 @@ static void monitor_work_handler(struct k_work *item)
             written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 
                                    "%s: %s   ", ctx->channel_names[i], state_str);
         } 
+        else if (strncmp(ctx->channel_names[i], "DOUT", 4) == 0) {
+            int s_val = (int)val;
+            const char *dout_str = "UNKNOWN";
+            if      (s_val == 0) dout_str = "IN";
+            else if (s_val == 1) dout_str = "LOW";
+            else if (s_val == 2) dout_str = "HIGH";
+            else if (s_val == 3) dout_str = "SHORT";
+
+            written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 
+                                   "%s: %s   ", ctx->channel_names[i], dout_str);
+        }
         else {
             // Для остальных каналов (ENV, Sense, AO, LIN_AO) — стандартный %f с (double)
             written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 

@@ -35,9 +35,8 @@
  **************************************************************************************************/
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
-#define DISPATCHER_STACK_SIZE 2048
-
-
+#define LOW_CUR_CHANNELS_CNT   16
+#define HIGH_CUR_CHANNELS_CNT  2
 
 typedef struct hc595_channels_msg {
     uint32_t channels_mv[CHANNEL_DATA_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
@@ -47,19 +46,16 @@ typedef struct hc595_channels_msg {
  *                                   PRIVATE FUNCTION PROTOTYPES
  **********************************************************************************/
 static void _out_zbus_listener_callback(const struct zbus_channel *_chan);
-static void _discrete_control_line_listener_cb(const struct zbus_channel *_chan);
 static void _hc595_calculate_mask(const struct hc595_channels_msg *_msg, 
                                   uint8_t *_tx_data, size_t _len);
 static void _out_update_handler(struct k_work *_work);
-static void _enable_port_init(void);
-static void _discrete_control_update_handler(struct k_work *_work);
 static int  _out_manager_system_init(void);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
 static struct k_work out_task; 
-static struct k_work discrete_control_task; 
+
 
 ZBUS_LISTENER_DEFINE(hc595_sub, _out_zbus_listener_callback);
 
@@ -73,15 +69,7 @@ ZBUS_CHAN_DEFINE(hc595_chan,
 );
 
 
-
-static struct spi_dt_spec spi_spec = 
-    SPI_DT_SPEC_GET(DT_NODELABEL(hc595_chain),
-                    SPI_OP_MODE_MASTER | 
-                    SPI_WORD_SET(8) | 
-                    SPI_TRANSFER_MSB);
-
 static const struct device *const hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));      
-
 
 
 /***************************************************************************************************
@@ -128,7 +116,7 @@ static void _hc595_calculate_mask(const struct hc595_channels_msg *_msg,
                   ((uint8_t)_msg->channels_mv[20] << 6) |
                   ((uint8_t)_msg->channels_mv[21] << 7);
 
-    static const uint8_t state_to_bits[] = {0, 0x02, 0x01};
+     static const uint8_t state_to_bits[] = {0x00, 0x02, 0x01, 0x03};
 
     // Заполнение каналов слаботочных драйверов
     for (int i = 0; i < LOW_CUR_DRIVER_COUNT; i++) 
@@ -137,7 +125,9 @@ static void _hc595_calculate_mask(const struct hc595_channels_msg *_msg,
         uint8_t bit_indx = (i % 4) * 2;
         uint32_t state = _msg->channels_mv[i];
 
-        if (state < 3) 
+       uint32_t max_allowed_state = (i < LOW_CUR_CHANNELS_CNT) ? 4 : 3;
+
+        if (state < max_allowed_state) 
         {
             _tx_data[chip_index] |= (state_to_bits[state] << bit_indx);
         }

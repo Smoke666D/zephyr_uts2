@@ -316,37 +316,49 @@ def build_dashboard(ports_refs, ui_labels):
     # ==========================================
     # 4. ЛИНИИ IO (1-18)
     # ==========================================
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
-          'text-xs font-semibold text-yellow-300 mb-1'
-      )
-
-      def on_io_change(ch_num, select_element):
-        val_map = {'INPUT': 'IN', 'HIGH': 'HI', 'LOW': 'LO'}
-        short_state = val_map.get(select_element.value, 'IN')
-        cmd = f'out_set {ch_num} {short_state}\r\n'
-        curr_shell = shell_ref.get('ser')
-        if curr_shell and curr_shell.is_open:
-          curr_shell.write(cmd.encode('utf-8'))
-          ui.notify(f'[IO {ch_num}] Отправлено: {cmd.strip()}', type='info')
-        else:
-          ui.notify('Shell порт закрыт!', type='warning')
-
-      with ui.grid(columns=6).classes('w-full gap-1'):
-        for i in range(1, 19):
-          with ui.card().classes(
-              'bg-slate-700 p-1 flex-row items-center justify-between rounded'
-          ):
-            ui.label(f'IO {i}').classes('text-[11px] text-white font-bold')
-            io_select = ui.select(
-                options=['INPUT', 'HIGH', 'LOW'], value='INPUT'
-            ).props('dark outlined dense').classes(
-                'w-32 bg-slate-800 text-[10px] text-white'
+      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
+                'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
             )
-            io_select.on(
-                'update:model-value',
-                lambda e, c=i, s=io_select: on_io_change(c, s),
-            )
+
+            def on_io_change(ch_num, select_element):
+                val_map = {
+                    'INPUT': 'IN',
+                    'HIGH': 'HIGH',
+                    'LOW': 'LOW',
+                    'SHORT_CUT': 'SHORT',
+                }
+                short_state = val_map.get(select_element.value, 'IN')
+                cmd = f'DOUT {ch_num} {short_state}\r\n'
+                curr_shell = shell_ref.get('ser')
+                if curr_shell and curr_shell.is_open:
+                    curr_shell.write(cmd.encode('utf-8'))
+                    ui.notify(f'[IO {ch_num}] Отправлено: {cmd.strip()}', type='info')
+                else:
+                    ui.notify('Shell порт закрыт!', type='warning')
+
+            with ui.grid(columns=6).classes('w-full gap-1'):
+                for i in range(1, 19):
+                    with ui.card().classes(
+                        'bg-slate-700 p-1 flex-row items-center justify-between rounded'
+                    ):
+                        ui.label(f'IO {i}').classes('text-[11px] text-white font-bold')
+
+                        if i <= 16:
+                            options_list = ['INPUT', 'HIGH', 'LOW', 'SHORT_CUT']
+                        else:
+                            options_list = ['INPUT', 'HIGH', 'LOW']
+
+                        io_select = ui.select(
+                            options=options_list, value='INPUT'
+                        ).props('dark outlined dense').classes(
+                            'w-32 bg-slate-800 text-[10px] text-white'
+                        )
+                        io_select.on(
+                            'update:model-value',
+                            lambda e, c=i, s=io_select: on_io_change(c, s),
+                        )
+
 
     # ==========================================
     # 5. ЦАП И РЕЗИСТОРЫ
