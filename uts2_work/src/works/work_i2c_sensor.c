@@ -17,7 +17,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/gpio.h>
+
 
 #include "app_worker.h"
 #include "system_bus_model.h"
@@ -94,6 +97,7 @@ static void _sensor_poll_handler(struct k_work *_work)
     ARG_UNUSED(_work);
     FLOAT_ARRAY_CHANNEL_4_t msg;
 
+
     for (int i = 0; i < ARRAY_SIZE(sensors_cache_slots); i++) 
     {
         sensor_cache_slot_t *slot = &sensors_cache_slots[i];
@@ -113,7 +117,7 @@ static void _sensor_poll_handler(struct k_work *_work)
             msg.value[i] = NAN;
         }
     }
-    
+
     zbus_chan_pub(&sensor_channel_poll, &msg, K_MSEC(10));
     
     // Перезапуск воркера ровно через 500 мс
@@ -135,6 +139,9 @@ static int _app_worker_system_init(void)
     app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(100),COMMON_WORKER);
 
     LOG_INF("Фоновый опрос датчиков успешно инициализирован");
+
+
+    
     return 0;
 }
 

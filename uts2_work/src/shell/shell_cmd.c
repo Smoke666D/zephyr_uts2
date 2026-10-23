@@ -285,3 +285,146 @@ SHELL_CMD_ARG_REGISTER(
     1, 
     0
 );
+
+#define NUM_I2C_OUT2_CHANNELS 9
+
+/* Массив имен каналов (индекс 0 - заглушка) */
+static const char *const i2c_out2_names[NUM_I2C_OUT2_CHANNELS + 1] = {
+    "",
+    "JTAG_MUX_EN",
+    "EN_USB_UART",
+    "EN_USB_OUT1",
+    "EN_USB_OUT2",
+    "EN_USB_OUT3",
+    "UART_FB_EN",
+    "UART_RX_EN",
+    "OK2",
+    "OK1"
+};
+
+/* Маппинг номера канала (1-9) на SYSTEM_BUS_ID */
+static inline SYSTEM_BUS_ID _get_i2c_out2_bus_id(int ch_num)
+{
+    switch (ch_num) {
+        case 1:  return JTAG_MUX_EN;
+        case 2:  return EN_USB_UART;
+        case 3:  return EN_USB_OUT1;
+        case 4:  return EN_USB_OUT2;
+        case 5:  return EN_USB_OUT3;
+        case 6:  return UART_FB_EN;
+        case 7:  return UART_RX_EN;
+        case 8:  return OK2;
+        case 9:  return OK1;
+        default: return (SYSTEM_BUS_ID)-1;
+    }
+}
+
+/***************************************************************************************************
+ *                                        COMMAND HANDLER
+ **************************************************************************************************/
+
+static int _cmd_i2c_out2(const struct shell *_sh, size_t _argc, char **_argv)
+{
+    // ВЕТКА 1: Вывод статуса (если вызвано как "I2C_OUT2" или "I2C_OUT2 ?")
+    if (_argc == 1 || (_argc == 2 && strcmp(_argv[1], "?") == 0)) 
+    {
+        shell_print(_sh, "Current I2C_OUT2 states:");
+        for (int i = 1; i <= NUM_I2C_OUT2_CHANNELS; i++) 
+        {
+            bool state = false;
+            SYSTEM_BUS_ID id = _get_i2c_out2_bus_id(i);
+            
+            if (SYSTEM_BUS_GET(id, &state) == 0) {
+                shell_print(_sh, "  %d - %-13s: %s", i, i2c_out2_names[i], state ? "ON" : "OFF");
+            } else {
+                shell_print(_sh, "  %d - %-13s: [N/A]", i, i2c_out2_names[i]);
+            }
+        }
+        return 0;
+    }
+
+    // ВЕТКА 2: Глобальное управление ВСЕМИ каналами (например: I2C_OUT2 ON или I2C_OUT2 OFF)
+    if (_argc == 2) 
+    {
+        bool state = false;
+        if (strcmp(_argv[1], "ON") == 0 || strcmp(_argv[1], "1") == 0) {
+            state = true;
+        } else if (strcmp(_argv[1], "OFF") == 0 || strcmp(_argv[1], "0") == 0) {
+            state = false;
+        } else {
+            shell_error(_sh, "Error: Invalid global state. Use 'ON' or 'OFF'.");
+            return -EINVAL;
+        }
+
+        shell_print(_sh, "Applying state %s to ALL I2C_OUT2 channels:", state ? "ON" : "OFF");
+        for (int i = 1; i <= NUM_I2C_OUT2_CHANNELS; i++) {
+            SYSTEM_BUS_ID id = _get_i2c_out2_bus_id(i);
+            int ret = SYSTEM_BUS_SET(id, (bool)state);
+            if (ret == 0) {
+                shell_print(_sh, "  %s -> %s", i2c_out2_names[i], state ? "ON" : "OFF");
+            } else {
+                shell_error(_sh, "  %s -> Failed (err: %d)", i2c_out2_names[i], ret);
+            }
+        }
+        return 0;
+    }
+
+    // ВЕТКА 3: Управление конкретным каналом (ожидаем: I2C_OUT2 <1-9> <ON|OFF>)
+    if (_argc < 3) 
+    {
+        shell_error(_sh, "Invalid arguments.");
+        shell_print(_sh, "Usage:");
+        shell_print(_sh, "  I2C_OUT2                 - Show status of all channels");
+        shell_print(_sh, "  I2C_OUT2 ?               - Show status of all channels");
+        shell_print(_sh, "  I2C_OUT2 <ON|OFF>        - Turn ALL channels ON or OFF");
+        shell_print(_sh, "  I2C_OUT2 <1-9> <ON|OFF>  - Turn specific channel ON or OFF");
+        shell_print(_sh, "\nChannels map:");
+        for (int i = 1; i <= NUM_I2C_OUT2_CHANNELS; i++) {
+            shell_print(_sh, "  %d: %s", i, i2c_out2_names[i]);
+        }
+        return -EINVAL;
+    }
+
+    int ch_num = atoi(_argv[1]);
+    if (ch_num < 1 || ch_num > NUM_I2C_OUT2_CHANNELS) 
+    {
+        shell_error(_sh, "Error: Invalid channel number. Use from 1 to %d.", NUM_I2C_OUT2_CHANNELS);
+        return -EINVAL;
+    }
+
+    bool state = false;
+    if (strcmp(_argv[2], "ON") == 0 || strcmp(_argv[2], "1") == 0) {
+        state = true;
+    } else if (strcmp(_argv[2], "OFF") == 0 || strcmp(_argv[2], "0") == 0) {
+        state = false;
+    } else {
+        shell_error(_sh, "Error: Invalid state value. Use 'ON' or 'OFF'.");
+        return -EINVAL;
+    }
+
+    SYSTEM_BUS_ID id = _get_i2c_out2_bus_id(ch_num);
+    int ret = SYSTEM_BUS_SET(id, (bool)state);
+
+    if (ret == 0) {
+        shell_print(_sh, "%s (%d) set to %s", i2c_out2_names[ch_num], ch_num, state ? "ON" : "OFF");
+    } else {
+        shell_error(_sh, "Failed to state for %s (err: %d)", i2c_out2_names[ch_num], ret);
+    }
+
+    return 0;
+}
+
+// Регистрация команды I2C_OUT2 в Zephyr Shell
+SHELL_CMD_ARG_REGISTER(
+    I2C_OUT2, 
+    NULL, 
+    "Control I2C_OUT2 digital/mux channels (JTAG, USB, UART, OK).\n"
+    "Usage:\n"
+    "  I2C_OUT2                 - Show status of all channels\n"
+    "  I2C_OUT2 ?               - Show status of all channels\n"
+    "  I2C_OUT2 <ON|OFF>        - Turn ALL channels ON or OFF\n"
+    "  I2C_OUT2 <1-9> <ON|OFF>  - Turn specific channel ON or OFF", 
+    _cmd_i2c_out2, 
+    1, 
+    2
+);

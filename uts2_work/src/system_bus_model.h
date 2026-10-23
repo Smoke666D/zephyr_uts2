@@ -155,6 +155,17 @@ typedef enum
     LIN3_RX,
     LIN4_TX,
     LIN4_RX,
+    USB_FB_MUX,    
+    JTAG_MUX0,    
+    JTAG_MUX_EN,    
+    EN_USB_UART,
+    EN_USB_OUT1,
+    EN_USB_OUT2,
+    EN_USB_OUT3,    
+    UART_FB_EN,
+    UART_RX_EN,
+    OK2,
+    OK1,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;

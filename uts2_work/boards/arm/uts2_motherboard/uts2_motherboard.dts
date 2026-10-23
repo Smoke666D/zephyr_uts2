@@ -446,7 +446,7 @@ zephyr_udc0: &usbotg_hs {
     status = "okay";
     pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb7>; /* Проверь точные имена pinctrl для твоей платы, но логика такая */
     pinctrl-names = "default";
-    clock-frequency = <I2C_BITRATE_FAST>; /* 400 kHz */
+    clock-frequency = <I2C_BITRATE_STANDARD>; /* 400 kHz */
 
 
  	eeprom_1: eeprom@50 {
@@ -470,24 +470,13 @@ zephyr_udc0: &usbotg_hs {
         status = "okay";
     };
 
-    /* 6-я микросхема PCF8575RGER (A0=VDD, A1=GND, A2=GND) -> адрес 0x21 */
-    pcf8575_6: pcf857x@21 {
-        compatible = "nxp,pcf857x";
-        status = "okay";
-        reg = <0x21>;
-        gpio-controller;
-        #gpio-cells = <2>;
-        ngpios = <16>;
-    };
-    
-    /* Если 7-я микросхема (все адреса на GND, адрес 0x20) тоже там, можешь сразу прописать и её: */
-    pcf8575_7: pcf857x@20 {
+ pcf_test: pcf857x@20 {
         compatible = "nxp,pcf857x";
         status = "okay";
         reg = <0x20>;
         gpio-controller;
         #gpio-cells = <2>;
-        ngpios = <16>;
+        ngpios = <16>; /* Указываем, что это 16-битный PCF8575 */
     };
 
 	tmp112_gnd: tmp112@48 {

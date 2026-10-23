@@ -461,7 +461,7 @@ ZBUS_LISTENER_DEFINE(lin4_rx_listener, _lin4_rx_listener_cb);
 
 
 
-
+#define PCF_NODE DT_NODELABEL(pcf_test)
 
 
 int main(void)
@@ -482,11 +482,13 @@ int main(void)
     bus_listener_attach(&lin3_rx_listener,LIN3_RX);
     bus_listener_attach(&lin4_rx_listener,LIN4_RX);
 
-  
+   
+
     k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
     bool state = true;
     while (1) 
 	{    
+      
         can_queue_message_t rx_msg;       
         while (k_msgq_get(&all_can_rx_queue, &rx_msg, K_NO_WAIT) == 0) 
         {
