@@ -164,61 +164,7 @@ SHELL_CMD_REGISTER(out_set, NULL,
                    cmd_out_set);
 
 
-uint32_t linpb_name[] =
-{
-    LIN_PD1,
-    LIN_PD2,  
-    LIN_PD3,    
-    LIN_PD4,
 
-};
-
-
-static int cmd_linpb_set(const struct shell *sh, size_t argc, char **argv)
-{
-    /* Проверяем количество переданных аргументов (команда + 2 параметра) */
-    if (argc != 3)
-    {
-        shell_error(sh, "Usage: linpb_set <1-4> <ON/OFF>");
-        return -EINVAL;
-    }
-    
-    char *endptr;
-    long channel_num = strtol(argv[1], &endptr, 10);
-    if (*endptr != '\0' || channel_num < 1 || channel_num > 4 ) 
-    {
-        shell_error(sh, "Invalid channel: %s (Must be 1 to %d)", argv[1], 4 );
-        return -EINVAL;
-    }
-
-    uint32_t state;
-    if (strcmp(argv[2], "ON") == 0 || strcmp(argv[2], "on") == 0) 
-    {
-        state = 0x01;
-    } 
-    else 
-    if (strcmp(argv[2], "OFF") == 0 || strcmp(argv[2], "off") == 0) 
-    {
-        state = 0x00;
-    } 
-    else 
-    {
-        shell_error(sh, "Invalid state: %s (Must be ON or OFF)", argv[2]);
-        return -EINVAL;
-    }
-
-    /* 4. Выполняем безопасный атомарный Zero-Copy доступ к каналу Zbus [2] */
-    SYSTEM_BUS_SET(linpb_name[channel_num-1],state);
-    return 0;
-}
-
-/* ------------------------------------------------------------------ */
-/* 5. РЕГИСТРАЦИЯ КОМАНДЫ В СИСТЕМЕ SHELL                             */
-/* ------------------------------------------------------------------ */
-
-SHELL_CMD_REGISTER(linpb_set, NULL, 
-                   "Set state of linpb: linpb_set <1-4> <ON/OFF>", 
-                   cmd_linpb_set);
 
 
                    
@@ -324,3 +270,127 @@ SHELL_CMD_ARG_REGISTER(lin_send, NULL,
     "Отправить данные в LIN канал.\nИспользование: lin_send <1-4> <байт1> [байт2] ...", 
     cmd_lin_send, 3, SHELL_OPT_ARG_CHECK_SKIP);
 
+/***************************************************************************************************
+ *                                           DEFINITIONS & TABLES
+ **************************************************************************************************/
+#define TEST_TOTAL_CHANNELS  40
+#define TEST_CHANNELS_PER_ROW 5
+#define TEST_TOTAL_ROWS      8  // 8 рядов по 5 каналов = 40 каналов
+
+/* Массив имен всех 40 каналов в точном порядке их вывода */
+static const char *const test_channel_names[TEST_TOTAL_CHANNELS] = {
+    "AIN_AO1",    "AIN_AO7",    "AIN_AO13",   "AIN_AVsense1", "LIN_AO1",
+    "AIN_AO2",    "AIN_AO8",    "AIN_AO14",   "AIN_AVsense2", "LIN_AO2",
+    "AIN_AO3",    "AIN_AO9",    "AIN_AO15",   "AIN_AVsense3", "LIN_AO3",
+    "AIN_AO4",    "AIN_AO10",   "AIN_AO16",   "AIN_AVsense4", "LIN_AO4",
+    "AIN_AO5",    "AIN_AO11",   "AIN_AO17",   "AIN_AVsense5", "DA41_GND1",
+    "AIN_AO6",    "AIN_AO12",   "AIN_AO18",   "AIN_AVsense6", "DA41_GND2",
+    "AIN_DA11_1", "AIN_DA20_1", "AIN_DA33_1", "AIN_DA44_1",   "AIN_DA41_1",
+    "AIN_DA11_2", "AIN_DA20_2", "AIN_DA33_2", "AIN_DA44_2",   "AIN_DA41_2"
+};
+
+/* Универсальная функция получения float-значения по имени канала из вашей шины */
+static float _get_bus_float(const char *name)
+{
+    float val = 0.0f;
+
+    // Автоматический поиск и чтение через макросы системы (добавьте недостающие, если имена отличаются)
+    if      (strcmp(name, "AIN_AO1") == 0)    { SYSTEM_BUS_GET(AIN_AO1, &val); }
+    else if (strcmp(name, "AIN_AO2") == 0)    { SYSTEM_BUS_GET(AIN_AO2, &val); }
+    else if (strcmp(name, "AIN_AO3") == 0)    { SYSTEM_BUS_GET(AIN_AO3, &val); }
+    else if (strcmp(name, "AIN_AO4") == 0)    { SYSTEM_BUS_GET(AIN_AO4, &val); }
+    else if (strcmp(name, "AIN_AO5") == 0)    { SYSTEM_BUS_GET(AIN_AO5, &val); }
+    else if (strcmp(name, "AIN_AO6") == 0)    { SYSTEM_BUS_GET(AIN_AO6, &val); }
+    else if (strcmp(name, "AIN_AO7") == 0)    { SYSTEM_BUS_GET(AIN_AO7, &val); }
+    else if (strcmp(name, "AIN_AO8") == 0)    { SYSTEM_BUS_GET(AIN_AO8, &val); }
+    else if (strcmp(name, "AIN_AO9") == 0)    { SYSTEM_BUS_GET(AIN_AO9, &val); }
+    else if (strcmp(name, "AIN_AO10") == 0)   { SYSTEM_BUS_GET(AIN_AO10, &val); }
+    else if (strcmp(name, "AIN_AO11") == 0)   { SYSTEM_BUS_GET(AIN_AO11, &val); }
+    else if (strcmp(name, "AIN_AO12") == 0)   { SYSTEM_BUS_GET(AIN_AO12, &val); }
+    else if (strcmp(name, "AIN_AO13") == 0)   { SYSTEM_BUS_GET(AIN_AO13, &val); }
+    else if (strcmp(name, "AIN_AO14") == 0)   { SYSTEM_BUS_GET(AIN_AO14, &val); }
+    else if (strcmp(name, "AIN_AO15") == 0)   { SYSTEM_BUS_GET(AIN_AO15, &val); }
+    else if (strcmp(name, "AIN_AO16") == 0)   { SYSTEM_BUS_GET(AIN_AO16, &val); }
+    else if (strcmp(name, "AIN_AO17") == 0)   { SYSTEM_BUS_GET(AIN_AO17, &val); }
+    else if (strcmp(name, "AIN_AO18") == 0)   { SYSTEM_BUS_GET(AIN_AO18, &val); }
+
+    else if (strcmp(name, "AIN_AVsense1") == 0) { SYSTEM_BUS_GET(AIN_AVsense1, &val); }
+    else if (strcmp(name, "AIN_AVsense2") == 0) { SYSTEM_BUS_GET(AIN_AVsense2, &val); }
+    else if (strcmp(name, "AIN_AVsense3") == 0) { SYSTEM_BUS_GET(AIN_AVsense3, &val); }
+    else if (strcmp(name, "AIN_AVsense4") == 0) { SYSTEM_BUS_GET(AIN_AVsense4, &val); }
+    else if (strcmp(name, "AIN_AVsense5") == 0) { SYSTEM_BUS_GET(AIN_AVsense5, &val); }
+    else if (strcmp(name, "AIN_AVsense6") == 0) { SYSTEM_BUS_GET(AIN_AVsense6, &val); }
+
+    else if (strcmp(name, "LIN_AO1") == 0) { SYSTEM_BUS_GET(LIN_AO1, &val); }
+    else if (strcmp(name, "LIN_AO2") == 0) { SYSTEM_BUS_GET(LIN_AO2, &val); }
+    else if (strcmp(name, "LIN_AO3") == 0) { SYSTEM_BUS_GET(LIN_AO3, &val); }
+    else if (strcmp(name, "LIN_AO4") == 0) { SYSTEM_BUS_GET(LIN_AO4, &val); }
+
+    else if (strcmp(name, "DA41_GND1") == 0) { SYSTEM_BUS_GET(DA41_GND1, &val); }
+    else if (strcmp(name, "DA41_GND2") == 0) { SYSTEM_BUS_GET(DA41_GND2, &val); }
+
+    else if (strcmp(name, "AIN_DA11_1") == 0) { SYSTEM_BUS_GET(AIN_DA11_test1, &val); }
+    else if (strcmp(name, "AIN_DA20_1") == 0) { SYSTEM_BUS_GET(AIN_DA20_test1, &val); }
+    else if (strcmp(name, "AIN_DA33_1") == 0) { SYSTEM_BUS_GET(AIN_DA33_test1, &val); }
+    else if (strcmp(name, "AIN_DA44_1") == 0) { SYSTEM_BUS_GET(AIN_DA41_test1, &val); } // Проверьте суффикс _test1 для 44
+    else if (strcmp(name, "AIN_DA41_1") == 0) { SYSTEM_BUS_GET(AIN_DA41_test1, &val); }
+
+    else if (strcmp(name, "AIN_DA11_2") == 0) { SYSTEM_BUS_GET(AIN_DA11_test2, &val); }
+    else if (strcmp(name, "AIN_DA20_2") == 0) { SYSTEM_BUS_GET(AIN_DA20_test2, &val); }
+    else if (strcmp(name, "AIN_DA33_2") == 0) { SYSTEM_BUS_GET(AIN_DA33_test2, &val); }
+    else if (strcmp(name, "AIN_DA44_2") == 0) { SYSTEM_BUS_GET(AIN_DA41_test2, &val); } // Проверьте суффикс _test2 для 44
+    else if (strcmp(name, "AIN_DA41_2") == 0) { SYSTEM_BUS_GET(AIN_DA41_test2, &val); }
+
+    return val;
+}
+
+/***************************************************************************************************
+ *                                        COMMAND HANDLER
+ **************************************************************************************************/
+
+static int _cmd_ai_test(const struct shell *_sh, size_t _argc, char **_argv)
+{
+    ARG_UNUSED(_argc);
+    ARG_UNUSED(_argv);
+
+    shell_print(_sh, "=== AI_TEST MATRIX (40 channels: 5 per row, 8 rows) ===");
+
+    for (int row = 0; row < TEST_TOTAL_ROWS; row++) 
+    {
+        char row_buf[384] = {0};
+        int offset = 0;
+
+        for (int col = 0; col < TEST_CHANNELS_PER_ROW; col++) 
+        {
+            int ch_index = row * TEST_CHANNELS_PER_ROW + col;
+            if (ch_index >= TEST_TOTAL_CHANNELS) break;
+
+            const char *name = test_channel_names[ch_index];
+            float val = _get_bus_float(name);
+
+            // Форматируем колонку: "Имя: Значение V" (с фикс. отступами для красоты)
+            int written = snprintf(row_buf + offset, sizeof(row_buf) - offset, 
+                                   "%-12s: %8.4f V   ", name, (double)val);
+            if (written > 0) {
+                offset += written;
+            }
+        }
+
+        // Выводим готовый ряд из 5 каналов
+        shell_print(_sh, "%s", row_buf);
+    }
+
+    shell_print(_sh, "=======================================================");
+    return 0;
+}
+
+// Регистрация тестовой команды
+SHELL_CMD_ARG_REGISTER(
+    AI_TEST, 
+    NULL, 
+    "Print matrix of 40 float analog channels (5 columns x 8 rows).\n"
+    "Usage: AI_TEST", 
+    _cmd_ai_test, 
+    1, 
+    0
+);

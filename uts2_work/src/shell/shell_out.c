@@ -234,3 +234,128 @@ SHELL_CMD_ARG_REGISTER(
     1, 
     2
 );
+
+#define NUM_LIN_PD_CHANNELS 4
+
+/* Массив имен каналов */
+static const char *const lin_pd_channel_names[NUM_LIN_PD_CHANNELS + 1] = {
+    "",         // Заглушка для индекса 0
+    "LIN_PD1",
+    "LIN_PD2",
+    "LIN_PD3",
+    "LIN_PD4"
+};
+
+/* Функция маппинга номера канала на SYSTEM_BUS_ID */
+static inline SYSTEM_BUS_ID _get_lin_pd_bus_id(int ch_num)
+{
+    switch (ch_num) {
+        case 1:  return LIN_PD1;
+        case 2:  return LIN_PD2;
+        case 3:  return LIN_PD3;
+        case 4:  return LIN_PD4;
+        default: return (SYSTEM_BUS_ID)-1;
+    }
+}
+static int _cmd_lin_pd(const struct shell *_sh, size_t _argc, char **_argv)
+{
+    // ВЕТКА 1: Вывод статуса (если вызвано как "LIN_PD" или "LIN_PD ?")
+    if (_argc == 1 || (_argc == 2 && strcmp(_argv[1], "?") == 0)) 
+    {
+        shell_print(_sh, "Current LIN_PD states:");
+        for (int i = 1; i <= NUM_LIN_PD_CHANNELS; i++) 
+        {
+            uint32_t state = 0;
+            SYSTEM_BUS_ID id = _get_lin_pd_bus_id(i);
+            
+            if (bus_get_u32(id, &state) == 0) {
+                shell_print(_sh, "  %d - %-10s: %s (%u)", i, lin_pd_channel_names[i], (state > 0) ? "ON" : "OFF", state);
+            } else {
+                shell_print(_sh, "  %d - %-10s: [N/A]", i, lin_pd_channel_names[i]);
+            }
+        }
+        return 0;
+    }
+
+    // ВЕТКА 2: Глобальное управление ВСЕМИ каналами (например: LIN_PD ON или LIN_PD OFF)
+    if (_argc == 2) 
+    {
+        uint32_t val = 0;
+        if (strcmp(_argv[1], "ON") == 0 || strcmp(_argv[1], "1") == 0) {
+            val = 1;
+        } else if (strcmp(_argv[1], "OFF") == 0 || strcmp(_argv[1], "0") == 0) {
+            val = 0;
+        } else {
+            shell_error(_sh, "Error: Invalid global state. Use 'ON' or 'OFF'.");
+            return -EINVAL;
+        }
+
+        shell_print(_sh, "Applying state %s (%u) to ALL LIN_PD channels:", val ? "ON" : "OFF", val);
+        for (int i = 1; i <= NUM_LIN_PD_CHANNELS; i++) {
+            SYSTEM_BUS_ID id = _get_lin_pd_bus_id(i);
+            int ret = bus_set_u32(id, val);
+            if (ret == 0) {
+                shell_print(_sh, "  %s -> %s", lin_pd_channel_names[i], val ? "ON" : "OFF");
+            } else {
+                shell_error(_sh, "  %s -> Failed (err: %d)", lin_pd_channel_names[i], ret);
+            }
+        }
+        return 0;
+    }
+
+    // ВЕТКА 3: Управление конкретным каналом (ожидаем: LIN_PD <1-4> <ON|OFF>)
+    if (_argc < 3) 
+    {
+        shell_error(_sh, "Invalid arguments.");
+        shell_print(_sh, "Usage:");
+        shell_print(_sh, "  LIN_PD                 - Show status of all channels");
+        shell_print(_sh, "  LIN_PD ?               - Show status of all channels");
+        shell_print(_sh, "  LIN_PD <ON|OFF>        - Set ALL channels to ON or OFF");
+        shell_print(_sh, "  LIN_PD <1-4> <ON|OFF>  - Set specific channel to ON or OFF");
+        return -EINVAL;
+    }
+
+    int ch_num = atoi(_argv[1]);
+    if (ch_num < 1 || ch_num > NUM_LIN_PD_CHANNELS) 
+    {
+        shell_error(_sh, "Error: Invalid channel number. Use from 1 to %d.", NUM_LIN_PD_CHANNELS);
+        return -EINVAL;
+    }
+
+    // Конвертируем ON/OFF в uint32_t (1 или 0)
+    uint32_t val = 0;
+    if (strcmp(_argv[2], "ON") == 0 || strcmp(_argv[2], "1") == 0) {
+        val = 1;
+    } else if (strcmp(_argv[2], "OFF") == 0 || strcmp(_argv[2], "0") == 0) {
+        val = 0;
+    } else {
+        shell_error(_sh, "Error: Invalid state value. Use 'ON' or 'OFF'.");
+        return -EINVAL;
+    }
+
+    SYSTEM_BUS_ID id = _get_lin_pd_bus_id(ch_num);
+    int ret = bus_set_u32(id, val);
+
+    if (ret == 0) {
+        shell_print(_sh, "%s (%d) set to %s (%u)", lin_pd_channel_names[ch_num], ch_num, val ? "ON" : "OFF", val);
+    } else {
+        shell_error(_sh, "Failed to set state for %s (err: %d)", lin_pd_channel_names[ch_num], ret);
+    }
+
+    return 0;
+}
+
+// Регистрация команды LIN_PD в Zephyr Shell
+SHELL_CMD_ARG_REGISTER(
+    LIN_PD, 
+    NULL, 
+    "Control LIN power distribution channels (ON/OFF).\n"
+    "Usage:\n"
+    "  LIN_PD                 - Show status of all channels\n"
+    "  LIN_PD ?               - Show status of all channels\n"
+    "  LIN_PD <ON|OFF>        - Set ALL channels to ON or OFF\n"
+    "  LIN_PD <1-4> <ON|OFF>  - Set specific channel to ON or OFF", 
+    _cmd_lin_pd, 
+    1, 
+    2
+);

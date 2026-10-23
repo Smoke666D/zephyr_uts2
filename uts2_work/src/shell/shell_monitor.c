@@ -89,6 +89,10 @@ static float get_channel_value_by_name(const char *name)
     else if (strcmp(name, "EN_USB_BOOT") == 0) { bool b = false; SYSTEM_BUS_GET(EN_USB_BOOT, &b); val = b ? 1.0f : 0.0f; }
     else if (strcmp(name, "EN_USB_TOP") == 0)  { bool b = false; SYSTEM_BUS_GET(EN_USB_TOP, &b);  val = b ? 1.0f : 0.0f; }
 
+    else if (strcmp(name, "LIN_PD1") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD1, &u); val = (float)u; }
+    else if (strcmp(name, "LIN_PD2") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD2, &u); val = (float)u; }
+    else if (strcmp(name, "LIN_PD3") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD3, &u); val = (float)u; }
+    else if (strcmp(name, "LIN_PD4") == 0) { uint32_t u = 0; bus_get_u32(LIN_PD4, &u); val = (float)u; }
     return val;
 }
 
@@ -129,9 +133,10 @@ static void monitor_work_handler(struct k_work *item)
             written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 
                                    "%s: %.2f lx   ", ctx->channel_names[i], (double)val);
         } 
-         else if (strncmp(ctx->channel_names[i], "LED", 3) == 0 || strncmp(ctx->channel_names[i], "EN_", 3) == 0) {
-            // Для светодиодов (LED1-3) и силовых ключей (EN_*) выводим ON / OFF
-            const char *state_str = (val >= 0.5f) ? "ON" : "OFF";
+        else if (strncmp(ctx->channel_names[i], "LED", 3) == 0 || 
+                 strncmp(ctx->channel_names[i], "EN_", 3) == 0  || 
+                 strncmp(ctx->channel_names[i], "LIN_PD", 6) == 0) {
+            const char *state_str = (val >= 0.5f) ? "ON (1)" : "OFF (0)";
             written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 
                                    "%s: %s   ", ctx->channel_names[i], state_str);
         } 

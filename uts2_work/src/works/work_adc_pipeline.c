@@ -228,14 +228,10 @@ static void _sense_listener_handler(struct k_work *_work)
    
     seq_mux_adc_get_buf_copy(seq_dev, _raw_buf);
 
-    for (int step = 0; step < ADC_SAMPLES_PER_CH; step++) 
-    {                       
-        for (int ch = 0; ch < ADC_NUM_CHANNELS; ch++) 
-        {
-            uint8_t ch_idx = step * ADC_NUM_CHANNELS + ch;
-            float v_pin_mv = (float)apply_median_filter_5(&sense_filters[ch_idx], _raw_buf[ch_idx]); 
-            msg.channels_mv[ch_idx] = v_pin_mv * sense_coof[ch_idx];
-        }             
+    for (int channel = 0; channel < TOTAL_CHANNEL_COUNT; channel++) 
+    {                               
+        float v_pin_mv = (float)apply_median_filter_5(&sense_filters[channel], _raw_buf[channel]); 
+        msg.channels_mv[channel] = v_pin_mv * sense_coof[channel];        
     }
 
     // Публикация 32-канального пакета измерений в ZBUS

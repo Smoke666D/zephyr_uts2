@@ -296,7 +296,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
 
     LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_1, (uint32_t)adc_buf_b);
     LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_1);
-     LL_DMA_DisableIT_HT(DMA1, LL_DMA_STREAM_1);
+    LL_DMA_DisableIT_HT(DMA1, LL_DMA_STREAM_1);
     return 0;
 }
 
@@ -489,7 +489,7 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
    // --- НАСТРОЙКА АППАРАТНОГО ОВЕРСЭМПЛИНГА (x4 для укладки в 60 мкс) ---
     LL_ADC_SetOverSamplingDiscont(_adc_inst, LL_ADC_OVS_REG_CONT);
     // Коэффициент x4 и сдвиг вправо на 2 бита (2^2 = 4)
-    LL_ADC_ConfigOverSamplingRatioShift(_adc_inst, 4, LL_ADC_OVS_SHIFT_RIGHT_2);
+    LL_ADC_ConfigOverSamplingRatioShift(_adc_inst, 2, LL_ADC_OVS_SHIFT_RIGHT_1);
     // Включаем оверсэмплинг для регулярной группы
     LL_ADC_SetOverSamplingScope(_adc_inst, LL_ADC_OVS_GRP_REGULAR_CONTINUED);
 

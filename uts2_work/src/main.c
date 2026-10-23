@@ -297,13 +297,11 @@ void send_binary_telemetry(const struct device *uart_dev) {
 
     SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &pkt.current_sensors[18]);
     SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &pkt.current_sensors[19]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR,       &pkt.current_sensors[20]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR, &pkt.current_sensors[20]);
 
     SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &pkt.current_sensors[21]);
     SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &pkt.current_sensors[22]);                    
-    SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,       &pkt.current_sensors[23]);
-
-
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,     &pkt.current_sensors[23]);
 
     SYSTEM_BUS_GET(LIN_AO1,       &pkt.lin_voltages[0]);
     SYSTEM_BUS_GET(LIN_AO2,       &pkt.lin_voltages[1]);

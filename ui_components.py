@@ -583,7 +583,7 @@ def build_dashboard(ports_refs, ui_labels):
 
           def handle_pull_down(e, idx=l_idx):
             state = 'ON' if e.value else 'OFF'
-            cmd = f'linpb_set {idx} {state}\r\n'
+            cmd = f'LIN_PD {idx} {state}\r\n'
             curr_shell = shell_ref.get('ser')
             if curr_shell and curr_shell.is_open:
               curr_shell.write(cmd.encode('utf-8'))
