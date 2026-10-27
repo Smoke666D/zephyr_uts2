@@ -123,10 +123,15 @@ static void settings_listener_fn(const struct zbus_channel *chan)
         /* Физически сохраняем во FRAM и обязательно проверяем статус ошибки */
         if (device_is_ready(fram_dev)) {
             int err = eeprom_write(fram_dev, 0x0000, &g_settings_frame, sizeof(g_settings_frame));
-            if (err == 0) {
+            if (err == 0) 
+            {
                 LOG_INF("Settings successfully written to FRAM.");
-            } else {
+                SYSTEM_BUS_CLEAR_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+            } 
+            else 
+            {
                 LOG_ERR("EEPROM WRITE FAILED! Error code: %d", err);
+                SYSTEM_BUS_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
             }
         }
     }
@@ -162,7 +167,8 @@ static int fram_settings_init(void)
     bool valid_data_loaded = false;
 
     /* Читаем полный мастер-кадр из FRAM */
-    if (eeprom_read(fram_dev, 0x0000, &g_settings_frame, sizeof(g_settings_frame)) == 0) {
+    if (eeprom_read(fram_dev, 0x0000, &g_settings_frame, sizeof(g_settings_frame)) == 0) 
+    {
         if (g_settings_frame.magic == FRAM_MAGIC_HEADER) 
         {
             if (calc_frame_crc(&g_settings_frame) == g_settings_frame.crc16) 
@@ -171,6 +177,12 @@ static int fram_settings_init(void)
                 LOG_INF("Valid settings loaded from FRAM successfully!");
             }
         }
+        SYSTEM_BUS_CLEAR_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+    }
+    else 
+    {
+        SYSTEM_BUS_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+        return -ENODEV;
     }
 
     /* Если FRAM чист или CRC не совпал — инициализируем заводские дефолты */
@@ -196,6 +208,7 @@ static int fram_settings_init(void)
         if (write_err != 0) 
         {
             LOG_ERR("CRITICAL: Failed to write initial defaults to FRAM! Code: %d", write_err);
+            SYSTEM_BUS_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
         } 
         else 
         {
@@ -225,23 +238,6 @@ static int fram_settings_init(void)
 }
 
 SYS_INIT(fram_settings_init, POST_KERNEL, 80);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /* ------------------------------------------------------------------ */

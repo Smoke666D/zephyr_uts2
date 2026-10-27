@@ -224,6 +224,101 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
 }
 
 
+/**
+ * @brief Установить (в единицу) конкретный бит (0..31) по системному ID
+ */
+int bus_set_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
+{
+    if (bit_index > 31) {
+        return -EINVAL;
+    }
+
+    uint32_t val = 0;
+    int ret = bus_get_u32(id, &val);
+    if (ret < 0) {
+        return ret; // Возвращает -ENODEV или -EINVAL, если ID не валиден
+    }
+
+    // Устанавливаем бит в 1
+    val |= (1U << bit_index);
+
+    // Записываем обратно и уведомляем подписчиков Zbus
+    return bus_set_u32(id, val);
+}
+
+/**
+ * @brief Сбросить (в ноль) конкретный бит (0..31) по системному ID
+ */
+int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
+{
+    if (bit_index > 31) {
+        return -EINVAL;
+    }
+
+    uint32_t val = 0;
+    int ret = bus_get_u32(id, &val);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // Сбрасываем бит в 0
+    val &= ~(1U << bit_index);
+
+    // Записываем обратно и уведомляем подписчиков Zbus
+    return bus_set_u32(id, val);
+}
+
+/**
+ * @brief Безопасно установить бит в 1, если он еще не был установлен
+ */
+int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index)
+{
+    if (bit_index > 31) {
+        return -EINVAL;
+    }
+
+    uint32_t val = 0;
+    int ret = bus_get_u32(id, &val);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // Проверяем, установлен ли бит уже в 1
+    bool is_already_set = (val & (1U << bit_index)) != 0;
+    if (is_already_set) {
+        return 0; // Бит уже в нужном состоянии, ничего не делаем (экономим трафик Zbus)
+    }
+
+    // Устанавливаем бит в 1 и обновляем через сеттер
+    val |= (1U << bit_index);
+    return bus_set_u32(id, val);
+}
+
+/**
+ * @brief Безопасно сбросить бит в 0, если он еще не был сброшен
+ */
+int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index)
+{
+    if (bit_index > 31) {
+        return -EINVAL;
+    }
+
+    uint32_t val = 0;
+    int ret = bus_get_u32(id, &val);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // Проверяем, сброшен ли бит уже в 0
+    bool is_already_cleared = (val & (1U << bit_index)) == 0;
+    if (is_already_cleared) {
+        return 0; // Бит уже 0, ничего не делаем
+    }
+
+    // Сбрасываем бит в 0 и обновляем через сеттер
+    val &= ~(1U << bit_index);
+    return bus_set_u32(id, val);
+}
  
  int bus_set_real(SYSTEM_BUS_ID id, float _val)
 {

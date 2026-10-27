@@ -81,14 +81,16 @@ static void read_eeprom_chip_to_msg(const struct device *dev, struct eeprom_devi
 {
     memset(msg, 0, sizeof(struct eeprom_device_msg));
 
-    if (!device_is_ready(dev)) {
+    if (!device_is_ready(dev)) 
+    {
         LOG_ERR("EEPROM device %s not ready!", dev->name);
         return;
     }
 
     /* 1. Читаем 32-битный заводской UID с адреса 0xFC */
     int err = eeprom_read(dev, EEPROM_UID_OFFSET, &msg->factory_uid, sizeof(uint32_t));
-    if (err != 0) {
+    if (err != 0)
+    {
         LOG_ERR("Failed to read Factory UID from %s: %d", dev->name, err);
         return;
     }
@@ -96,15 +98,19 @@ static void read_eeprom_chip_to_msg(const struct device *dev, struct eeprom_devi
     /* 2. Читаем пользовательские данные с адреса 0x00 */
     struct eeprom_disk_payload disk_data;
     err = eeprom_read(dev, 0x00, &disk_data, sizeof(disk_data));
-    if (err == 0) {
+    if (err == 0) 
+    {
         /* Проверяем целостность CRC16 */
-        if (calc_disk_crc(&disk_data) == disk_data.crc16) {
+        if (calc_disk_crc(&disk_data) == disk_data.crc16) 
+        {
             msg->serial_number = disk_data.serial_number;
             msg->formatted_id  = disk_data.formatted_id;
             msg->usage_counter = disk_data.usage_counter;
             memcpy(msg->user_string, disk_data.user_string, sizeof(msg->user_string));
             msg->is_valid = true;
-        } else {
+        } 
+        else 
+        {
             LOG_WRN("CRC mismatch on %s user data!", dev->name);
         }
     }

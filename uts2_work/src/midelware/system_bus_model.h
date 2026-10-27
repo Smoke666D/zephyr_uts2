@@ -146,6 +146,7 @@ typedef enum
     SENS_I2C_POWER_VD5,
     HARDWARE_ERROR_REGISTER1,
     HARDWARE_ERROR_REGISTER2,
+    HARDWARE_ERROR_REGISTER3,
     CAN1_TX,
     CAN2_TX,
     CAN3_TX,
@@ -304,8 +305,18 @@ int bus_get_real_ch(SYSTEM_BUS_ID id, float * _val,uint8_t size);
     float:    bus_get_real_ch  \
 )((id), (val), (size))
 
+int bus_set_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
 
- int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
+#define SYSTEM_BUS_SET_BIT( id, mask) bus_set_bit(id, mask)
+#define SYSTEM_BUS_CLEAR_BIT( id, mask) bus_clear_bit(id, mask)
+#define SYSTEM_BUS_SET_BIT_IF_NEEDED( id, mask) bus_set_bit_if_needed(id, mask)
+#define SYSTEM_BUS_CLEAR_BIT_IF_NEEDED( id, mask) bus_clear_bit_if_needed(id, mask)
+
+
+int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
 #define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
     system_can_message_t: bus_get_can     \    
