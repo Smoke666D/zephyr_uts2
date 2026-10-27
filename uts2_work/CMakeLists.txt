@@ -15,24 +15,23 @@ target_include_directories(app PRIVATE
     src/drivers
     src/logic_signal
     src/shell
+    src/midelware
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"  
     "src/works/*.c"  
-    "src/shell/*.c"    
+    "src/shell/*.c" 
+    "src/midelware/*c"   
 )
 
 target_sources(app PRIVATE 
-       src/ina228_stream_thread.c
-       src/app_worker.c
-       src/system_bus_model.c
+       src/ina228_stream_thread.c          
        src/main.c
-       src/settings.c       
-       src/filters.c
+        src/settings.c  
+        src/settings_eeprom.c       
       ${APP_SOURCES} 
 )
-
 
 
 add_subdirectory(drivers/seq_mux_adc)

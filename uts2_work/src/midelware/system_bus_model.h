@@ -16,7 +16,12 @@ extern "C" {
 
 #define TOTAL_DAC_COUNT 3
 
-
+typedef enum
+{
+    EEPORM_IU_ERROR = 0x0001 << 0,
+    EEPORM_CU_ERROR = 0x0001 << 1,
+    FRAM_MU_ERROR = 0x0001 << 3,
+} HARDWARE_ERROR_REGISTER1_t;
 
 
 
@@ -166,6 +171,15 @@ typedef enum
     UART_RX_EN,
     OK2,
     OK1,
+    SETTING_MU_ID_1,
+    SETTING_MU_ID_2,
+    SETTING_MU_ID_3,
+    SETTING_IU_ID,
+    SETTING_CU_ID,
+    SETTING_MU_SN,
+    SETTING_OUT_TEST_CUR,
+    SETTING_3_3_CUR_HIGH,
+    SETTING_5_CUR_HIGH,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;
@@ -189,13 +203,12 @@ typedef enum
 #define POWER_CONTROL_LINE_CNT 8
 
 typedef enum
-{
-  SINGLE_DATA,
-  FLOAT,
-  BOOL,
-  ARRAY_DATA,
+{  
   QUEUE_DATA,
   BOOL_DATA,
+  UINT_DATA,
+  FLOAT_DATA,
+  CAN_MSG_DATA,
 } SYSTEM_BUS_DATA_TYPE;
 
 /* Универсальный контейнер обмена данными */

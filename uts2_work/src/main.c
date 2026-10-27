@@ -16,7 +16,7 @@
 #include <zephyr/drivers/eeprom.h>
 #include <zephyr/drivers/i2c.h>
 #include "ad5243.h"
-#include "settings.h"
+
 #include "system_bus_model.h"
 #include "telemetry.h"
 

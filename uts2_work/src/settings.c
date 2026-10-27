@@ -1,86 +1,254 @@
+#include <stdint.h>
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/eeprom.h>
-#include <zephyr/settings/settings.h>
+#include <zephyr/sys/crc.h>
+#include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/init.h>
+#include <zephyr/drivers/hwinfo.h>
+#include "system_bus_model.h"
+#include "system_bus_model.h"
 
 LOG_MODULE_REGISTER(fram_settings, LOG_LEVEL_INF);
 
-#define FRAM_NODE DT_NODELABEL(fram_chip)
-static const struct device *fram_dev = DEVICE_DT_GET(FRAM_NODE);
+#define FRAM_MAGIC_HEADER   0x53545453 /* Маркер "STTS" */
+#define FRAM_VERSION_1      2
 
-/* Пример вашей структуры с уставками */
-struct device_config {
-    int32_t speed;
-    int32_t kp_gain;
+typedef enum {
+    MU_ID_1 = 0,
+    MU_ID_2 = 1,
+    MU_ID_3 = 2,
+    MU_SN   = 3,
+} uint32_t_setting_t;
+
+/* ------------------------------------------------------------------ */
+/* ВАЖНО: Упаковываем структуры (#pragma pack), чтобы убрать мусорные байты */
+/* ------------------------------------------------------------------ */
+#pragma pack(push, 1)
+
+typedef struct app_uint32_setting {
+    uint32_t value[4];
+} app_uint32_setting;
+
+typedef struct app_float_settings {
+    float fault_low_threshold_mv;
+    float fault_high_threshold_mv;
+    float fault_current_limit_a;        
+} app_float_settings;
+
+struct app_settings_frame {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t length;
+    app_uint32_setting uint32_payload;
+    app_float_settings float_payload;
+    uint16_t crc16;
 };
 
-static struct device_config current_cfg = {
-    .speed = 1000,
-    .kp_gain = 50,
-};
+#pragma pack(pop)
 
-/* 1. Функция чтения конкретного параметра из структуры при загрузке */
-static int cfg_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
-    const char *next;
+/* Глобальный мастер-кадр уставок в RAM */
+static struct app_settings_frame g_settings_frame;
 
-    if (settings_name_steq(name, "speed", &next)) {
-        if (len != sizeof(current_cfg.speed)) return -EINVAL;
-        return (read_cb(cb_arg, &current_cfg.speed, sizeof(current_cfg.speed)) < 0) ? -EINVAL : 0;
+/* Доступ к физической микросхеме FRAM из Devicetree */
+static const struct device *const fram_dev = DEVICE_DT_GET(DT_NODELABEL(fram_chip));
+
+/* 1. Объявляем листенер сохранения уставок */
+static void settings_listener_fn(const struct zbus_channel *chan);
+
+ZBUS_LISTENER_DEFINE(settings_lis, settings_listener_fn);
+
+/* 2. Объявляем Zbus каналы (каждый под свой строго определенный тип данных) */
+ZBUS_CHAN_DEFINE(settings_uint32_t_chan,
+                 app_uint32_setting,
+                 NULL, NULL,
+                 ZBUS_OBSERVERS(settings_lis),
+                 {0}
+);
+
+ZBUS_CHAN_DEFINE(settings_float_chan,
+                 app_float_settings,
+                 NULL, NULL,
+                 ZBUS_OBSERVERS(settings_lis),
+                 {0}
+);
+
+/* ------------------------------------------------------------------ */
+/* РАСЧЕТ CRC16                                                       */
+/* ------------------------------------------------------------------ */
+static uint16_t calc_frame_crc(const struct app_settings_frame *frame)
+{
+    size_t payload_bytes = sizeof(struct app_settings_frame) - sizeof(uint16_t);
+    return crc16_itu_t(0xFFFF, (const uint8_t *)frame, payload_bytes);
+}
+
+/* ------------------------------------------------------------------ */
+/* ЛИСТЕНЕР: СРАБАТЫВАЕТ ПРИ ИЗМЕНЕНИИ ЛЮБОГО ИЗ КАНАЛОВ              */
+/* ------------------------------------------------------------------ */
+static void settings_listener_fn(const struct zbus_channel *chan)
+{
+    bool updated = false;
+
+    if (chan == &settings_uint32_t_chan) 
+    {    
+        /* 
+         * ПРАВИЛЬНО: Получаем прямой константный указатель на данные канала.
+         * Функция работает мгновенно и без конфликтов мьютексов.
+         */
+        const struct app_uint32_setting *msg = zbus_chan_const_msg(chan);
+        
+        if (msg != NULL) {
+            /* Копируем данные из безопасного указателя в наш мастер-кадр */
+            memcpy(&g_settings_frame.uint32_payload, msg, sizeof(struct app_uint32_setting));
+            updated = true;
+        }
+    } 
+    else if (chan == &settings_float_chan) 
+    {
+        const struct app_float_settings *msg = zbus_chan_const_msg(chan);
+        
+        if (msg != NULL) {
+            memcpy(&g_settings_frame.float_payload, msg, sizeof(struct app_float_settings));
+            updated = true;
+        }
     }
 
-    if (settings_name_steq(name, "kp", &next)) {
-        if (len != sizeof(current_cfg.kp_gain)) return -EINVAL;
-        return (read_cb(cb_arg, &current_cfg.kp_gain, sizeof(current_cfg.kp_gain)) < 0) ? -EINVAL : 0;
+    if (updated) 
+    {
+        /* Обновляем CRC16 мастера-кадра */
+        g_settings_frame.crc16 = calc_frame_crc(&g_settings_frame);
+
+        /* Физически сохраняем во FRAM и обязательно проверяем статус ошибки */
+        if (device_is_ready(fram_dev)) {
+            int err = eeprom_write(fram_dev, 0x0000, &g_settings_frame, sizeof(g_settings_frame));
+            if (err == 0) {
+                LOG_INF("Settings successfully written to FRAM.");
+            } else {
+                LOG_ERR("EEPROM WRITE FAILED! Error code: %d", err);
+            }
+        }
     }
-
-    return -ENOENT;
 }
 
-/* 2. Функция экспорта (сохраняет текущие RAM-значения в бэкенд при вызове settings_save) */
-static int cfg_export(int (*export_func)(const char *name, const void *value, size_t val_len)) {
-    int rc;
+/* ------------------------------------------------------------------ */
+/* ВНОМОГАТЕЛЬНЫЕ ФУНКЦИИ                                             */
+/* ------------------------------------------------------------------ */
+static void get_stm32_uid(app_uint32_setting *setting)
+{
+    uint8_t uid[12];
+    ssize_t length = hwinfo_get_device_id(uid, sizeof(uid));
 
-    rc = export_func("motor/speed", &current_cfg.speed, sizeof(current_cfg.speed));
-    if (rc) return rc;
-
-    rc = export_func("motor/kp", &current_cfg.kp_gain, sizeof(current_cfg.kp_gain));
-    if (rc) return rc;
-
-    return 0;
+    if (length == 12) {
+        setting->value[MU_ID_1] = UNALIGNED_GET((uint32_t *)&uid[0]);
+        setting->value[MU_ID_2] = UNALIGNED_GET((uint32_t *)&uid[4]);
+        setting->value[MU_ID_3] = UNALIGNED_GET((uint32_t *)&uid[8]);
+    } else {
+        LOG_ERR("Failed to read UID, error: %d", (int)length);
+    }
 }
 
-/* Регистрируем обработчик ветки "motor" */
-SETTINGS_STATIC_HANDLER_DEFINE(motor_settings, "motor", NULL, cfg_set, NULL, cfg_export);
-
-
-/* Бэкенд-драйвер сохранения/загрузки всего файла настроек во FRAM */
-int fram_backend_commit(void) {
-    // При вызове "settings save" Zephyr сам соберет все параметры через export 
-    // и передаст их нам, либо мы можем просто сбросить всю структуру во FRAM.
-    // Но правильнее использовать встроенный механизм сохранения в бэкенд.
-    return 0;
-}
-
-/* Функция инициализации и загрузки настроек при старте */
-int settings_fram_init(void) {
+/* ------------------------------------------------------------------ */
+/* ИНИЦИАЛИЗАЦИЯ И ЗАГРУЗКА ИЗ FRAM ПРИ СТАРТЕ СИСТЕМЫ                 */
+/* ------------------------------------------------------------------ */
+static int fram_settings_init(void)
+{
     if (!device_is_ready(fram_dev)) {
-        LOG_ERR("FRAM device not ready!");
+        LOG_ERR("FRAM device not ready during boot!");
         return -ENODEV;
     }
 
-    // Пример: Читаем всю структуру целиком из FRAM при старте (смещение 0)
-    int err = eeprom_read(fram_dev, 0, &current_cfg, sizeof(current_cfg));
-    if (err) {
-        LOG_ERR("Failed to read config from FRAM (%d)", err);
+    bool valid_data_loaded = false;
+
+    /* Читаем полный мастер-кадр из FRAM */
+    if (eeprom_read(fram_dev, 0x0000, &g_settings_frame, sizeof(g_settings_frame)) == 0) {
+        if (g_settings_frame.magic == FRAM_MAGIC_HEADER) 
+        {
+            if (calc_frame_crc(&g_settings_frame) == g_settings_frame.crc16) 
+            {
+                valid_data_loaded = true;
+                LOG_INF("Valid settings loaded from FRAM successfully!");
+            }
+        }
     }
 
-    // Инициализируем подсистему settings
-    settings_subsys_init();
+    /* Если FRAM чист или CRC не совпал — инициализируем заводские дефолты */
+    if (!valid_data_loaded) {
+        LOG_WRN("FRAM uninitialized or CRC invalid! Loading factory defaults...");
+        
+        g_settings_frame.magic = FRAM_MAGIC_HEADER;
+        g_settings_frame.version = FRAM_VERSION_1;
+        g_settings_frame.length = sizeof(g_settings_frame.uint32_payload) + sizeof(g_settings_frame.float_payload);
+        
+        g_settings_frame.uint32_payload.value[MU_SN] = 0x01;
+        get_stm32_uid(&g_settings_frame.uint32_payload);
 
-    // Загружаем поверх дефолтных значений те, что были переопределены
-    settings_load();
+        g_settings_frame.float_payload.fault_low_threshold_mv = 1500.0f;
+        g_settings_frame.float_payload.fault_high_threshold_mv = 10000.0f;
+        g_settings_frame.float_payload.fault_current_limit_a = 2.5f;
 
-    LOG_INF("Settings loaded. Speed: %d, KP: %d", current_cfg.speed, current_cfg.kp_gain);
+        /* Считаем CRC16 для дефолтов */
+        g_settings_frame.crc16 = calc_frame_crc(&g_settings_frame);
+
+        /* ИНИЦИАЛИЗИРУЕМ FRAM И ОБЯЗАТЕЛЬНО ПРОВЕРЯЕМ ОШИБКУ */
+        int write_err = eeprom_write(fram_dev, 0x0000, &g_settings_frame, sizeof(g_settings_frame));
+        if (write_err != 0) 
+        {
+            LOG_ERR("CRITICAL: Failed to write initial defaults to FRAM! Code: %d", write_err);
+        } 
+        else 
+        {
+            LOG_INF("Initial factory defaults written to FRAM.");
+        }
+    }
+
+    /* 
+     * Копируем прочитанные валидные данные в соответствующие Zbus каналы БЕЗ УВЕДОМЛЕНИЯ (без notify).
+     * Каждому каналу передаем СТРОГО ЕГО ТИП ДАННЫХ (без выходов за границы буферов!)
+     */
+    if (zbus_chan_claim(&settings_uint32_t_chan, K_FOREVER) == 0)
+    {
+        app_uint32_setting *chan_msg = (app_uint32_setting *)zbus_chan_msg(&settings_uint32_t_chan);
+        memcpy(chan_msg, &g_settings_frame.uint32_payload, sizeof(app_uint32_setting));
+        zbus_chan_finish(&settings_uint32_t_chan);
+    }
+
+    if (zbus_chan_claim(&settings_float_chan, K_FOREVER) == 0) {
+        app_float_settings *chan_msg = (app_float_settings *)zbus_chan_msg(&settings_float_chan);
+        memcpy(chan_msg, &g_settings_frame.float_payload, sizeof(app_float_settings));
+        zbus_chan_finish(&settings_float_chan);
+    }
+
+    LOG_INF("Settings Zbus channels initialized successfully.");
     return 0;
 }
+
+SYS_INIT(fram_settings_init, POST_KERNEL, 80);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ------------------------------------------------------------------ */
+/* МАРШРУТЫ СЕРВЕРА ПАРАМЕТРОВ                                        */
+/* ------------------------------------------------------------------ */
+PARAM_ROUTE_DEFINE(SETTING_MU_ID_1, &settings_uint32_t_chan, 0, UINT_DATA);
+PARAM_ROUTE_DEFINE(SETTING_MU_ID_2, &settings_uint32_t_chan, 1, UINT_DATA);
+PARAM_ROUTE_DEFINE(SETTING_MU_ID_3, &settings_uint32_t_chan, 2, UINT_DATA);
+PARAM_ROUTE_DEFINE(SETTING_MU_SN,   &settings_uint32_t_chan, 3, UINT_DATA);
+

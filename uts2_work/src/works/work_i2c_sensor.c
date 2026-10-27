@@ -147,10 +147,10 @@ static int _app_worker_system_init(void)
 
 SYS_INIT(_app_worker_system_init, APPLICATION, 50);
 
-PARAM_ROUTE_DEFINE(I2C1_TEMP1, &sensor_channel_poll, 0, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(I2C1_TEMP2, &sensor_channel_poll, 1, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(I2C1_LUX1,  &sensor_channel_poll, 2, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(I2C1_LUX2,  &sensor_channel_poll, 3, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(I2C1_TEMP1, &sensor_channel_poll, 0, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(I2C1_TEMP2, &sensor_channel_poll, 1, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(I2C1_LUX1,  &sensor_channel_poll, 2, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(I2C1_LUX2,  &sensor_channel_poll, 3, FLOAT_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

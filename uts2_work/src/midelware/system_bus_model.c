@@ -54,57 +54,11 @@ static inline const struct system_bus_handler * _get_valid_handler(SYSTEM_BUS_ID
 
 
 
-int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
-{
-    const struct system_bus_handler *handler = _get_valid_handler(id);
-    if (handler == NULL)
-    {
-        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
-    }
-
-    if (handler->channel_type == ARRAY_DATA)
-    {            
-        // Захватываем данные канала
-        if (zbus_chan_claim(handler->channel, K_MSEC(50)) == 0)
-        {
-            uint32_t *msg = (uint32_t *)zbus_chan_msg(handler->channel);                
-            msg[handler->system_index] = _val;
-            zbus_chan_finish(handler->channel);
-            zbus_chan_notify(handler->channel, K_NO_WAIT); 
-            return 0;
-        }
-        return -EBUSY; // Если не удалось захватить канал по тайм-ауту
-    }         
-
-    return -ENOTSUP; /* Тип данных не поддерживается этой функцией */
-}
 
 
 
- int bus_set_real(SYSTEM_BUS_ID id, float _val)
-{
-    const struct system_bus_handler *handler = _get_valid_handler(id);
-    if (handler == NULL)
-    {
-        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
-    }
 
-    if (handler->channel_type == ARRAY_DATA)
-    {            
-        // Захватываем данные канала
-        if (zbus_chan_claim(handler->channel, K_MSEC(1)) == 0)
-        {
-            float *msg = (float *)zbus_chan_msg(handler->channel);                
-            msg[handler->system_index] = _val;
-            zbus_chan_finish(handler->channel);
-            zbus_chan_notify(handler->channel, K_NO_WAIT); 
-            return 0;
-        }
-        return -EBUSY; // Если не удалось захватить канал по тайм-ауту
-    }         
 
-    return -ENOTSUP; /* Тип данных не поддерживается этой функцией */
-}
 
 int bus_set_u32p(SYSTEM_BUS_ID id,  uint32_t * _val)
 {
@@ -176,6 +130,29 @@ static inline bool _validate_and_claim_handler(SYSTEM_BUS_ID id, SYSTEM_BUS_DATA
     return true;
 }
 
+
+
+
+int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
+{
+    const struct system_bus_handler *handler;
+    void *raw_msg;
+
+    if (!_validate_and_claim_handler(id, BOOL_DATA,&handler, &raw_msg)) {
+        return -ENODEV;
+    }
+
+    // Записываем данные
+    bool *msg = (bool *)raw_msg;
+    msg[handler->system_index] = _val;
+
+    // Освобождаем канал и уведомляем подписчиков Zbus
+    zbus_chan_finish(handler->channel);
+    zbus_chan_notify(handler->channel, K_NO_WAIT);
+
+    return 0;
+}
+
 int bus_get_bool(SYSTEM_BUS_ID id, bool *_val)
 {
     if (_val == NULL) 
@@ -199,17 +176,44 @@ int bus_get_bool(SYSTEM_BUS_ID id, bool *_val)
     return 0;
 }
 
-int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
+int bus_get_u32(SYSTEM_BUS_ID id, uint32_t * _val)
 {
+    if (_val == NULL) 
+    {
+        return -EINVAL;
+    }
+    
+
     const struct system_bus_handler *handler;
     void *raw_msg;
 
-    if (!_validate_and_claim_handler(id, BOOL_DATA,&handler, &raw_msg)) {
+    if (!_validate_and_claim_handler(id, UINT_DATA,&handler, &raw_msg)) 
+    {
         return -ENODEV;
     }
 
-    // Записываем данные
-    bool *msg = (bool *)raw_msg;
+    // Читаем данные
+    const uint32_t *msg = (const uint32_t *)raw_msg;
+    *_val = msg[handler->system_index];
+
+    // Освобождаем канал
+    zbus_chan_finish(handler->channel);
+    return 0;
+                   
+}
+
+
+int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
+{
+
+    const struct system_bus_handler *handler;
+    void *raw_msg;
+
+    if (!_validate_and_claim_handler(id, UINT_DATA,&handler, &raw_msg)) {
+        return -ENODEV;
+    }
+
+    uint32_t *msg = (uint32_t *)raw_msg;
     msg[handler->system_index] = _val;
 
     // Освобождаем канал и уведомляем подписчиков Zbus
@@ -219,107 +223,55 @@ int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
     return 0;
 }
 
- int bus_get_u32(SYSTEM_BUS_ID id, uint32_t * _val)
+
+ 
+ int bus_set_real(SYSTEM_BUS_ID id, float _val)
 {
-    const struct system_bus_handler *handler = _get_valid_handler(id);
-    if (handler == NULL)
-    {
-        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
-    }
 
 
+    const struct system_bus_handler *handler;
+    void *raw_msg;
 
-    const uint32_t *channel_msg = (const uint32_t *)zbus_chan_msg(handler->channel);
-    if (channel_msg == NULL)
-    {
+    if (!_validate_and_claim_handler(id, FLOAT_DATA,&handler, &raw_msg)) {
         return -ENODEV;
-    }   
-     
-            
-     *_val = channel_msg [handler->system_index];
-        
-     return 0;
-               
-    
-   
-}
-
-
-
-
- int bus_get_u32_ch(SYSTEM_BUS_ID id, uint32_t * _val,uint8_t size)
-{
-    const struct system_bus_handler *handler = _get_valid_handler(id);
-    if (handler == NULL)
-    {
-        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
     }
 
+    float *msg = (float *)raw_msg;
+    msg[handler->system_index] = _val;
 
+    // Освобождаем канал и уведомляем подписчиков Zbus
+    zbus_chan_finish(handler->channel);
+    zbus_chan_notify(handler->channel, K_NO_WAIT);
 
-    const uint32_t *channel_msg = (const uint32_t *)zbus_chan_msg(handler->channel);
-    if (channel_msg == NULL)
-    {
-        return -ENODEV;
-    }   
-     
-            
-     *_val = channel_msg [handler->system_index];
-        
-     return 0;
-               
-    
-   
+    return 0;    
 }
-
-
-int bus_get_real_ch(SYSTEM_BUS_ID id, float * _val, uint8_t size)
-{
-
-    const struct system_bus_handler *handler = _get_valid_handler(id);
-    if (handler == NULL)
-    {
-        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
-    }
-
-    size_t msg_size = zbus_chan_msg_size(handler->channel);    
-    if (size > msg_size)    
-    {
-            return -ENOMEM; 
-    }
-    const float * _float_msg;
-    _float_msg = (const float *)zbus_chan_msg(handler->channel);                     
-    memcpy(_val,_float_msg,size*sizeof(float));            
-    return 0;
-   
-    
-   
-}
-
 
 
 int bus_get_real(SYSTEM_BUS_ID id, float * _val)
 {
-    const struct system_bus_handler *handler = _get_valid_handler(id);
-    if (handler == NULL)
+  
+    if (_val == NULL) 
     {
-        return -EINVAL; // Или -ENODEV, в зависимости от того, хотите ли вы различать ошибки
+        return -EINVAL;
+    }
+    
+
+    const struct system_bus_handler *handler;
+    void *raw_msg;
+
+    if (!_validate_and_claim_handler(id, FLOAT_DATA,&handler, &raw_msg)) 
+    {
+        return -ENODEV;
     }
 
-    size_t msg_size = zbus_chan_msg_size(handler->channel);
-    uint8_t raw_msg_buffer[160]; 
-    if (msg_size > sizeof(raw_msg_buffer)) {
-            return -ENOMEM; 
-    }
+    // Читаем данные
+    const float *msg = (const float *)raw_msg;
+    *_val = msg[handler->system_index];
 
-    const float * _float_msg;
-    if (zbus_chan_claim(handler->channel, K_MSEC(1)) == 0)
-    {
-        _float_msg = (const float *)zbus_chan_msg(handler->channel);          
-        *_val = _float_msg[handler->system_index];
-        zbus_chan_finish(handler->channel);
-    }
-    return 0;   
+    // Освобождаем канал
+    zbus_chan_finish(handler->channel);
+    return 0;
+
 }
 
 SYS_INIT(system_bus_cache_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);

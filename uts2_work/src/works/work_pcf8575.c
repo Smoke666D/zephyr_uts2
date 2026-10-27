@@ -69,32 +69,32 @@ static void pcf_work_handler(struct k_work *work)
 {
     uint16_t mask = 0x0000;
 
-    /* 1. Собираем маску из массива ровно в 9 элементов по таблице маппинга */
+       static bool toggle = false;
+    toggle = !toggle;
     for (int i = 0; i < 9; i++) {
         if (current_bools.states[i]) {
             mask |= (1 << pcf_pin_mapping[i]);
         }
     }
 
-    /* 2. Накладываем группу PO1 - PO3 (биты 1, 2, 3) */
-    mask &= ~((1 << 1) | (1 << 2) | (1 << 3));
-    uint8_t g1 = current_mux.group_1_3;
-    if (g1 == 1 || g1 == 2 || g1 == 4 || g1 == 5 || g1 == 6) {
-        mask |= ((g1 & 0x07) << 1);
-    }
+    
+   // mask &= ~((1 << 1) | (1 << 2) | (1 << 3));
+   // uint8_t g1 = current_mux.group_1_3;
+  //  if (g1 == 1 || g1 == 2 || g1 == 4 || g1 == 5 || g1 == 6) {
+  //      mask |= ((g1 & 0x07) << 1);
+  //  }
 
-    /* 3. Накладываем группу PO10 - PO12 (биты 8, 9, 10) */
-    mask &= ~((1 << 8) | (1 << 9) | (1 << 10));
-    uint8_t g2 = current_mux.group_10_12;
-    if (g2 <= 3) {
-        mask |= ((g2 & 0x03) << 8);
-    }
+    
+  //  mask &= ~((1 << 8) | (1 << 9) | (1 << 10));
+  //  uint8_t g2 = current_mux.group_10_12;
+  //  if (g2 <= 3) {
+ //       mask |= ((g2 & 0x03) << 8);
+  //  }
 
- mask = 0xFFFF;
-    /* 4. Отправляем 2 байта на шину I2C1 */
+
     uint8_t tx_buf[2];
-    tx_buf[0] = (uint8_t)(mask & 0xFF);        /* P07–P00 (Младший байт) */
-    tx_buf[1] = (uint8_t)((mask >> 8) & 0xFF); /* P17–P10 (Старший байт) */
+    tx_buf[0] = (uint8_t)(mask & 0xFF);        
+    tx_buf[1] = (uint8_t)((mask >> 8) & 0xFF); 
 
     int ret = i2c_write_dt(&pcf_spec, tx_buf, sizeof(tx_buf));
     if (ret < 0) {
@@ -102,16 +102,32 @@ static void pcf_work_handler(struct k_work *work)
     } else {
         LOG_INF("PCF8575 9-array mask sent: 0x%04X", mask);
     }
+
+
+   
+
 }
 
 /* Единый Zbus Слушатель (Listener), который цепляется на оба канала */
 static void pcf_zbus_listener(const struct zbus_channel *chan)
 {
-    if (chan == &pcf_bool_channel) {
-        zbus_chan_read(&pcf_bool_channel, &current_bools, K_NO_WAIT);
-    } else if (chan == &pcf_mux_channel) {
-        zbus_chan_read(&pcf_mux_channel, &current_mux, K_NO_WAIT);
+ if (chan == &pcf_bool_channel) 
+    {
+      //  if (zbus_chan_claim(&pcf_bool_channel, K_MSEC(10)) == 0) {
+            struct pcf_bool_array_9_msg *msg = zbus_chan_msg(&pcf_bool_channel);
+            current_bools = *msg; // Копируем структуру локально
+       //     zbus_chan_finish(&pcf_bool_channel);
+       // }
+    } 
+    else if (chan == &pcf_mux_channel) 
+    {
+      //  if (zbus_chan_claim(&pcf_mux_channel, K_MSEC(10)) == 0) {
+            struct pcf_mux_msgs *msg = zbus_chan_msg(&pcf_mux_channel);
+            current_mux = *msg; // Копируем структуру локально
+       //     zbus_chan_finish(&pcf_mux_channel);
+    //    }
     }
+
 
     app_worker_submit(&pcf_work, REAL_TIME_WORKER);
              
@@ -138,8 +154,8 @@ static int pcf8575_out_init(void)
 
 SYS_INIT(pcf8575_out_init, APPLICATION, 70);
 
-PARAM_ROUTE_DEFINE(JTAG_MUX0, &pcf_mux_channel, 0, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(USB_FB_MUX, &pcf_mux_channel, 1, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(JTAG_MUX0, &pcf_mux_channel, 0, UINT_DATA);
+PARAM_ROUTE_DEFINE(USB_FB_MUX, &pcf_mux_channel, 1, UINT_DATA);
 
 PARAM_ROUTE_DEFINE(JTAG_MUX_EN, &pcf_bool_channel, 0, BOOL_DATA);
 PARAM_ROUTE_DEFINE(EN_USB_UART, &pcf_bool_channel, 1, BOOL_DATA);

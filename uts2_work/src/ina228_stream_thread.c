@@ -29,12 +29,47 @@
 #include <zephyr/drivers/sensor/ina2xx.h>
 
 #include "system_bus_model.h"
-#include "ina228_stream_thread.h"
+
 
 /***************************************************************************************************
  *                                           DEFINITIONS
  **************************************************************************************************/
 LOG_MODULE_REGISTER(ina_rtio_poller, LOG_LEVEL_INF);
+
+/**
+ *  @brief Перечисление физических измерительных каналов (датчиков)
+ */
+typedef enum cur_sens_channel
+{
+    CUR_SENS_BRD_LOW     = 0,
+    CUR_SENS_BRD_HIGH    = 1,
+    CUR_SENS_VDUT2       = 2,
+    CUR_SENS_VDUT3       = 3,
+    CUR_SENS_VIN         = 4,
+    CUR_SENS_DCDC_3_3    = 5,
+    CUR_SENS_VDOUT_PWR   = 6,
+    CUR_SENS_VD5         = 7,
+    CUR_SENS_NUM_SENSORS = 8,
+} cur_sens_channel_t;
+
+
+
+/**
+ *  @brief Пакетное сообщение ZBUS с результатами опроса всех датчиков
+ */
+typedef struct ina_batch_msg 
+{
+    float sensors[CUR_SENS_NUM_SENSORS*2];
+} ina_batch_msg_t;
+
+/**
+ *  @brief Пакетное сообщение ZBUS с накопленной энергией всех датчиков
+ */
+typedef struct ina_energy_msg 
+{
+    float energy[CUR_SENS_NUM_SENSORS];
+} ina_energy_msg_t;
+
 
 #define FAST_POLL_INTERVAL_MS     1   /* Быстрый опрос U и I каждые 10 мс (100 Гц) */
 #define SLOW_ENERGY_POLL_TICKS    10   /* Опрос энергии каждые 10 тиков (100 мс / 10 Гц) */
@@ -323,32 +358,32 @@ K_THREAD_DEFINE(ina_thread_id, INA228_THREAD_STACK_SIZE, _rti_poller_thread,
                 INA228_THREAD_PRIORITY, 0, 0);
 
 // Регистрация путей шины параметров для Токов и Напряжений
-PARAM_ROUTE_DEFINE(SENS_BRD_LOW_CURRENT,   &ina_batch_chan, 0,  ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_BRD_LOW_VOLTAGE,   &ina_batch_chan, 1,  ARRAY_DATA);  
-PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_CURRENT,  &ina_batch_chan, 2,  ARRAY_DATA); 
-PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_VOLTAGE,  &ina_batch_chan, 3,  ARRAY_DATA); 
-PARAM_ROUTE_DEFINE(SENS_VDUT2_CURRENT,     &ina_batch_chan, 4,  ARRAY_DATA);   
-PARAM_ROUTE_DEFINE(SENS_VDUT2_VOLTAGE,     &ina_batch_chan, 5,  ARRAY_DATA);  
-PARAM_ROUTE_DEFINE(SENS_VDUT3_CURRENT,     &ina_batch_chan, 6,  ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VDUT3_VOLTAGE,     &ina_batch_chan, 7,  ARRAY_DATA);  
-PARAM_ROUTE_DEFINE(SENS_VIN_CURRENT,       &ina_batch_chan, 8,  ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VIN_VOLTAGE,       &ina_batch_chan, 9,  ARRAY_DATA);    
-PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_CURRENT,  &ina_batch_chan, 10, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_VOLTAGE,  &ina_batch_chan, 11, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_CURRENT, &ina_batch_chan, 12, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_VOLTAGE, &ina_batch_chan, 13, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_VD5_CURRENT,       &ina_batch_chan, 14, ARRAY_DATA);      
-PARAM_ROUTE_DEFINE(SENS_VD5_VOLTAGE,       &ina_batch_chan, 15, ARRAY_DATA); 
+PARAM_ROUTE_DEFINE(SENS_BRD_LOW_CURRENT,   &ina_batch_chan, 0,  FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_BRD_LOW_VOLTAGE,   &ina_batch_chan, 1,  FLOAT_DATA);  
+PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_CURRENT,  &ina_batch_chan, 2,  FLOAT_DATA); 
+PARAM_ROUTE_DEFINE(SENS_BRD_HIGH_VOLTAGE,  &ina_batch_chan, 3,  FLOAT_DATA); 
+PARAM_ROUTE_DEFINE(SENS_VDUT2_CURRENT,     &ina_batch_chan, 4,  FLOAT_DATA);   
+PARAM_ROUTE_DEFINE(SENS_VDUT2_VOLTAGE,     &ina_batch_chan, 5,  FLOAT_DATA);  
+PARAM_ROUTE_DEFINE(SENS_VDUT3_CURRENT,     &ina_batch_chan, 6,  FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_VDUT3_VOLTAGE,     &ina_batch_chan, 7,  FLOAT_DATA);  
+PARAM_ROUTE_DEFINE(SENS_VIN_CURRENT,       &ina_batch_chan, 8,  FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_VIN_VOLTAGE,       &ina_batch_chan, 9,  FLOAT_DATA);    
+PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_CURRENT,  &ina_batch_chan, 10, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_DCDC_3_3_VOLTAGE,  &ina_batch_chan, 11, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_CURRENT, &ina_batch_chan, 12, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_VDOUT_PWR_VOLTAGE, &ina_batch_chan, 13, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_VD5_CURRENT,       &ina_batch_chan, 14, FLOAT_DATA);      
+PARAM_ROUTE_DEFINE(SENS_VD5_VOLTAGE,       &ina_batch_chan, 15, FLOAT_DATA); 
 
 // Регистрация путей шины параметров для Накопленной Энергии
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_LOW,   &ina_energy_chan, 0, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_HIGH,  &ina_energy_chan, 1, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT2,     &ina_energy_chan, 2, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT3,     &ina_energy_chan, 3, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VIN,       &ina_energy_chan, 4, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_DCDC_3_3,  &ina_energy_chan, 5, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDOUT_PWR, &ina_energy_chan, 6, ARRAY_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VD5,       &ina_energy_chan, 7, ARRAY_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_LOW,   &ina_energy_chan, 0, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_HIGH,  &ina_energy_chan, 1, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT2,     &ina_energy_chan, 2, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT3,     &ina_energy_chan, 3, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VIN,       &ina_energy_chan, 4, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_DCDC_3_3,  &ina_energy_chan, 5, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDOUT_PWR, &ina_energy_chan, 6, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VD5,       &ina_energy_chan, 7, FLOAT_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE
