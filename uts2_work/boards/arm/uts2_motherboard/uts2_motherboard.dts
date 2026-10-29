@@ -476,7 +476,7 @@ zephyr_udc0: &usbotg_hs {
     scl-gpios = <&gpiob 8 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
     sda-gpios = <&gpiob 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
     pinctrl-names = "default";
-    clock-frequency = <I2C_BITRATE_FAST>; /* 400 kHz */
+    clock-frequency = <I2C_BITRATE_STANDARD>; /* 400 kHz */
 
 
  	eeprom_1: eeprom@51 {
@@ -500,13 +500,13 @@ zephyr_udc0: &usbotg_hs {
         status = "okay";
     };
 
- pcf_test: pcf857x@20 {
-        compatible = "nxp,pcf857x";
+    mcp23017: mcp23017@20 {
+        compatible = "microchip,mcp23017";
         status = "okay";
         reg = <0x20>;
         gpio-controller;
         #gpio-cells = <2>;
-        ngpios = <16>; /* Указываем, что это 16-битный PCF8575 */
+        ngpios = <16>;
     };
 
 	tmp112_gnd: tmp112@48 {

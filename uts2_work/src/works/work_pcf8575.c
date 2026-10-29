@@ -6,44 +6,37 @@
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
 #include "system_bus_model.h"
-#include "app_worker.h"
 
-LOG_MODULE_REGISTER(pcf_out, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(mcp_out, LOG_LEVEL_INF);
 
 #define I2C1_NODE DT_NODELABEL(i2c1)
+#define MCP23017_ADDR 0x20
 
-
-#define PCF8575_ADDR 0x20
-
-/* 1. Структура для булевого канала (9 дискретных пинов) */
 typedef struct pcf_bool_array_9_msg 
 {
     bool states[9]; 
-} pcf_bool_array_9_msg ;
+} pcf_bool_array_9_msg;
 
-/* 2. Структура для uint32_t канала (упакованы две группы) */
 struct pcf_mux_msgs {
-    uint8_t group_1_3;   /* Допустимо: 1, 2, 4, 5, 6 */
-    uint8_t group_10_12; /* Допустимо: 0, 1, 2, 3 */
+    uint8_t group_1_3;   
+    uint8_t group_10_12; 
 };
 
 static void pcf_zbus_listener(const struct zbus_channel *chan);
-/* Текущие состояния сообщений от обоих каналов */
+
 static struct pcf_bool_array_9_msg current_bools = { {false} };
 static struct pcf_mux_msgs         current_mux   = {0};
 
 static struct k_work pcf_work;
-static struct i2c_dt_spec pcf_spec;
+static struct i2c_dt_spec mcp_spec;
 
-/* Определяем Zbus канал для булевых пинов */
 ZBUS_LISTENER_DEFINE(pcf_listener, pcf_zbus_listener);
 
-/* 2. Привязываем наблюдателя прямо внутри макроса определения каналов (поле observers) */
 ZBUS_CHAN_DEFINE(pcf_bool_channel,
                  struct pcf_bool_array_9_msg,
                  NULL, NULL,
                  ZBUS_OBSERVERS(pcf_listener),
-                 ZBUS_MSG_INIT({ {false} }));
+                 ZBUS_MSG_INIT(0));
 
 ZBUS_CHAN_DEFINE(pcf_mux_channel,
                  struct pcf_mux_msgs,
@@ -51,118 +44,135 @@ ZBUS_CHAN_DEFINE(pcf_mux_channel,
                  ZBUS_OBSERVERS(pcf_listener),
                  ZBUS_MSG_INIT(0));
 
-static const uint8_t pcf_pin_mapping[9] = {
-    0,  // индекс 0 -> PO0  (бит 0)
-    4,  // индекс 1 -> PO4  (бит 4)
-    5,  // индекс 2 -> PO5  (бит 5)
-    6,  // индекс 3 -> PO6  (бит 6)
-    7,  // индекс 4 -> PO7  (бит 7)
-    11, // индекс 5 -> PO13 (бит 11, порт 1 пин 3)
-    13, // индекс 6 -> PO15 (бит 13, порт 1 пин 5)
-    14, // индекс 7 -> PO16 (бит 14, порт 1 пин 6)
-    15  // индекс 8 -> PO17 (бит 15, порт 1 пин 7)
+static const uint8_t mcp_pin_mapping[9] = {
+    0,  // 0 -> GPA0
+    4,  // 1 -> GPA4
+    5,  // 2 -> GPA5
+    6,  // 3 -> GPA6
+    7,  // 4 -> GPA7
+    8,  // 5 -> GPB3 (индекс 8 в маске = порт B, пин 3)
+    10, // 6 -> GPB5
+    13, // 7 -> GPB6
+    15  // 8 -> GPB7
 };
 
-
-/* Функция сборки маски и отправки в PCF8575 (выполняется в воркере) */
-static void pcf_work_handler(struct k_work *work)
+static void mcp23017_dump_all_registers(const struct i2c_dt_spec *spec, const char *tag)
 {
-    uint16_t mask = 0x0000;
-
-       static bool toggle = false;
-    toggle = !toggle;
-    for (int i = 0; i < 9; i++) {
-        if (current_bools.states[i]) {
-            mask |= (1 << pcf_pin_mapping[i]);
+    uint8_t all_regs[22];
+    for (uint8_t reg = 0; reg <= 0x15; reg++) {
+        uint8_t reg_addr = reg;
+        uint8_t val = 0;
+        if (i2c_write_read_dt(spec, &reg_addr, 1, &val, 1) < 0) {
+            all_regs[reg] = 0xEE;
+        } else {
+            all_regs[reg] = val;
         }
     }
 
-    
-   // mask &= ~((1 << 1) | (1 << 2) | (1 << 3));
-   // uint8_t g1 = current_mux.group_1_3;
-  //  if (g1 == 1 || g1 == 2 || g1 == 4 || g1 == 5 || g1 == 6) {
-  //      mask |= ((g1 & 0x07) << 1);
-  //  }
-
-    
-  //  mask &= ~((1 << 8) | (1 << 9) | (1 << 10));
-  //  uint8_t g2 = current_mux.group_10_12;
-  //  if (g2 <= 3) {
- //       mask |= ((g2 & 0x03) << 8);
-  //  }
-
-
-    uint8_t tx_buf[2];
-    tx_buf[0] = (uint8_t)(mask & 0xFF);        
-    tx_buf[1] = (uint8_t)((mask >> 8) & 0xFF); 
-
-    int ret = i2c_write_dt(&pcf_spec, tx_buf, sizeof(tx_buf));
-    if (ret < 0) {
-        LOG_ERR("Failed to write to PCF8575: %d", ret);
-    } else {
-        LOG_INF("PCF8575 9-array mask sent: 0x%04X", mask);
-    }
-
-
-   
-
+    LOG_INF("========== MCP23017 DUMP: %s ==========", tag);
+    LOG_INF("0x00 IODIRA: 0x%02X | 0x01 IODIRB: 0x%02X", all_regs[0x00], all_regs[0x01]);
+    LOG_INF("0x0A IOCONA: 0x%02X | 0x0B IOCONB: 0x%02X", all_regs[0x0A], all_regs[0x0B]);
+    LOG_INF("0x12 GPIOA:  0x%02X | 0x13 GPIOB:  0x%02X", all_regs[0x12], all_regs[0x13]);
+    LOG_INF("0x14 OLATA:  0x%02X | 0x15 OLATB:  0x%02X", all_regs[0x14], all_regs[0x15]);
+    LOG_INF("============================================");
 }
 
-/* Единый Zbus Слушатель (Listener), который цепляется на оба канала */
+static void pcf_work_handler(struct k_work *work)
+{
+    uint8_t porta = 0x00; 
+    uint8_t portb = 0x00; 
+
+    for (int i = 0; i < 9; i++) {
+        if (current_bools.states[i]) {
+            uint8_t pin = mcp_pin_mapping[i];
+            if (pin < 8) {
+                porta |= (1 << pin);
+            } else {
+                portb |= (1 << (pin - 8));
+            }
+        }
+    }
+
+   //  porta = 0xFF; 
+  //  portb = 0xFF; 
+
+    LOG_INF("Target values to write -> porta=0x%02X, portb=0x%02X", porta, portb);
+
+    mcp23017_dump_all_registers(&mcp_spec, "BEFORE I2C WRITE");
+
+    // Записываем данные в GPIOA (0x12) и GPIOB (0x13)
+    uint8_t cmd_a[2] = { 0x12, porta }; 
+    uint8_t cmd_b[2] = { 0x13, portb }; 
+
+    i2c_write_dt(&mcp_spec, cmd_a, sizeof(cmd_a));
+    i2c_write_dt(&mcp_spec, cmd_b, sizeof(cmd_b));
+
+    mcp23017_dump_all_registers(&mcp_spec, "AFTER I2C WRITE");
+}
+
 static void pcf_zbus_listener(const struct zbus_channel *chan)
 {
- if (chan == &pcf_bool_channel) 
+    if (chan == &pcf_bool_channel) 
     {
-      //  if (zbus_chan_claim(&pcf_bool_channel, K_MSEC(10)) == 0) {
-            struct pcf_bool_array_9_msg *msg = zbus_chan_msg(&pcf_bool_channel);
-            current_bools = *msg; // Копируем структуру локально
-       //     zbus_chan_finish(&pcf_bool_channel);
-       // }
+        struct pcf_bool_array_9_msg *msg = zbus_chan_msg(&pcf_bool_channel);
+        current_bools = *msg; 
     } 
     else if (chan == &pcf_mux_channel) 
     {
-      //  if (zbus_chan_claim(&pcf_mux_channel, K_MSEC(10)) == 0) {
-            struct pcf_mux_msgs *msg = zbus_chan_msg(&pcf_mux_channel);
-            current_mux = *msg; // Копируем структуру локально
-       //     zbus_chan_finish(&pcf_mux_channel);
-    //    }
+        struct pcf_mux_msgs *msg = zbus_chan_msg(&pcf_mux_channel);
+        current_mux = *msg; 
     }
 
-
-    app_worker_submit(&pcf_work, REAL_TIME_WORKER);
-             
+    app_worker_submit(&pcf_work,COMMON_WORKER);
 }
 
-/* Регистрируем слушателя для обоих каналов */
-
-static int pcf8575_out_init(void)
+static int mcp23017_out_init(void)
 {
     const struct device *i2c_dev = DEVICE_DT_GET(I2C1_NODE);
     if (!device_is_ready(i2c_dev)) {
-        LOG_ERR("I2C1 bus not ready for PCF8575 outputs!");
+        LOG_ERR("I2C1 bus not ready for MCP23017!");
         return -ENODEV;
     }
 
-    pcf_spec.bus = i2c_dev;
-    pcf_spec.addr = PCF8575_ADDR;
+    mcp_spec.bus = i2c_dev;
+    mcp_spec.addr = MCP23017_ADDR;
 
     k_work_init(&pcf_work, pcf_work_handler);
 
-    LOG_INF("PCF8575 Zbus-driven Output Driver initialized!");
+    LOG_INF("--- MCP23017 INIT START ---");
+    mcp23017_dump_all_registers(&mcp_spec, "AT BOOT START");
+
+    /* 
+     * КРИТИЧЕСКИ ВАЖНО: 
+     * 1. Сбрасываем регистр конфигурации IOCON (адрес 0x0A) в 0x00, 
+     *    чтобы перевести чип в стандартный BANK=0 (отключаем сдвиги банков).
+     * 2. Настраиваем IODIRA (0x00) и IODIRB (0x01) на выходы (0x00).
+     */
+    uint8_t iocon_cmd[2]  = { 0x0A, 0x00 }; // Сброс IOCON в дефолт
+    uint8_t iodira_cmd[2] = { 0x00, 0x00 }; // IODIRA = выходы
+    uint8_t iodirb_cmd[2] = { 0x01, 0x00 }; // IODIRB = выходы
+
+    i2c_write_dt(&mcp_spec, iocon_cmd, sizeof(iocon_cmd));
+    i2c_write_dt(&mcp_spec, iodira_cmd, sizeof(iodira_cmd));
+    i2c_write_dt(&mcp_spec, iodirb_cmd, sizeof(iodirb_cmd));
+
+    mcp23017_dump_all_registers(&mcp_spec, "AT BOOT END");
+    LOG_INF("---------------------------");
+
     return 0;
 }
 
-SYS_INIT(pcf8575_out_init, APPLICATION, 70);
+SYS_INIT(mcp23017_out_init, APPLICATION, 70);
 
 PARAM_ROUTE_DEFINE(JTAG_MUX0, &pcf_mux_channel, 0, UINT_DATA);
 PARAM_ROUTE_DEFINE(USB_FB_MUX, &pcf_mux_channel, 1, UINT_DATA);
 
 PARAM_ROUTE_DEFINE(JTAG_MUX_EN, &pcf_bool_channel, 0, BOOL_DATA);
 PARAM_ROUTE_DEFINE(EN_USB_UART, &pcf_bool_channel, 1, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT1,     &pcf_bool_channel, 2, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT2,     &pcf_bool_channel, 3, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT3,       &pcf_bool_channel, 4, BOOL_DATA);
+PARAM_ROUTE_DEFINE(EN_USB_OUT1, &pcf_bool_channel, 2, BOOL_DATA);
+PARAM_ROUTE_DEFINE(EN_USB_OUT2, &pcf_bool_channel, 3, BOOL_DATA);
+PARAM_ROUTE_DEFINE(EN_USB_OUT3, &pcf_bool_channel, 4, BOOL_DATA);
 PARAM_ROUTE_DEFINE(UART_FB_EN,  &pcf_bool_channel, 5, BOOL_DATA);
-PARAM_ROUTE_DEFINE(UART_RX_EN, &pcf_bool_channel, 6, BOOL_DATA);
-PARAM_ROUTE_DEFINE(OK2,  &pcf_bool_channel, 7, BOOL_DATA);
-PARAM_ROUTE_DEFINE(OK1,  &pcf_bool_channel, 8, BOOL_DATA);
+PARAM_ROUTE_DEFINE(UART_RX_EN,  &pcf_bool_channel, 6, BOOL_DATA);
+PARAM_ROUTE_DEFINE(OK2,         &pcf_bool_channel, 7, BOOL_DATA);
+PARAM_ROUTE_DEFINE(OK1,         &pcf_bool_channel, 8, BOOL_DATA);
