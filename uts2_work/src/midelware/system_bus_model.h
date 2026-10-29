@@ -10,6 +10,7 @@ extern "C" {
 
 #define LED_CNT 3
 
+
 #define LOW_CUR_DRIVER_COUNT 18
 #define LIN_CONTROL_CNT  4
 #define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
@@ -18,15 +19,17 @@ extern "C" {
 
 typedef enum
 {
-    EEPORM_IU_ERROR = 0x0001 << 0,
-    EEPORM_CU_ERROR = 0x0001 << 1,
-    FRAM_MU_ERROR = 0x0001 << 3,
+    EEPORM_IU_ERROR  = 0x0001 << 0,
+    EEPORM_CU_ERROR  = 0x0001 << 1,
+    FRAM_MU_ERROR    = 0x0001 << 3,
+    ADS1115_IU_ERROR = 0x0001 << 4,
 } HARDWARE_ERROR_REGISTER1_t;
 
 typedef enum
 {
-    EEPORM_IU_WARNING = 0x0001 << 0,
-    EEPORM_CU_WARNING = 0x0001 << 1,    
+    EEPORM_IU_WARNING  = 0x0001 << 0,
+    EEPORM_CU_WARNING  = 0x0001 << 1,    
+    ADS1115_IU_WARNNIG = 0x0001 << 4,
 } HARDWARE_WARNING_REGISTER1_t;
 
 

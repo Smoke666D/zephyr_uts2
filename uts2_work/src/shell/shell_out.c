@@ -42,7 +42,7 @@ static int _cmd_led(const struct shell *_sh, size_t _argc, char **_argv)
     }
 
     int led_num = atoi(_argv[1]);
-    if (led_num < 1 || led_num > 3) 
+    if (led_num < 1 || led_num > LED_CNT) 
     {
         shell_error(_sh, "Error: Invalid LED number. Use 1, 2, or 3.");
         return -EINVAL;

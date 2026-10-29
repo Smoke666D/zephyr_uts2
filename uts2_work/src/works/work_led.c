@@ -29,21 +29,10 @@
  **************************************************************************************************/
 LOG_MODULE_REGISTER(led_manager, LOG_LEVEL_INF);
 
-#define LED_CNT 3
 
 #define GREEN_LED_NODE  DT_NODELABEL(green_led)
 #define YELLOW_LED_NODE DT_NODELABEL(yellow_led)
 #define RED_LED_NODE    DT_NODELABEL(red_led)
-
-#if !DT_NODE_HAS_STATUS(GREEN_LED_NODE, okay)
-#error "Узел green_led не найден в DeviceTree!"
-#endif
-#if !DT_NODE_HAS_STATUS(YELLOW_LED_NODE, okay)
-#error "Узел yellow_led не найден в DeviceTree!"
-#endif
-#if !DT_NODE_HAS_STATUS(RED_LED_NODE, okay)
-#error "Узел red_led не найден в DeviceTree!"
-#endif
 
 /***************************************************************************************************
  *                                          PRIVATE TYPES
@@ -162,13 +151,12 @@ static int _led_manager_system_init(void)
 {
     int ret;
 
-    LOG_INF("Инициализация портов светодиодов...");
 
     for (int i = 0; i < LED_CNT; i++)
     {
         if (!device_is_ready(leds[i].spec.port))
         {         
-            LOG_ERR("Один из портов GPIO светодиодов не готов!");
+            LOG_ERR("LED Ports not ready!");
             return -ENODEV;
         }
 
@@ -181,7 +169,7 @@ static int _led_manager_system_init(void)
 
     k_work_init(&led_task, _led_hardware_update_handler);
 
-    LOG_INF("Светодиоды успешно инициализированы.");
+    LOG_INF("LED inits seccefuly...");
     return 0;
 }
 
