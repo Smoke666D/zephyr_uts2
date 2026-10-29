@@ -58,8 +58,6 @@ static inline const struct system_bus_handler * _get_valid_handler(SYSTEM_BUS_ID
 
 
 
-
-
 int bus_set_u32p(SYSTEM_BUS_ID id,  uint32_t * _val)
 {
     return 0;
@@ -268,6 +266,33 @@ int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
     return bus_set_u32(id, val);
 }
 
+
+/**
+ * @brief     Чтение состояния конкретного бита из регистра системной шины
+ * 
+ * @param     id        - Идентификатор регистра шины (SYSTEM_BUS_ID)
+ * @param     bit_index - Индекс бита (от 0 до 31)
+ * @param[out] bit_val   - Указатель для записи состояния бита (true/false)
+ * 
+ * @return    int       - 0 при успехе, отрицательный код ошибки при сбое
+ */
+int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val)
+{
+    if (bit_index > 31 || bit_val == NULL) {
+        return -EINVAL;
+    }
+
+    uint32_t val = 0;
+    int ret = bus_get_u32(id, &val);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // Извлекаем состояние бита (0 или 1) и записываем в результат
+    *bit_val = (val & (1U << bit_index)) != 0;
+
+    return 0;
+}
 /**
  * @brief Безопасно установить бит в 1, если он еще не был установлен
  */

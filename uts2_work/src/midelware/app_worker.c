@@ -26,7 +26,7 @@ LOG_MODULE_REGISTER(app_worker, LOG_LEVEL_INF);
 
 #define WORKER_STACK_SIZE           2048
 #define COMMON_WORKER_PRIORITY      4
-#define REAL_TIME_WORKER_PRIORITY   -1
+#define REAL_TIME_WORKER_PRIORITY  -1
 
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
@@ -75,6 +75,7 @@ static int _app_worker_system_init(void)
         REAL_TIME_WORKER_PRIORITY, 
         NULL
     );
+
 
     return 0;
 }

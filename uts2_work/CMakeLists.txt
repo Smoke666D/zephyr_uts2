@@ -22,14 +22,14 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"  
     "src/works/*.c"  
     "src/shell/*.c" 
-    "src/midelware/*c"   
+    "src/midelware/*c"  
+    "src/deamons/*c" 
 )
 
 target_sources(app PRIVATE 
        src/ina228_stream_thread.c          
        src/main.c
-        src/settings.c  
-        src/settings_eeprom.c       
+        src/settings.c        
       ${APP_SOURCES} 
 )
 

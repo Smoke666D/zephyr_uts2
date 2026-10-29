@@ -23,7 +23,11 @@ typedef enum
     FRAM_MU_ERROR = 0x0001 << 3,
 } HARDWARE_ERROR_REGISTER1_t;
 
-
+typedef enum
+{
+    EEPORM_IU_WARNING = 0x0001 << 0,
+    EEPORM_CU_WARNING = 0x0001 << 1,    
+} HARDWARE_WARNING_REGISTER1_t;
 
 
 
@@ -147,6 +151,7 @@ typedef enum
     HARDWARE_ERROR_REGISTER1,
     HARDWARE_ERROR_REGISTER2,
     HARDWARE_ERROR_REGISTER3,
+    HARDWARE_WARNING_REG1,
     CAN1_TX,
     CAN2_TX,
     CAN3_TX,
@@ -175,9 +180,19 @@ typedef enum
     SETTING_MU_ID_1,
     SETTING_MU_ID_2,
     SETTING_MU_ID_3,
-    SETTING_IU_ID,
-    SETTING_CU_ID,
     SETTING_MU_SN,
+    SETTING_MU_HW_ID,
+    SETTING_MU_HW_VER,
+    SETTING_IU_ID,
+    SETTING_IU_SN,
+    SETTING_IU_HW_ID,
+    SETTING_IU_HW_VER,
+    SETTING_IU_USER_DATA,
+    SETTING_CU_ID,    
+    SETTING_CU_SN,    
+    SETTING_CU_HW_ID,
+    SETTING_CU_HW_VER,
+    SETTING_CU_USER_DATA,
     SETTING_OUT_TEST_CUR,
     SETTING_3_3_CUR_HIGH,
     SETTING_5_CUR_HIGH,
@@ -211,17 +226,6 @@ typedef enum
   FLOAT_DATA,
   CAN_MSG_DATA,
 } SYSTEM_BUS_DATA_TYPE;
-
-/* Универсальный контейнер обмена данными */
-typedef struct {
-    union {
-        uint32_t  integer;
-        float     real;
-        bool      boolean;
-        uint8_t   raw[4];
-        void *    pointer;
-    } value;
-} DATA_VAL;
 
 
 
@@ -262,6 +266,14 @@ struct system_bus_handler
         .system_index = index, \
     }
 
+#define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = chan_ptr, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+    }
+    
  int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
  int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
  int bus_set_real(SYSTEM_BUS_ID id, float _val);
@@ -309,12 +321,14 @@ int bus_set_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
 int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
 int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
 int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val);
 
+#define SERVER_CHANNEL_SET_BIT( id, mask) bus_set_bit(id, mask)
 #define SYSTEM_BUS_SET_BIT( id, mask) bus_set_bit(id, mask)
 #define SYSTEM_BUS_CLEAR_BIT( id, mask) bus_clear_bit(id, mask)
 #define SYSTEM_BUS_SET_BIT_IF_NEEDED( id, mask) bus_set_bit_if_needed(id, mask)
 #define SYSTEM_BUS_CLEAR_BIT_IF_NEEDED( id, mask) bus_clear_bit_if_needed(id, mask)
-
+#define SYSTEM_BUS_GET_BIT(id, mask, val) bus_get_bit(id, mask, val)
 
 int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 

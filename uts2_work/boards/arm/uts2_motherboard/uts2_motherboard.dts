@@ -485,7 +485,7 @@ zephyr_udc0: &usbotg_hs {
         size = <256>;          /* 2 Кбит = 256 байт */
         pagesize = <16>;       /* Размер страницы записи 16 байт */
         address-width = <8>;   /* 8-битная адресация внутри чипа */
-        timeout = <5>;
+        timeout = <10>;
         status = "okay";
     };
 
@@ -496,7 +496,7 @@ zephyr_udc0: &usbotg_hs {
         size = <256>;
         pagesize = <16>;
         address-width = <8>;
-        timeout = <5>;
+        timeout = <10>;
         status = "okay";
     };
 

@@ -9,7 +9,7 @@
 #include <zephyr/init.h>
 #include <zephyr/drivers/hwinfo.h>
 #include "system_bus_model.h"
-#include "system_bus_model.h"
+
 
 LOG_MODULE_REGISTER(fram_settings, LOG_LEVEL_INF);
 
@@ -248,3 +248,47 @@ PARAM_ROUTE_DEFINE(SETTING_MU_ID_2, &settings_uint32_t_chan, 1, UINT_DATA);
 PARAM_ROUTE_DEFINE(SETTING_MU_ID_3, &settings_uint32_t_chan, 2, UINT_DATA);
 PARAM_ROUTE_DEFINE(SETTING_MU_SN,   &settings_uint32_t_chan, 3, UINT_DATA);
 
+
+typedef struct 
+{
+    uint32_t  value[3];    
+} error_channel_t;
+
+typedef struct 
+{
+    uint32_t  value[3];    
+} warning_channel_t;
+
+
+/***************************************************************************************************
+ *                                           PRIVATE DATA
+ **************************************************************************************************/
+
+
+// Предварительная декларация канала ZBUS
+
+
+
+
+ZBUS_CHAN_DEFINE(
+    error_channel,
+    error_channel_t,
+    NULL,
+    NULL,
+    ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(0)
+);
+
+ZBUS_CHAN_DEFINE(
+    warning_channel,
+    warning_channel_t,
+    NULL,
+    NULL,
+    ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(0)
+);
+
+PARAM_ROUTE_DEFINE(HARDWARE_ERROR_REGISTER1, &error_channel, 0, UINT_DATA);
+PARAM_ROUTE_DEFINE(HARDWARE_ERROR_REGISTER2, &error_channel, 1, UINT_DATA);
+PARAM_ROUTE_DEFINE(HARDWARE_ERROR_REGISTER3, &error_channel, 2, UINT_DATA);
+PARAM_ROUTE_DEFINE(HARDWARE_WARNING_REG1, &warning_channel, 0, UINT_DATA);

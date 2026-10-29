@@ -199,11 +199,16 @@ static int _cmd_pwr_ctl(const struct shell *_sh, size_t _argc, char **_argv)
     }
 
     bool state = false;
-    if (strcmp(_argv[2], "ON") == 0 || strcmp(_argv[2], "1") == 0) {
+    if (strcmp(_argv[2], "ON") == 0 || strcmp(_argv[2], "1") == 0) 
+    {
         state = true;
-    } else if (strcmp(_argv[2], "OFF") == 0 || strcmp(_argv[2], "0") == 0) {
+    }
+    else if (strcmp(_argv[2], "OFF") == 0 || strcmp(_argv[2], "0") == 0) 
+    {
         state = false;
-    } else {
+    } 
+    else 
+    {
         shell_error(_sh, "Error: Invalid state value. Use 'ON' or 'OFF'.");
         return -EINVAL;
     }
@@ -211,9 +216,12 @@ static int _cmd_pwr_ctl(const struct shell *_sh, size_t _argc, char **_argv)
     SYSTEM_BUS_ID id = _get_pwr_bus_id(ch_num);
     int ret = bus_set_bool(id, state);
 
-    if (ret == 0) {
+    if (ret == 0) 
+    {
         shell_print(_sh, "%s (%d) set to %s", pwr_channel_names[ch_num], ch_num, state ? "ON" : "OFF");
-    } else {
+    } 
+    else 
+    {
         shell_error(_sh, "Failed to set state for %s (err: %d)", pwr_channel_names[ch_num], ret);
     }
 
