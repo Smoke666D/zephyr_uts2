@@ -103,7 +103,8 @@
 	aliases {
 		led0 = &green_led;
 		led1 = &yellow_led;
-		led2 = &red_led;		
+		led2 = &red_led;	
+        uart-detect = &usart2;	
 	};
 };
 
@@ -393,7 +394,7 @@
     CUR_SENS_3_3_DCDC: ina228@45 {
         compatible = "ti,ina228";
         reg = <0x45>;
-        current-lsb-microamps = <10>;
+        current-lsb-microamps = <1>;
         adc-mode = "Bus and shunt voltage continuous";
         vbus-conversion-time-us = <280>;   /* 280 мкс */
         vshunt-conversion-time-us = <280>; /* 280 мкс */
@@ -673,5 +674,12 @@ zephyr_udc0: &usbotg_hs {
     current-speed = <19200>;
     pinctrl-0 = <&uart5_tx_pc12 &uart5_rx_pd2>; // Пример для PD2/PC12
     pinctrl-names = "default";
+    status = "okay";
+};
+
+uart_detect: &usart2 {
+    pinctrl-0 = <&usart2_tx_pd5 &usart2_rx_pd6>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
     status = "okay";
 };

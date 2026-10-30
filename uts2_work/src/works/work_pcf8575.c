@@ -18,8 +18,7 @@ typedef struct pcf_bool_array_9_msg
 } pcf_bool_array_9_msg;
 
 struct pcf_mux_msgs {
-    uint8_t group_1_3;   
-    uint8_t group_10_12; 
+    uint32_t group[2];       
 };
 
 static void pcf_zbus_listener(const struct zbus_channel *chan);
@@ -45,15 +44,15 @@ ZBUS_CHAN_DEFINE(pcf_mux_channel,
                  ZBUS_MSG_INIT(0));
 
 static const uint8_t mcp_pin_mapping[9] = {
-    0,  // 0 -> GPA0
-    4,  // 1 -> GPA4
-    5,  // 2 -> GPA5
-    6,  // 3 -> GPA6
-    7,  // 4 -> GPA7
-    8,  // 5 -> GPB3 (индекс 8 в маске = порт B, пин 3)
-    10, // 6 -> GPB5
-    13, // 7 -> GPB6
-    15  // 8 -> GPB7
+    8,  // 0 -> GPA0
+    12,  // 1 -> GPA4
+    13,  // 2 -> GPA5
+    14,  // 3 -> GPA6
+    15,  // 4 -> GPA7
+    3,  // 5 -> GPB3 (индекс 8 в маске = порт B, пин 3)
+    5, // 6 -> GPB5
+    6, // 7 -> GPB6
+    7  // 8 -> GPB7
 };
 
 static void mcp23017_dump_all_registers(const struct i2c_dt_spec *spec, const char *tag)
@@ -91,14 +90,12 @@ static void pcf_work_handler(struct k_work *work)
                 portb |= (1 << (pin - 8));
             }
         }
-    }
-
-   //  porta = 0xFF; 
-  //  portb = 0xFF; 
+    }        
+    portb |= (current_mux.group[0] & 0x0003) << 1;
+    porta |= (current_mux.group[1] & 0x0003);
 
     LOG_INF("Target values to write -> porta=0x%02X, portb=0x%02X", porta, portb);
 
-    mcp23017_dump_all_registers(&mcp_spec, "BEFORE I2C WRITE");
 
     // Записываем данные в GPIOA (0x12) и GPIOB (0x13)
     uint8_t cmd_a[2] = { 0x12, porta }; 
@@ -107,7 +104,7 @@ static void pcf_work_handler(struct k_work *work)
     i2c_write_dt(&mcp_spec, cmd_a, sizeof(cmd_a));
     i2c_write_dt(&mcp_spec, cmd_b, sizeof(cmd_b));
 
-    mcp23017_dump_all_registers(&mcp_spec, "AFTER I2C WRITE");
+
 }
 
 static void pcf_zbus_listener(const struct zbus_channel *chan)
@@ -139,9 +136,6 @@ static int mcp23017_out_init(void)
 
     k_work_init(&pcf_work, pcf_work_handler);
 
-    LOG_INF("--- MCP23017 INIT START ---");
-    mcp23017_dump_all_registers(&mcp_spec, "AT BOOT START");
-
     /* 
      * КРИТИЧЕСКИ ВАЖНО: 
      * 1. Сбрасываем регистр конфигурации IOCON (адрес 0x0A) в 0x00, 
@@ -155,9 +149,6 @@ static int mcp23017_out_init(void)
     i2c_write_dt(&mcp_spec, iocon_cmd, sizeof(iocon_cmd));
     i2c_write_dt(&mcp_spec, iodira_cmd, sizeof(iodira_cmd));
     i2c_write_dt(&mcp_spec, iodirb_cmd, sizeof(iodirb_cmd));
-
-    mcp23017_dump_all_registers(&mcp_spec, "AT BOOT END");
-    LOG_INF("---------------------------");
 
     return 0;
 }

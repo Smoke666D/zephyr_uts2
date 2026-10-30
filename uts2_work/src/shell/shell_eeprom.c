@@ -44,7 +44,9 @@ typedef struct eeprom_shell_cfg
 {
     const char *prefix;         // "IU_EEPROM" или "CU_EEPROM"
     uint32_t    error_bit;      // EEPORM_IU_ERROR или EEPORM_CU_ERROR
-    uint32_t    warn_bit;       // EEPORM_IU_WARNING или EEPORM_CU_WARNING
+    uint32_t    set_ok_bit;     // EEPORM_IU_WARNING или EEPORM_CU_WARNING
+    uint32_t    set_error_bit;  // EEPORM_IU_WARNING или EEPORM_CU_WARNING
+    uint32_t    set_crc_error_bit;
     uint32_t    id_param;       // SETTING_IU_ID или SETTING_CU_ID
     uint32_t    sn_param;       // SETTING_IU_SN или SETTING_CU_SN
     uint32_t    hw_id_param;    // SETTING_IU_HW_ID или SETTING_CU_HW_ID
@@ -77,37 +79,42 @@ static int  _cmd_cu_get(const struct shell *_sh, size_t _argc, char **_argv);
 static int  _cmd_cu_set(const struct shell *_sh, size_t _argc, char **_argv);
 static int  _eeprom_shell_init(void);
 
+
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
 static const eeprom_shell_cfg_t iu_cfg = 
 {
-    .prefix       = "IU_EEPROM",
-    .error_bit    = EEPORM_IU_ERROR,
-    .warn_bit     = EEPORM_IU_WARNING,
-    .id_param     = SETTING_IU_ID,
-    .sn_param     = SETTING_IU_SN,
-    .hw_id_param  = SETTING_IU_HW_ID,
-    .hw_ver_param = SETTING_IU_HW_VER,
-    .user_param   = SETTING_IU_USER_DATA,
+    .prefix        = "IU_EEPROM",
+    .error_bit     = EEPORM_IU_ERROR,
+    .set_ok_bit    = EVENT_EEPROM_IU_WRITE_OK,
+    .set_error_bit = EVENT_EEPROM_IU_WRITE_ERROR,    
+    .id_param      = SETTING_IU_ID,
+    .sn_param      = SETTING_IU_SN,
+    .hw_id_param   = SETTING_IU_HW_ID,
+    .hw_ver_param  = SETTING_IU_HW_VER,
+    .set_crc_error_bit  = EVENT_EEPROM_IU_CRC_ERROR,
+    .user_param    = SETTING_IU_USER_DATA,
 };
 
 static const eeprom_shell_cfg_t cu_cfg = 
 {
     .prefix       = "CU_EEPROM",
     .error_bit    = EEPORM_CU_ERROR,
-    .warn_bit     = EEPORM_CU_WARNING,
+    .set_ok_bit    = EVENT_EEPROM_CU_WRITE_OK,
+    .set_error_bit = EVENT_EEPROM_CU_WRITE_ERROR,
     .id_param     = SETTING_CU_ID,
     .sn_param     = SETTING_CU_SN,
     .hw_id_param  = SETTING_CU_HW_ID,
     .hw_ver_param = SETTING_CU_HW_VER,
+     .set_crc_error_bit  = EVENT_EEPROM_CU_CRC_ERROR,
     .user_param   = SETTING_CU_USER_DATA,
 };
 
 // Раздельные контексты исключают взаимное влияние при одновременной записи
 static eeprom_shell_ctx_t iu_ctx = {.cfg = &iu_cfg};
 static eeprom_shell_ctx_t cu_ctx = {.cfg = &cu_cfg};
-
+static uint32_t timeout = 0;
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
  **************************************************************************************************/
@@ -123,17 +130,29 @@ static void _eeprom_check_work_handler(struct k_work *_work)
     struct k_work_delayable *dwork = k_work_delayable_from_work(_work);
     eeprom_shell_ctx_t *ctx = CONTAINER_OF(dwork, eeprom_shell_ctx_t, check_work);
 
-    bool warn_bit = false;
-    SYSTEM_BUS_GET_BIT(HARDWARE_WARNING_REG1, ctx->cfg->warn_bit, &warn_bit);
+    bool ok_bit = false;
+    bool error_bit = false;
 
-    if (warn_bit) 
+    SERVER_CH_GET_BIT(EEPROM_EVENT_CH, ctx->cfg->set_error_bit, &error_bit);
+    SERVER_CH_GET_BIT(EEPROM_EVENT_CH, ctx->cfg->set_ok_bit, &ok_bit);
+
+    if (ctx->sh != NULL) 
     {
-        if (ctx->sh != NULL) 
-        {
+         if (error_bit)
+         {
             // Формат URC: +IU_EEPROM ERROR: write error!
             shell_print(ctx->sh, "+%s ERROR: write error!", ctx->cfg->prefix);
-        }
+         }
+         else if (ok_bit)
+         {
+            shell_print(ctx->sh, "+%s DONE: write ok!", ctx->cfg->prefix);
+         }
+         else 
+         {
+            shell_print(ctx->sh, "+%s ERROR: timeout error!", ctx->cfg->prefix);
+         }
     }
+    
 }
 
 /**
@@ -147,11 +166,10 @@ static void _schedule_write_check(eeprom_shell_ctx_t *_ctx, const struct shell *
 {
     _ctx->sh = _sh;
     // Сбрасываем флаг перед проверкой, чтобы не читать устаревшую ошибку
-    SYSTEM_BUS_CLEAR_BIT_IF_NEEDED(HARDWARE_WARNING_REG1, _ctx->cfg->warn_bit);
-
+    SERVER_CH_CLEAR_MASK(EEPROM_EVENT_CH, _ctx->cfg->set_error_bit | _ctx->cfg->set_ok_bit);    
     app_worker_reschedule_submit(
         &_ctx->check_work, 
-        K_MSEC(EEPROM_WRITE_CHECK_DELAY_MS), 
+        K_MSEC(timeout), 
         COMMON_WORKER
     );
 }
@@ -181,12 +199,13 @@ static int _eeprom_cmd_get(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
 
     // 1. Проверяем физическую готовность EEPROM
     bool err_bit = false;
-    SYSTEM_BUS_GET_BIT(HARDWARE_ERROR_REGISTER1, cfg->error_bit, &err_bit);
+    SERVER_CH_GET_BIT(EEPROM_ERROR_CH, cfg->error_bit, &err_bit);
     if (err_bit) 
     {
         shell_print(_sh, "%s ERROR: Eeprom not found!", cfg->prefix);
         return 0;
-    }
+    }     
+
 
     const char *data_type = _argv[1];
 
@@ -204,67 +223,77 @@ static int _eeprom_cmd_get(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
             shell_print(_sh, "%s OK UID: 0x%08X", cfg->prefix, val);
         }
     }
-    // 3. SN
-    else if (strcmp(data_type, "SN") == 0) 
-    {
-        uint32_t val = 0;
-        int res = SYSTEM_BUS_GET(cfg->sn_param, &val);
-        if (res != 0) 
-        {
-            shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
-        } 
-        else 
-        {
-            shell_print(_sh, "%s OK SN: %u", cfg->prefix, val);
-        }
-    }
-    // 4. USER
-    else if (strcmp(data_type, "USER") == 0) 
-    {
-        uint32_t val = 0;
-        int res = SYSTEM_BUS_GET(cfg->user_param, &val);
-        if (res != 0) 
-        {
-            shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
-        } 
-        else 
-        {
-            shell_print(_sh, "%s OK USER: %u", cfg->prefix, val);
-        }
-    }
-    // 5. HW
-    else if (strcmp(data_type, "HW") == 0) 
-    {
-        uint32_t val_hw_id = 0;
-        uint32_t val_hw_ver = 0;
-        int res1 = SYSTEM_BUS_GET(cfg->hw_id_param, &val_hw_id);
-        int res2 = SYSTEM_BUS_GET(cfg->hw_ver_param, &val_hw_ver);
-
-        if (false
-            || res1 != 0 
-            || res2 != 0
-           ) 
-        {
-            shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
-        } 
-        else 
-        {
-            uint32_t mm = val_hw_id % 100;
-            uint32_t temp = val_hw_id / 100;
-            uint32_t a = temp % 10;
-            uint32_t ccc = temp / 10;
-
-            uint32_t ee = val_hw_ver % 100;
-            uint32_t dd = val_hw_ver / 100;
-
-            shell_print(_sh, "%s OK HW: %03u.%u.%02u.%02u.%02u", 
-                        cfg->prefix, ccc, a, mm, dd, ee);
-        }
-    }
-    // 6. Неизвестный параметр
     else 
     {
-        shell_print(_sh, "%s ERROR: invalid data!", cfg->prefix);
+        SERVER_CH_GET_BIT(EVENT_1_REG, cfg->set_crc_error_bit, &err_bit);
+        if (err_bit) 
+        {
+            shell_print(_sh, "%s ERROR: Clear eeprom detected!", cfg->prefix);
+            return 0;
+        }
+    
+        // 3. SN
+        if (strcmp(data_type, "SN") == 0) 
+        {
+            uint32_t val = 0;
+            int res = SYSTEM_BUS_GET(cfg->sn_param, &val);
+            if (res != 0) 
+            {
+                shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
+            } 
+            else 
+            {
+                shell_print(_sh, "%s OK SN: %u", cfg->prefix, val);
+            }
+        }
+        // 4. USER
+        else if (strcmp(data_type, "USER") == 0) 
+        {
+            uint32_t val = 0;
+            int res = SYSTEM_BUS_GET(cfg->user_param, &val);
+            if (res != 0) 
+            {
+                shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
+            } 
+            else 
+            {
+                shell_print(_sh, "%s OK USER: %u", cfg->prefix, val);
+            }
+        }
+        // 5. HW
+        else if (strcmp(data_type, "HW") == 0) 
+        {
+            uint32_t val_hw_id = 0;
+            uint32_t val_hw_ver = 0;
+            int res1 = SYSTEM_BUS_GET(cfg->hw_id_param, &val_hw_id);
+            int res2 = SYSTEM_BUS_GET(cfg->hw_ver_param, &val_hw_ver);
+
+            if (false
+                || res1 != 0 
+                || res2 != 0
+               ) 
+            {
+                shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
+            } 
+            else 
+            {
+                uint32_t mm = val_hw_id % 100;
+                uint32_t temp = val_hw_id / 100;
+                uint32_t a = temp % 10;
+                uint32_t ccc = temp / 10;
+
+                uint32_t ee = val_hw_ver % 100;
+                uint32_t dd = val_hw_ver / 100;
+
+                shell_print(_sh, "%s OK HW: %03u.%u.%02u.%02u.%02u", 
+                        cfg->prefix, ccc, a, mm, dd, ee);
+            }
+        }        
+        // 6. Неизвестный параметр
+        else 
+        {
+            shell_print(_sh, "%s ERROR: invalid data!", cfg->prefix);
+        }
     }
 
     return 0;
@@ -295,7 +324,7 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
 
     // 1. Проверяем физическую готовность EEPROM
     bool err_bit = false;
-    SYSTEM_BUS_GET_BIT(HARDWARE_ERROR_REGISTER1, cfg->error_bit, &err_bit);
+    SERVER_CH_GET_BIT(EEPROM_ERROR_CH, cfg->error_bit, &err_bit);
     if (err_bit) 
     {
         shell_print(_sh, "%s ERROR: Eeprom not found!", cfg->prefix);
@@ -328,6 +357,7 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
         } 
         else 
         {
+            timeout = SERVER_CH_TIMEOUT(cfg->sn_param);
             shell_print(_sh, "%s OK", cfg->prefix);
             _schedule_write_check(_ctx, _sh);
         }
@@ -351,6 +381,7 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
         else 
         {
             shell_print(_sh, "%s OK", cfg->prefix);
+            timeout = SERVER_CH_TIMEOUT(cfg->user_param);
             _schedule_write_check(_ctx, _sh);
         }
     }
@@ -381,8 +412,7 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
         uint32_t hw_ver = (dd * 100) + ee;
 
         int res1 = SYSTEM_BUS_SET(cfg->hw_id_param, hw_id);
-        int res2 = SYSTEM_BUS_SET(cfg->hw_ver_param, hw_ver);
-
+        int res2 = SYSTEM_BUS_SET(cfg->hw_ver_param, hw_ver);        
         if (false
             || res1 != 0 
             || res2 != 0
@@ -393,6 +423,7 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
         else 
         {
             shell_print(_sh, "%s OK", cfg->prefix);
+            timeout = SERVER_CH_TIMEOUT(cfg->hw_id_param);
             _schedule_write_check(_ctx, _sh);
         }
     }
@@ -401,7 +432,7 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
     {
         shell_print(_sh, "%s ERROR: invalid data!", cfg->prefix);
     }
-
+    
     return 0;
 }
 

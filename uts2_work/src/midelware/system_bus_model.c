@@ -268,6 +268,65 @@ int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
 
 
 /**
+ * @brief Установить (в единицу) биты по маске для указанного системного ID
+ * 
+ * @param id   Идентификатор системной шины
+ * @param mask Маска устанавливаемых бит (биты, равные 1, будут установлены в 1)
+ * @return 0 в случае успеха, либо отрицательный код ошибки (-EINVAL, -ENODEV)
+ */
+int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask)
+{
+    uint32_t val = 0;
+    int ret = bus_get_u32(id, &val);
+    if (ret < 0) {
+        return ret; // Возвращает -ENODEV или -EINVAL, если ID не валиден
+    }
+
+    // Устанавливаем биты по маске в 1
+    val |= mask;
+
+    // Записываем обратно и уведомляем подписчиков Zbus
+    return bus_set_u32(id, val);
+}
+
+uint32_t get_channel_write_timeout(SYSTEM_BUS_ID id)
+{
+    uint32_t time_out = 0;
+    if (id < SYSTEM_BUS_COUNT) 
+    {
+        const struct system_bus_handler *handler = cache[id];    
+        if (handler != NULL)
+        {
+            time_out = handler->set_timeout;
+        }
+    }
+    return (time_out);
+}
+
+
+/**
+ * @brief Сбросить (в ноль) биты по маске для указанного системного ID
+ * 
+ * @param id   Идентификатор системной шины
+ * @param mask Маска сбрасываемых бит (биты, равные 1, будут сброшены в 0)
+ * @return 0 в случае успеха, либо отрицательный код ошибки (-EINVAL, -ENODEV)
+ */
+int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask)
+{
+    uint32_t val = 0;
+    int ret = bus_get_u32(id, &val);
+    if (ret < 0) {
+        return ret;
+    }
+
+    // Сбрасываем биты по маске в 0
+    val &= ~mask;
+
+    // Записываем обратно и уведомляем подписчиков Zbus
+    return bus_set_u32(id, val);
+}
+
+/**
  * @brief     Чтение состояния конкретного бита из регистра системной шины
  * 
  * @param     id        - Идентификатор регистра шины (SYSTEM_BUS_ID)

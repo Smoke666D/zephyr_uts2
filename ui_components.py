@@ -1,10 +1,12 @@
 import asyncio
+import os
 import time
-from logger import start_logger, stop_logger
-from nicegui import ui
-from oscilloscope import build_oscilloscope_panel, refresh_logs_ui
 import serial
 from serial.tools import list_ports
+from nicegui import ui
+
+from logger import start_logger, stop_logger
+from oscilloscope import build_oscilloscope_panel, refresh_logs_ui
 
 ENABLE_LINES = [
     'EN_DUT2_PSU',
@@ -21,6 +23,16 @@ LED_LINES = [
     {'id': 2, 'name': 'Зеленый'},
     {'id': 3, 'name': 'Синий'},
 ]
+CURRENT_SENSOR_NAMES = [
+    'BOARD LOW',
+    'BOARD HIGH',
+    'Питание метки №2',
+    'Питание метки №1',
+    'Питание стенда',
+    'Линия 3.3В стенда',
+    'Питание тестируемого узла',
+    'Линия 5В стенда',
+]
 
 can_logs_dict = {}
 lin_logs_dict = {}
@@ -28,295 +40,284 @@ raw_logs_dict = {}
 
 
 def get_available_ports():
-  ports = [p.device for p in list_ports.comports()]
-  return ports if ports else ['Нет портов']
+    ports = [p.device for p in list_ports.comports()]
+    return ports if ports else ['Нет портов']
 
 
 def build_dashboard(ports_refs, ui_labels):
-  tel_ref = ports_refs['tel']
-  shell_ref = ports_refs['shell']
+    tel_ref = ports_refs['tel']
+    shell_ref = ports_refs['shell']
 
-  with ui.column().classes('w-full gap-2') as container:
+    with ui.column().classes('w-full gap-2') as container:
 
-    # ==========================================
-    # 1. БЛОК УПРАВЛЕНИЯ ПОРТАМИ
-    # ==========================================
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      with ui.row().classes('w-full gap-2'):
-        # Телеметрия
-        with ui.card().classes('bg-slate-700/50 p-2 flex-1'):
-          ui.label('Телеметрия (Бинарный)').classes(
-              'text-sm font-semibold text-sky-300 mb-1'
-          )
-          ports_list = get_available_ports()
-          tel_select = ui.select(
-              options=ports_list,
-              value=ports_list[0] if ports_list else None,
-              label='Порт',
-          ).props('dark outlined dense color=sky-400').classes(
-              'w-full bg-slate-700 rounded text-sm'
-          )
+        # ==========================================
+        # 1. БЛОК УПРАВЛЕНИЯ ПОРТАМИ
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            with ui.row().classes('w-full gap-2'):
+                # Телеметрия
+                with ui.card().classes('bg-slate-700/50 p-2 flex-1'):
+                    ui.label('Телеметрия (Бинарный)').classes(
+                        'text-sm font-semibold text-sky-300 mb-1'
+                    )
+                    ports_list = get_available_ports()
+                    tel_select = ui.select(
+                        options=ports_list,
+                        value=ports_list[0] if ports_list else None,
+                        label='Порт',
+                    ).props('dark outlined dense color=sky-400').classes(
+                        'w-full bg-slate-700 rounded text-sm'
+                    )
 
-          def toggle_tel():
-            curr = tel_ref.get('ser')
-            if curr and curr.is_open:
-              curr.close()
-              tel_ref['ser'] = None
-              tel_btn.text = 'Открыть'
-              tel_btn.classes(remove='bg-red-600', add='bg-sky-600')
-              ui.notify('Телеметрия закрыта', type='warning')
-            else:
-              try:
-                p_name = tel_select.value
-                if not p_name or p_name == 'Нет портов':
-                  raise ValueError('Порт не выбран!')
-                tel_ref['ser'] = serial.Serial(
-                    p_name, baudrate=3000000, timeout=0.01
+                    def toggle_tel():
+                        curr = tel_ref.get('ser')
+                        if curr and curr.is_open:
+                            curr.close()
+                            tel_ref['ser'] = None
+                            tel_btn.text = 'Открыть'
+                            tel_btn.classes(remove='bg-red-600', add='bg-sky-600')
+                            ui.notify('Телеметрия закрыта', type='warning')
+                        else:
+                            try:
+                                p_name = tel_select.value
+                                if not p_name or p_name == 'Нет портов':
+                                    raise ValueError('Порт не выбран!')
+                                tel_ref['ser'] = serial.Serial(
+                                    p_name, baudrate=3000000, timeout=0.01
+                                )
+                                tel_btn.text = 'Закрыть'
+                                tel_btn.classes(remove='bg-sky-600', add='bg-red-600')
+                                ui.notify(f'Телеметрия: {p_name}', type='positive')
+                            except Exception as e:
+                                ui.notify(f'Ошибка: {e}', type='negative')
+
+                    tel_btn = ui.button('Открыть', on_click=toggle_tel).classes(
+                        'mt-2 bg-sky-600 text-white text-xs py-1 px-2'
+                    )
+
+                # Shell
+                with ui.card().classes('bg-slate-700/50 p-2 flex-1'):
+                    ui.label('Shell (Команды)').classes(
+                        'text-sm font-semibold text-emerald-300 mb-1'
+                    )
+                    shell_select = ui.select(
+                        options=ports_list,
+                        value=ports_list[0] if ports_list else None,
+                        label='Порт',
+                    ).props('dark outlined dense color=emerald-400').classes(
+                        'w-full bg-slate-700 rounded text-sm'
+                    )
+
+                    def toggle_shell():
+                        curr = shell_ref.get('ser')
+                        if curr and curr.is_open:
+                            curr.close()
+                            shell_ref['ser'] = None
+                            shell_btn.text = 'Открыть'
+                            shell_btn.classes(remove='bg-red-600', add='bg-emerald-600')
+                            ui.notify('Shell закрыт', type='warning')
+                        else:
+                            try:
+                                p_name = shell_select.value
+                                if not p_name or p_name == 'Нет портов':
+                                    raise ValueError('Порт не выбран!')
+                                shell_ref['ser'] = serial.Serial(
+                                    p_name, baudrate=115200, timeout=0.01
+                                )
+                                shell_btn.text = 'Закрыть'
+                                shell_btn.classes(remove='bg-emerald-600', add='bg-red-600')
+                                ui.notify(f'Shell открыт на {p_name}', type='positive')
+                            except Exception as e:
+                                ui.notify(f'Ошибка: {e}', type='negative')
+
+                    shell_btn = ui.button('Открыть', on_click=toggle_shell).classes(
+                        'mt-2 bg-emerald-600 text-white text-xs py-1 px-2'
+                    )
+
+            async def global_auto_scan():
+                ui.notify('Автопоиск портов...', type='info')
+                current_ports = get_available_ports()
+                tel_select.options = current_ports
+                shell_select.options = current_ports
+                found_tel, found_shell = None, None
+
+                for p_name in current_ports:
+                    if p_name == 'Нет портов':
+                        continue
+                    if not found_tel:
+                        try:
+                            s = serial.Serial(p_name, baudrate=115200, timeout=0.05)
+                            s.reset_input_buffer()
+                            start_t = asyncio.get_event_loop().time()
+                            is_tel = False
+                            while (asyncio.get_event_loop().time() - start_t) < 1.0:
+                                if s.in_waiting > 0:
+                                    if b'\xbe' in s.read(s.in_waiting):
+                                        is_tel = True
+                                        break
+                                await asyncio.sleep(0.05)
+                            s.close()
+                            if is_tel:
+                                found_tel = p_name
+                                continue
+                        except Exception:
+                            pass
+                    if not found_shell:
+                        try:
+                            s = serial.Serial(p_name, baudrate=115200, timeout=0.2)
+                            s.reset_input_buffer()
+                            s.write(b'\r\n')
+                            await asyncio.sleep(0.2)
+                            if s.in_waiting > 0:
+                                resp = s.read(s.in_waiting)
+                                if len(resp) > 1 and any(
+                                    c in resp for c in [b'~', b'>', b'$', b'#', b'\r', b'\n']
+                                ):
+                                    found_shell = p_name
+                            s.close()
+                        except Exception:
+                            pass
+
+                if found_tel:
+                    tel_select.value = found_tel
+                    if not (tel_ref.get('ser') and tel_ref['ser'].is_open):
+                        toggle_tel()
+                    ui.notify(f'Телеметрия: {found_tel}', type='positive')
+                if found_shell:
+                    shell_select.value = found_shell
+                    if not (shell_ref.get('ser') and shell_ref['ser'].is_open):
+                        toggle_shell()
+                    ui.notify(f'Shell: {found_shell}', type='positive')
+
+            def refresh_ports():
+                p = get_available_ports()
+                tel_select.options = p
+                shell_select.options = p
+                ui.notify('Порты обновлены', type='info')
+
+            with ui.row().classes('w-full gap-2 mt-2 items-center px-1'):
+                ui.button('Обновить порты', on_click=refresh_ports).classes(
+                    'bg-slate-700 text-white text-xs py-1 px-2'
                 )
-                tel_btn.text = 'Закрыть'
-                tel_btn.classes(remove='bg-sky-600', add='bg-red-600')
-                ui.notify(f'Телеметрия: {p_name}', type='positive')
-              except Exception as e:
-                ui.notify(f'Ошибка: {e}', type='negative')
-
-          tel_btn = ui.button('Открыть', on_click=toggle_tel).classes(
-              'mt-2 bg-sky-600 text-white text-xs py-1 px-2'
-          )
-
-        # Shell
-        with ui.card().classes('bg-slate-700/50 p-2 flex-1'):
-          ui.label('Shell (Команды)').classes(
-              'text-sm font-semibold text-emerald-300 mb-1'
-          )
-          shell_select = ui.select(
-              options=ports_list,
-              value=ports_list[0] if ports_list else None,
-              label='Порт',
-          ).props('dark outlined dense color=emerald-400').classes(
-              'w-full bg-slate-700 rounded text-sm'
-          )
-
-          def toggle_shell():
-            curr = shell_ref.get('ser')
-            if curr and curr.is_open:
-              curr.close()
-              shell_ref['ser'] = None
-              shell_btn.text = 'Открыть'
-              shell_btn.classes(remove='bg-red-600', add='bg-emerald-600')
-              ui.notify('Shell закрыт', type='warning')
-            else:
-              try:
-                p_name = shell_select.value
-                if not p_name or p_name == 'Нет портов':
-                  raise ValueError('Порт не выбран!')
-                shell_ref['ser'] = serial.Serial(
-                    p_name, baudrate=115200, timeout=0.01
+                ui.button('Автопоиск портов', on_click=global_auto_scan).classes(
+                    'bg-amber-600 text-white font-bold text-xs py-1 px-2'
                 )
-                shell_btn.text = 'Закрыть'
-                shell_btn.classes(remove='bg-emerald-600', add='bg-red-600')
-                ui.notify(f'Shell открыт на {p_name}', type='positive')
-              except Exception as e:
-                ui.notify(f'Ошибка: {e}', type='negative')
 
-          shell_btn = ui.button('Открыть', on_click=toggle_shell).classes(
-              'mt-2 bg-emerald-600 text-white text-xs py-1 px-2'
-          )
+        # ==========================================
+        # 2. УПРАВЛЕНИЕ ПИТАНИЕМ
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            enable_checkboxes = []
+            bulk_updating = False
 
-      async def global_auto_scan():
-        ui.notify('Автопоиск портов...', type='info')
-        current_ports = get_available_ports()
-        tel_select.options = current_ports
-        shell_select.options = current_ports
-        found_tel, found_shell = None, None
-
-        for p_name in current_ports:
-          if p_name == 'Нет портов':
-            continue
-          if not found_tel:
-            try:
-              s = serial.Serial(p_name, baudrate=115200, timeout=0.05)
-              s.reset_input_buffer()
-              start_t = asyncio.get_event_loop().time()
-              is_tel = False
-              while (asyncio.get_event_loop().time() - start_t) < 1.0:
-                if s.in_waiting > 0:
-                  if b'\xbe' in s.read(s.in_waiting):
-                    is_tel = True
-                    break
-                await asyncio.sleep(0.05)
-              s.close()
-              if is_tel:
-                found_tel = p_name
-                continue
-            except Exception:
-              pass
-          if not found_shell:
-            try:
-              s = serial.Serial(p_name, baudrate=115200, timeout=0.2)
-              s.reset_input_buffer()
-              s.write(b'\r\n')
-              await asyncio.sleep(0.2)
-              if s.in_waiting > 0:
-                resp = s.read(s.in_waiting)
-                if len(resp) > 1 and any(
-                    c in resp for c in [b'~', b'>', b'$', b'#', b'\r', b'\n']
-                ):
-                  found_shell = p_name
-              s.close()
-            except Exception:
-              pass
-
-        if found_tel:
-          tel_select.value = found_tel
-          if not (tel_ref.get('ser') and tel_ref['ser'].is_open):
-            toggle_tel()
-          ui.notify(f'Телеметрия: {found_tel}', type='positive')
-        if found_shell:
-          shell_select.value = found_shell
-          if not (shell_ref.get('ser') and shell_ref['ser'].is_open):
-            toggle_shell()
-          ui.notify(f'Shell: {found_shell}', type='positive')
-
-      def refresh_ports():
-        p = get_available_ports()
-        tel_select.options = p
-        shell_select.options = p
-        ui.notify('Порты обновлены', type='info')
-
-      with ui.row().classes('w-full gap-2 mt-2 items-center px-1'):
-        ui.button('Обновить порты', on_click=refresh_ports).classes(
-            'bg-slate-700 text-white text-xs py-1 px-2'
-        )
-        ui.button('Автопоиск портов', on_click=global_auto_scan).classes(
-            'bg-amber-600 text-white font-bold text-xs py-1 px-2'
-        )
-
-# ==========================================
-    # 2. ЛИНИИ ENABLE
-    # ==========================================
-# ==========================================
-    # 2. ЛИНИИ ENABLE
-    # ==========================================
-# ==========================================
-    # 2. УПРАВЛЕНИЕ ПИТАНИЕМ
-    # ==========================================
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      enable_checkboxes = []
-      bulk_updating = False
-
-      # Заголовок крупнее, отцентрован строго по середине
-      ui.label('Управление питанием').classes(
-          'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
-      )
-
-      def pwr_all_on():
-        nonlocal bulk_updating
-        curr_shell = shell_ref.get('ser')
-        if curr_shell and curr_shell.is_open:
-          curr_shell.write(b'PWR_CTL ON\r\n')
-          ui.notify('Отправлено: PWR_CTL ON', type='positive')
-        else:
-          ui.notify('Shell порт закрыт!', type='warning')
-
-        bulk_updating = True
-        for cb in enable_checkboxes:
-          cb.value = True
-        bulk_updating = False
-
-      def pwr_all_off():
-        nonlocal bulk_updating
-        curr_shell = shell_ref.get('ser')
-        if curr_shell and curr_shell.is_open:
-          curr_shell.write(b'PWR_CTL OFF\r\n')
-          ui.notify('Отправлено: PWR_CTL OFF', type='info')
-        else:
-          ui.notify('Shell порт закрыт!', type='warning')
-
-        bulk_updating = True
-        for cb in enable_checkboxes:
-          cb.value = False
-        bulk_updating = False
-
-      def make_en_handler(c_num, c_name):
-        def handler(e):
-          if bulk_updating:
-            return
-          state = 'ON' if e.value else 'OFF'
-          cmd = f'PWR_CTL {c_num} {state}\r\n'
-          curr_shell = shell_ref.get('ser')
-          if curr_shell and curr_shell.is_open:
-            curr_shell.write(cmd.encode('utf-8'))
-            ui.notify(f'[{c_name}] Отправлено: {cmd.strip()}', type='info')
-          else:
-            ui.notify('Shell порт закрыт!', type='warning')
-
-        return handler
-
-      # Горизонтальный ряд: Слева чекбоксы, Справа две крупные кнопки
-      with ui.row().classes('w-full gap-3 items-center'):
-
-        # Левая часть: Сетка с 8 чекбоксами (4 колонки x 2 ряда)
-        with ui.grid(columns=4).classes('flex-1 gap-1'):
-          for idx, name in enumerate(ENABLE_LINES):
-            ch_num = idx + 1
-            cb = ui.checkbox(
-                f'{ch_num}. {name}',
-                value=False,
-                on_change=make_en_handler(ch_num, name),
-            ).classes('text-white text-xs')
-            enable_checkboxes.append(cb)
-
-        # Правая часть: Крупные кнопки (сверху зелёная, снизу красная)
-        with ui.column().classes('gap-1.5 w-44 justify-center'):
-          ui.button(
-              'ВКЛЮЧИТЬ ВСЕ',
-              on_click=pwr_all_on,
-          ).props('color=positive text-color=white').classes(
-              'w-full font-bold text-xs py-2 rounded shadow bg-green-600'
-          )
-
-          ui.button(
-              'ВЫКЛЮЧИТЬ ВСЕ',
-              on_click=pwr_all_off,
-          ).props('color=negative text-color=white').classes(
-              'w-full font-bold text-xs py-2 rounded shadow bg-red-600'
-          )
-
-    # ==========================================
-    # 3. СВЕТОДИОДЫ
-    # ==========================================
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      ui.label('Управление светодиодами').classes(
-          'text-xs font-semibold text-yellow-300 mb-1'
-      )
-
-      def make_led_handler(l_id, l_name):
-        def handler(e):
-          state = 'ON' if e.value else 'OFF'
-          cmd = f'LED {l_id} {state}\r\n'
-          curr_shell = shell_ref.get('ser')
-          if curr_shell and curr_shell.is_open:
-            curr_shell.write(cmd.encode('utf-8'))
-            ui.notify(
-                f'[Светодиод {l_name}] Отправлено: {cmd.strip()}', type='info'
+            ui.label('Управление питанием').classes(
+                'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
             )
-          else:
-            ui.notify('Shell порт закрыт!', type='warning')
 
-        return handler
+            def pwr_all_on():
+                nonlocal bulk_updating
+                curr_shell = shell_ref.get('ser')
+                if curr_shell and curr_shell.is_open:
+                    curr_shell.write(b'PWR_CTL ON\r\n')
+                    ui.notify('Отправлено: PWR_CTL ON', type='positive')
+                else:
+                    ui.notify('Shell порт закрыт!', type='warning')
 
-      with ui.row().classes('w-full gap-4'):
-        for led in LED_LINES:
-          ui.checkbox(
-              f'{led["id"]}. {led["name"]}',
-              value=False,
-              on_change=make_led_handler(led['id'], led['name']),
-          ).classes('text-white text-xs')
+                bulk_updating = True
+                for cb in enable_checkboxes:
+                    cb.value = True
+                bulk_updating = False
 
-    # ==========================================
-    # 4. ЛИНИИ IO (1-18)
-    # ==========================================
-      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            def pwr_all_off():
+                nonlocal bulk_updating
+                curr_shell = shell_ref.get('ser')
+                if curr_shell and curr_shell.is_open:
+                    curr_shell.write(b'PWR_CTL OFF\r\n')
+                    ui.notify('Отправлено: PWR_CTL OFF', type='info')
+                else:
+                    ui.notify('Shell порт закрыт!', type='warning')
+
+                bulk_updating = True
+                for cb in enable_checkboxes:
+                    cb.value = False
+                bulk_updating = False
+
+            def make_en_handler(c_num, c_name):
+                def handler(e):
+                    if bulk_updating:
+                        return
+                    state = 'ON' if e.value else 'OFF'
+                    cmd = f'PWR_CTL {c_num} {state}\r\n'
+                    curr_shell = shell_ref.get('ser')
+                    if curr_shell and curr_shell.is_open:
+                        curr_shell.write(cmd.encode('utf-8'))
+                        ui.notify(f'[{c_name}] Отправлено: {cmd.strip()}', type='info')
+                    else:
+                        ui.notify('Shell порт закрыт!', type='warning')
+
+                return handler
+
+            with ui.row().classes('w-full gap-3 items-center'):
+                with ui.grid(columns=4).classes('flex-1 gap-1'):
+                    for idx, name in enumerate(ENABLE_LINES):
+                        ch_num = idx + 1
+                        cb = ui.checkbox(
+                            f'{ch_num}. {name}',
+                            value=False,
+                            on_change=make_en_handler(ch_num, name),
+                        ).classes('text-white text-xs')
+                        enable_checkboxes.append(cb)
+
+                with ui.column().classes('gap-1.5 w-44 justify-center'):
+                    ui.button(
+                        'ВКЛЮЧИТЬ ВСЕ',
+                        on_click=pwr_all_on,
+                    ).props('color=positive text-color=white').classes(
+                        'w-full font-bold text-xs py-2 rounded shadow bg-green-600'
+                    )
+
+                    ui.button(
+                        'ВЫКЛЮЧИТЬ ВСЕ',
+                        on_click=pwr_all_off,
+                    ).props('color=negative text-color=white').classes(
+                        'w-full font-bold text-xs py-2 rounded shadow bg-red-600'
+                    )
+
+        # ==========================================
+        # 3. СВЕТОДИОДЫ
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            ui.label('Управление светодиодами').classes(
+                'text-xs font-semibold text-yellow-300 mb-1'
+            )
+
+            def make_led_handler(l_id, l_name):
+                def handler(e):
+                    state = 'ON' if e.value else 'OFF'
+                    cmd = f'LED {l_id} {state}\r\n'
+                    curr_shell = shell_ref.get('ser')
+                    if curr_shell and curr_shell.is_open:
+                        curr_shell.write(cmd.encode('utf-8'))
+                        ui.notify(
+                            f'[Светодиод {l_name}] Отправлено: {cmd.strip()}', type='info'
+                        )
+                    else:
+                        ui.notify('Shell порт закрыт!', type='warning')
+
+                return handler
+
+            with ui.row().classes('w-full gap-4'):
+                for led in LED_LINES:
+                    ui.checkbox(
+                        f'{led["id"]}. {led["name"]}',
+                        value=False,
+                        on_change=make_led_handler(led['id'], led['name']),
+                    ).classes('text-white text-xs')
+
+        # ==========================================
+        # 4. ЛИНИИ IO (1-18)
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
                 'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
             )
@@ -359,471 +360,472 @@ def build_dashboard(ports_refs, ui_labels):
                             lambda e, c=i, s=io_select: on_io_change(c, s),
                         )
 
-
-    # ==========================================
-    # 5. ЦАП И РЕЗИСТОРЫ
-    # ==========================================
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      ui.label('Управление ЦАП и подстроечными резисторами').classes(
-          'text-xs font-semibold text-yellow-300 mb-1.5'
-      )
-      with ui.row().classes('w-full gap-4 items-center'):
-        # ЦАП
-        with ui.row().classes('items-center gap-1.5 flex-1'):
-          ui.label('ЦАП:').classes('text-xs text-white font-medium')
-          dac_input = ui.input(placeholder='15.00 - 30.00', value='15.00').props(
-              'dark outlined dense type=number input-class="text-right"'
-          ).classes('w-28 bg-slate-700 text-xs text-white rounded')
-          ui.label('В').classes('text-xs text-slate-300 font-medium')
-
-          def send_dac():
-            try:
-              val = float(dac_input.value)
-              if 15.00 <= val <= 30.00:
-                cmd = f'dac_set {val:.2f}\r\n'
-                curr_shell = shell_ref.get('ser')
-                if curr_shell and curr_shell.is_open:
-                  curr_shell.write(cmd.encode('utf-8'))
-                  ui.notify(f'[ЦАП] Отправлено: {cmd.strip()}', type='positive')
-                else:
-                  ui.notify('Shell порт закрыт!', type='warning')
-              else:
-                ui.notify(
-                    'Значение ЦАП должно быть от 15.00 до 30.00', type='warning'
-                )
-            except ValueError:
-              ui.notify('Введите корректное число для ЦАП', type='negative')
-
-          dac_input.on('keydown.enter', send_dac)
-          ui.button('Set DAC', on_click=send_dac).classes(
-              'bg-sky-600 text-white text-xs py-1 px-2'
-          )
-
-        # Резистор 1
-        with ui.row().classes('items-center gap-1.5'):
-          ui.label('Резистор 1:').classes('text-xs text-white font-medium')
-          res1_input = ui.input(placeholder='0-100', value='0.00').props(
-              'dark outlined dense type=number input-class="text-right"'
-          ).classes('w-20 bg-slate-700 text-xs text-white rounded')
-          ui.label('кОм').classes('text-xs text-slate-300 font-medium')
-
-          def send_res1():
-            try:
-              val = float(res1_input.value)
-              if 0.00 <= val <= 100.00:
-                cmd = f'adj_res_set 1 {val:.2f}\r\n'
-                curr_shell = shell_ref.get('ser')
-                if curr_shell and curr_shell.is_open:
-                  curr_shell.write(cmd.encode('utf-8'))
-                  ui.notify(
-                      f'[Резистор 1] Отправлено: {cmd.strip()}', type='positive'
-                  )
-                else:
-                  ui.notify('Shell порт закрыт!', type='warning')
-              else:
-                ui.notify(
-                    'Значение резистора должно быть от 0.00 до 100.00',
-                    type='warning',
-                )
-            except ValueError:
-              ui.notify(
-                  'Введите корректное число для Резистора 1', type='negative'
-              )
-
-          res1_input.on('keydown.enter', send_res1)
-          ui.button('Set R1', on_click=send_res1).classes(
-              'bg-emerald-600 text-white text-xs py-1 px-2'
-          )
-
-        # Резистор 2
-        with ui.row().classes('items-center gap-1.5'):
-          ui.label('Резистор 2:').classes('text-xs text-white font-medium')
-          res2_input = ui.input(placeholder='0-100', value='0.00').props(
-              'dark outlined dense type=number input-class="text-right"'
-          ).classes('w-20 bg-slate-700 text-xs text-white rounded')
-          ui.label('кОм').classes('text-xs text-slate-300 font-medium')
-
-          def send_res2():
-            try:
-              val = float(res2_input.value)
-              if 0.00 <= val <= 100.00:
-                cmd = f'adj_res_set 2 {val:.2f}\r\n'
-                curr_shell = shell_ref.get('ser')
-                if curr_shell and curr_shell.is_open:
-                  curr_shell.write(cmd.encode('utf-8'))
-                  ui.notify(
-                      f'[Резистор 2] Отправлено: {cmd.strip()}', type='positive'
-                  )
-                else:
-                  ui.notify('Shell порт закрыт!', type='warning')
-              else:
-                ui.notify(
-                    'Значение резистора должно быть от 0.00 до 100.00',
-                    type='warning',
-                )
-            except ValueError:
-              ui.notify(
-                  'Введите корректное число для Резистора 2', type='negative'
-              )
-
-          res2_input.on('keydown.enter', send_res2)
-          ui.button('Set R2', on_click=send_res2).classes(
-              'bg-emerald-600 text-white text-xs py-1 px-2'
-          )
-
-    # ==========================================
-    # 6. ДАШБОРД ДАТЧИКОВ
-    # ==========================================
-    def create_metric_card(title, key, unit=''):
-      with ui.card().classes(
-          'bg-slate-700 py-3 px-3 flex-1 min-w-[130px] rounded flex flex-row justify-between items-center cursor-default'
-      ):
-        ui.label(title).classes(
-            'text-xs text-slate-300 font-medium leading-none m-0'
-        )
-        with ui.row().classes('items-center gap-1 m-0'):
-          lbl = ui.label('0.00').classes(
-              'text-base font-mono text-emerald-400 font-bold leading-none m-0'
-          )
-          if unit:
-            ui.label(unit).classes(
-                'text-xs text-slate-400 font-medium leading-none m-0'
+        # ==========================================
+        # 5. ЦАП И РЕЗИСТОРЫ
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            ui.label('Управление ЦАП и подстроечными резисторами').classes(
+                'text-xs font-semibold text-yellow-300 mb-1.5'
             )
-        ui_labels[key] = lbl
+            with ui.row().classes('w-full gap-4 items-center'):
+                # ЦАП
+                with ui.row().classes('items-center gap-1.5 flex-1'):
+                    ui.label('ЦАП:').classes('text-xs text-white font-medium')
+                    dac_input = ui.input(placeholder='15.00 - 30.00', value='15.00').props(
+                        'dark outlined dense type=number input-class="text-right"'
+                    ).classes('w-28 bg-slate-700 text-xs text-white rounded')
+                    ui.label('В').classes('text-xs text-slate-300 font-medium')
 
-    with ui.column().classes('w-full gap-2 cursor-grab'):
-      ui.label('Дашборд датчиков').classes('text-sm font-bold text-sky-300')
-      with ui.row().classes('w-full gap-1'):
-        create_metric_card('RF Power', 'rf_power', unit='дБ')
-        create_metric_card('NTC', 'ntc')
-        create_metric_card('Ext VSense', 'ext_vsense')
-        create_metric_card('Brd Detect', 'brd_detect')
-        create_metric_card('Температура МУ', 'temp_gnd', unit='°C')
-        create_metric_card('Температура ИУ', 'temp_vdd', unit='°C')
-        create_metric_card('Освещенность (DA22)', 'light_gnd', unit='лк')
-        create_metric_card('Освещенность (DA23)', 'light_vdd', unit='лк')
+                    def send_dac():
+                        try:
+                            val = float(dac_input.value)
+                            if 15.00 <= val <= 30.00:
+                                cmd = f'dac_set {val:.2f}\r\n'
+                                curr_shell = shell_ref.get('ser')
+                                if curr_shell and curr_shell.is_open:
+                                    curr_shell.write(cmd.encode('utf-8'))
+                                    ui.notify(f'[ЦАП] Отправлено: {cmd.strip()}', type='positive')
+                                else:
+                                    ui.notify('Shell порт закрыт!', type='warning')
+                            else:
+                                ui.notify(
+                                    'Значение ЦАП должно быть от 15.00 до 30.00', type='warning'
+                                )
+                        except ValueError:
+                            ui.notify('Введите корректное число для ЦАП', type='negative')
 
-      ui.label('Environment Voltages').classes(
-          'text-xs font-semibold text-slate-400 mt-1'
-      )
-      with ui.row().classes('w-full gap-1'):
-        for idx, name in enumerate(
-            ['P3V3', 'P5V0', 'VIN', 'VDOUT1', 'P40V', 'USB', 'VDOUT2', 'VDOUT3']
-        ):
-          create_metric_card(name, f'env_{idx}', unit='В')
+                    dac_input.on('keydown.enter', send_dac)
+                    ui.button('Set DAC', on_click=send_dac).classes(
+                        'bg-sky-600 text-white text-xs py-1 px-2'
+                    )
 
-      ui.label('AO Channels (1-18)').classes(
-          'text-xs font-semibold text-slate-400 mt-1'
-      )
-      with ui.grid(columns=6).classes('w-full gap-1'):
-        for i in range(18):
-          create_metric_card(f'AO {i+1}', f'ao_{i}', unit='В')
+                # Резистор 1
+                with ui.row().classes('items-center gap-1.5'):
+                    ui.label('Резистор 1:').classes('text-xs text-white font-medium')
+                    res1_input = ui.input(placeholder='0-100', value='0.00').props(
+                        'dark outlined dense type=number input-class="text-right"'
+                    ).classes('w-20 bg-slate-700 text-xs text-white rounded')
+                    ui.label('кОм').classes('text-xs text-slate-300 font-medium')
 
-      ui.label('AIN VSense (1-6)').classes(
-          'text-xs font-semibold text-slate-400 mt-1'
-      )
-      with ui.grid(columns=6).classes('w-full gap-1'):
-        for i in range(6):
-          create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
+                    def send_res1():
+                        try:
+                            val = float(res1_input.value)
+                            if 0.00 <= val <= 100.00:
+                                cmd = f'adj_res_set 1 {val:.2f}\r\n'
+                                curr_shell = shell_ref.get('ser')
+                                if curr_shell and curr_shell.is_open:
+                                    curr_shell.write(cmd.encode('utf-8'))
+                                    ui.notify(
+                                        f'[Резистор 1] Отправлено: {cmd.strip()}', type='positive'
+                                    )
+                                else:
+                                    ui.notify('Shell порт закрыт!', type='warning')
+                            else:
+                                ui.notify(
+                                    'Значение резистора должно быть от 0.00 до 100.00',
+                                    type='warning',
+                                )
+                        except ValueError:
+                            ui.notify(
+                                'Введите корректное число для Резистора 1', type='negative'
+                            )
 
-    # ==========================================
-    # 7. ДАТЧИКИ ТОКА, НАПРЯЖЕНИЯ И ЭНЕРГИИ (1-8)
-    # ==========================================
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      with ui.row().classes('w-full justify-between items-center mb-1'):
-        ui.label('Панель датчиков тока, напряжения и энергии (1-8)').classes(
-            'text-xs font-semibold text-yellow-300'
-        )
+                    res1_input.on('keydown.enter', send_res1)
+                    ui.button('Set R1', on_click=send_res1).classes(
+                        'bg-emerald-600 text-white text-xs py-1 px-2'
+                    )
 
-      def make_energy_reset_handler(d_idx):
-        def handler():
-          cmd = f'energy_reset {d_idx}\r\n'
-          curr_shell = shell_ref.get('ser')
-          if curr_shell and curr_shell.is_open:
-            curr_shell.write(cmd.encode('utf-8'))
-            ui.notify(f'[Датчик {d_idx}] Сброс энергии отправлен', type='info')
-          else:
-            ui.notify('Shell порт закрыт!', type='warning')
-        return handler
+                # Резистор 2
+                with ui.row().classes('items-center gap-1.5'):
+                    ui.label('Резистор 2:').classes('text-xs text-white font-medium')
+                    res2_input = ui.input(placeholder='0-100', value='0.00').props(
+                        'dark outlined dense type=number input-class="text-right"'
+                    ).classes('w-20 bg-slate-700 text-xs text-white rounded')
+                    ui.label('кОм').classes('text-xs text-slate-300 font-medium')
 
-      with ui.grid(columns=4).classes('w-full gap-1.5'):
-        for i in range(1, 9):
-          with ui.card().classes('bg-slate-700 py-1.5 px-2.5 rounded flex flex-col justify-between'):
+                    def send_res2():
+                        try:
+                            val = float(res2_input.value)
+                            if 0.00 <= val <= 100.00:
+                                cmd = f'adj_res_set 2 {val:.2f}\r\n'
+                                curr_shell = shell_ref.get('ser')
+                                if curr_shell and curr_shell.is_open:
+                                    curr_shell.write(cmd.encode('utf-8'))
+                                    ui.notify(
+                                        f'[Резистор 2] Отправлено: {cmd.strip()}', type='positive'
+                                    )
+                                else:
+                                    ui.notify('Shell порт закрыт!', type='warning')
+                            else:
+                                ui.notify(
+                                    'Значение резистора должно быть от 0.00 до 100.00',
+                                    type='warning',
+                                )
+                        except ValueError:
+                            ui.notify(
+                                'Введите корректное число для Резистора 2', type='negative'
+                            )
+
+                    res2_input.on('keydown.enter', send_res2)
+                    ui.button('Set R2', on_click=send_res2).classes(
+                        'bg-emerald-600 text-white text-xs py-1 px-2'
+                    )
+
+        # ==========================================
+        # 6. ДАШБОРД ДАТЧИКОВ
+        # ==========================================
+        def create_metric_card(title, key, unit=''):
+            with ui.card().classes(
+                'bg-slate-700 py-3 px-3 flex-1 min-w-[130px] rounded flex flex-row justify-between items-center cursor-default'
+            ):
+                ui.label(title).classes(
+                    'text-xs text-slate-300 font-medium leading-none m-0'
+                )
+                with ui.row().classes('items-center gap-1 m-0'):
+                    lbl = ui.label('0.00').classes(
+                        'text-base font-mono text-emerald-400 font-bold leading-none m-0'
+                    )
+                    if unit:
+                        ui.label(unit).classes(
+                            'text-xs text-slate-400 font-medium leading-none m-0'
+                        )
+                ui_labels[key] = lbl
+
+        with ui.column().classes('w-full gap-2 cursor-grab'):
+            ui.label('Дашборд датчиков').classes('text-sm font-bold text-sky-300')
+            with ui.row().classes('w-full gap-1'):
+                create_metric_card('RF Power', 'rf_power', unit='дБ')
+                create_metric_card('NTC', 'ntc')
+                create_metric_card('Ext VSense', 'ext_vsense')
+                create_metric_card('Brd Detect', 'brd_detect')
+                create_metric_card('Температура МУ', 'temp_gnd', unit='°C')
+                create_metric_card('Температура ИУ', 'temp_vdd', unit='°C')
+                create_metric_card('Освещенность (DA22)', 'light_gnd', unit='лк')
+                create_metric_card('Освещенность (DA23)', 'light_vdd', unit='лк')
+
+            ui.label('Environment Voltages').classes(
+                'text-xs font-semibold text-slate-400 mt-1'
+            )
+            with ui.row().classes('w-full gap-1'):
+                for idx, name in enumerate(
+                    ['P3V3', 'P5V0', 'VIN', 'VDOUT1', 'P40V', 'USB', 'VDOUT2', 'VDOUT3']
+                ):
+                    create_metric_card(name, f'env_{idx}', unit='В')
+
+            ui.label('AO Channels (1-18)').classes(
+                'text-xs font-semibold text-slate-400 mt-1'
+            )
+            with ui.grid(columns=6).classes('w-full gap-1'):
+                for i in range(18):
+                    create_metric_card(f'AO {i+1}', f'ao_{i}', unit='В')
+
+            ui.label('AIN VSense (1-6)').classes(
+                'text-xs font-semibold text-slate-400 mt-1'
+            )
+            with ui.grid(columns=6).classes('w-full gap-1'):
+                for i in range(6):
+                    create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
+
+        # ==========================================
+        # 7. ДАТЧИКИ ТОКА, НАПРЯЖЕНИЯ И ЭНЕРГИИ (1-8)
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             with ui.row().classes('w-full justify-between items-center mb-1'):
-              ui.label(f'Датчик {i}').classes('text-[11px] text-yellow-300 font-bold leading-none')
-              ui.button('Сброс', on_click=make_energy_reset_handler(i)).classes(
-                  'bg-red-700 text-white text-[9px] py-0.5 px-1.5 rounded'
-              )
-
-            with ui.row().classes('w-full justify-between items-center mt-0.5'):
-              ui.label('U:').classes('text-[10px] text-slate-300 leading-none')
-              with ui.row().classes('items-center gap-1'):
-                ui_labels[f'curr_v_{i}'] = ui.label('0.00').classes(
-                    'text-xs font-mono text-emerald-400 font-bold leading-none'
+                ui.label('Панель датчиков тока, напряжения и энергии').classes(
+                    'text-xs font-semibold text-yellow-300'
                 )
-                ui.label('В').classes('text-[10px] text-slate-400 leading-none')
 
-            with ui.row().classes('w-full justify-between items-center mt-1'):
-              ui.label('I:').classes('text-[10px] text-slate-300 leading-none')
-              with ui.row().classes('items-center gap-1'):
-                ui_labels[f'curr_i_{i}'] = ui.label('0.0000').classes(
-                    'text-xs font-mono text-sky-400 font-bold leading-none'
+            def make_energy_reset_handler(d_idx, d_name):
+                def handler():
+                    cmd = f'energy_reset {d_idx}\r\n'
+                    curr_shell = shell_ref.get('ser')
+                    if curr_shell and curr_shell.is_open:
+                        curr_shell.write(cmd.encode('utf-8'))
+                        ui.notify(f'[{d_name}] Сброс энергии отправлен', type='info')
+                    else:
+                        ui.notify('Shell порт закрыт!', type='warning')
+                return handler
+
+            with ui.grid(columns=4).classes('w-full gap-1.5'):
+                for idx, sensor_name in enumerate(CURRENT_SENSOR_NAMES):
+                    i = idx + 1
+                    with ui.card().classes('bg-slate-700 py-1.5 px-2.5 rounded flex flex-col justify-between'):
+                        with ui.row().classes('w-full justify-between items-center mb-1'):
+                            ui.label(sensor_name).classes(
+                                'text-[11px] text-yellow-300 font-bold leading-none truncate max-w-[170px]'
+                            )
+                            ui.button('Сброс', on_click=make_energy_reset_handler(i, sensor_name)).classes(
+                                'bg-red-700 text-white text-[9px] py-0.5 px-1.5 rounded'
+                            )
+
+                        with ui.row().classes('w-full justify-between items-center mt-0.5'):
+                            ui.label('U:').classes('text-[10px] text-slate-300 leading-none')
+                            with ui.row().classes('items-center gap-1'):
+                                ui_labels[f'curr_v_{i}'] = ui.label('0.00').classes(
+                                    'text-xs font-mono text-emerald-400 font-bold leading-none'
+                                )
+                                ui.label('В').classes('text-[10px] text-slate-400 leading-none')
+
+                        with ui.row().classes('w-full justify-between items-center mt-1'):
+                            ui.label('I:').classes('text-[10px] text-slate-300 leading-none')
+                            with ui.row().classes('items-center gap-1'):
+                                ui_labels[f'curr_i_{i}'] = ui.label('0.0000').classes(
+                                    'text-xs font-mono text-sky-400 font-bold leading-none'
+                                )
+                                ui.label('А').classes('text-[10px] text-slate-400 leading-none')
+
+                        with ui.row().classes('w-full justify-between items-center mt-1'):
+                            ui.label('E:').classes('text-[10px] text-slate-300 leading-none')
+                            with ui.row().classes('items-center gap-1'):
+                                ui_labels[f'curr_e_{i}'] = ui.label('0.000000').classes(
+                                    'text-xs font-mono text-amber-400 font-bold leading-none'
+                                )
+                                ui.label('Дж').classes('text-[10px] text-slate-400 leading-none')
+
+        # ==========================================
+        # 8. ИНТЕРФЕЙСЫ LIN (1-4)
+        # ==========================================
+        ui.label('Интерфейсы LIN (1-4)').classes(
+            'text-sm font-bold text-sky-300 mt-3'
+        )
+
+        def make_lin_block(l_idx):
+            with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+                with ui.row().classes('w-full justify-between items-center mb-1'):
+                    ui.label(f'LIN Интерфейс {l_idx}').classes(
+                        'text-xs font-semibold text-yellow-300'
+                    )
+
+                    def handle_pull_down(e, idx=l_idx):
+                        state = 'ON' if e.value else 'OFF'
+                        cmd = f'linpb_set {idx} {state}\r\n'
+                        curr_shell = shell_ref.get('ser')
+                        if curr_shell and curr_shell.is_open:
+                            curr_shell.write(cmd.encode('utf-8'))
+                            ui.notify(f'[LIN{idx} PULL_DOWN] {state}', type='info')
+                        else:
+                            ui.notify('Shell порт закрыт!', type='warning')
+
+                    ui.checkbox(
+                        'PULL_DOWN', value=False, on_change=handle_pull_down
+                    ).classes('text-white text-xs')
+
+                    with ui.row().classes('items-center gap-1'):
+                        ui.label('U:').classes('text-[11px] text-slate-300')
+                        lin_v_lbl = ui.label('0.00').classes(
+                            'text-xs font-mono text-emerald-400 font-bold'
+                        )
+                        ui.label('В').classes('text-[11px] text-slate-400')
+                        ui_labels[f'lin_v_{l_idx}'] = lin_v_lbl
+
+                ui.label('Входящие пакеты:').classes(
+                    'text-[10px] text-slate-400 mt-1 mb-0.5'
                 )
-                ui.label('А').classes('text-[10px] text-slate-400 leading-none')
-
-            with ui.row().classes('w-full justify-between items-center mt-1'):
-              ui.label('E:').classes('text-[10px] text-slate-300 leading-none')
-              with ui.row().classes('items-center gap-1'):
-                ui_labels[f'curr_e_{i}'] = ui.label('0.000000').classes(
-                    'text-xs font-mono text-amber-400 font-bold leading-none'
+                lin_log = ui.log(max_lines=20).classes(
+                    'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1 rounded'
                 )
-                ui.label('Дж').classes('text-[10px] text-slate-400 leading-none')
+                lin_log.push(f'LIN{l_idx} готов...')
+                lin_logs_dict[l_idx] = lin_log
 
-    # ==========================================
-    # 8. ИНТЕРФЕЙСЫ LIN (1-4)
-    # ==========================================
-    ui.label('Интерфейсы LIN (1-4)').classes(
-        'text-sm font-bold text-sky-300 mt-3'
-    )
+                with ui.row().classes('w-full gap-2 items-center mt-1.5'):
+                    lin_data_input = ui.input(
+                        placeholder='Данные через пробел (например: 10 20 AA)'
+                    ).props('dark outlined dense input-class="text-xs"').classes(
+                        'flex-1 bg-slate-700 text-xs text-white rounded'
+                    )
 
-    def make_lin_block(l_idx):
-      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-        with ui.row().classes('w-full justify-between items-center mb-1'):
-          ui.label(f'LIN Интерфейс {l_idx}').classes(
-              'text-xs font-semibold text-yellow-300'
-          )
+                    def send_lin_msg(idx=l_idx, data_inp=lin_data_input, log=lin_log):
+                        ldata = data_inp.value.strip()
+                        if not ldata:
+                            ui.notify(f'LIN{idx}: Введите данные для отправки!', type='warning')
+                            return
 
-          def handle_pull_down(e, idx=l_idx):
-            state = 'ON' if e.value else 'OFF'
-            cmd = f'LIN_PD {idx} {state}\r\n'
-            curr_shell = shell_ref.get('ser')
-            if curr_shell and curr_shell.is_open:
-              curr_shell.write(cmd.encode('utf-8'))
-              ui.notify(f'[LIN{idx} PULL_DOWN] {state}', type='info')
-            else:
-              ui.notify('Shell порт закрыт!', type='warning')
+                        cmd = f'lin_send {idx} {ldata}\r\n'
+                        curr_shell = shell_ref.get('ser')
 
-          ui.checkbox(
-              'PULL_DOWN', value=False, on_change=handle_pull_down
-          ).classes('text-white text-xs')
+                        if curr_shell and curr_shell.is_open:
+                            curr_shell.write(cmd.encode('utf-8'))
+                            log.push(f'TX -> {ldata}')
+                            data_inp.set_value('')
+                        else:
+                            ui.notify('Shell порт закрыт!', type='warning')
 
-          with ui.row().classes('items-center gap-1'):
-            ui.label('U:').classes('text-[11px] text-slate-300')
-            lin_v_lbl = ui.label('0.00').classes(
-                'text-xs font-mono text-emerald-400 font-bold'
-            )
-            ui.label('В').classes('text-[11px] text-slate-400')
-            ui_labels[f'lin_v_{l_idx}'] = lin_v_lbl
+                    lin_data_input.on('keydown.enter', send_lin_msg)
+                    ui.button('Отправить', on_click=send_lin_msg).classes(
+                        'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
+                    )
 
-        ui.label('Входящие пакеты:').classes(
-            'text-[10px] text-slate-400 mt-1 mb-0.5'
+        for lin_idx in range(1, 5):
+            make_lin_block(lin_idx)
+
+        # ==========================================
+        # 9. CAN ИНТЕРФЕЙСЫ (1-3)
+        # ==========================================
+        ui.label('Интерфейсы CAN (1-3)').classes(
+            'text-sm font-bold text-sky-300 mt-3'
         )
-        lin_log = ui.log(max_lines=20).classes(
-            'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1 rounded'
-        )
-        lin_log.push(f'LIN{l_idx} готов...')
-        lin_logs_dict[l_idx] = lin_log
+        for can_idx in range(1, 4):
+            with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+                ui.label(f'CAN Интерфейс {can_idx}').classes(
+                    'text-xs font-semibold text-yellow-300 mb-1'
+                )
 
-        with ui.row().classes('w-full gap-2 items-center mt-1.5'):
-          lin_data_input = ui.input(
-              placeholder='Данные через пробел (например: 10 20 AA)'
-          ).props('dark outlined dense input-class="text-xs"').classes(
-              'flex-1 bg-slate-700 text-xs text-white rounded'
-          )
+                with ui.row().classes('w-full gap-2 items-center'):
+                    can_speed_data = ui.select(
+                        options=['1000', '500', '250', '125'],
+                        value='1000',
+                        label='Скорость Data (кб/с)',
+                    ).props('dark outlined dense').classes(
+                        'w-36 bg-slate-700 text-xs text-white rounded'
+                    )
+                    can_speed_data.disable()
 
-          def send_lin_msg(idx=l_idx, data_inp=lin_data_input, log=lin_log):
-            ldata = data_inp.value.strip()
-            if not ldata:
-              ui.notify(f'LIN{idx}: Введите данные для отправки!', type='warning')
-              return
+                    def update_can_mode(e, ds=can_speed_data):
+                        if e.value == 'CANFD':
+                            ds.enable()
+                        else:
+                            ds.disable()
+                            ds.set_value('1000')
 
-            cmd = f'lin_send {idx} {ldata}\r\n'
-            curr_shell = shell_ref.get('ser')
+                    can_mode = ui.select(
+                        options=['Classic', 'CANFD'],
+                        value='Classic',
+                        label='Режим',
+                        on_change=update_can_mode,
+                    ).props('dark outlined dense').classes(
+                        'w-28 bg-slate-700 text-xs text-white rounded'
+                    )
 
-            if curr_shell and curr_shell.is_open:
-              curr_shell.write(cmd.encode('utf-8'))
-              log.push(f'TX -> {ldata}')
-              data_inp.set_value('')
-            else:
-              ui.notify('Shell порт закрыт!', type='warning')
+                    can_speed_nom = ui.select(
+                        options=['1000', '500', '250', '125'],
+                        value='500',
+                        label='Скорость (кб/с)',
+                    ).props('dark outlined dense').classes(
+                        'w-32 bg-slate-700 text-xs text-white rounded'
+                    )
 
-          lin_data_input.on('keydown.enter', send_lin_msg)
-          ui.button('Отправить', on_click=send_lin_msg).classes(
-              'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
-          )
+                ui.label('Входящие сообщения:').classes(
+                    'text-[10px] text-slate-400 mt-1 mb-0.5'
+                )
+                can_log = ui.log(max_lines=30).classes(
+                    'w-full h-20 bg-slate-900 text-green-400 font-mono text-[11px] p-1 rounded'
+                )
+                can_log.push(f'CAN{can_idx} готов к работе...')
+                can_logs_dict[can_idx] = can_log
 
-    for lin_idx in range(1, 5):
-      make_lin_block(lin_idx)
+                with ui.row().classes('w-full gap-2 items-center mt-1.5'):
+                    can_id_input = ui.input(placeholder='ID (например, 123)').props(
+                        'dark outlined dense input-class="text-xs"'
+                    ).classes('w-36 bg-slate-700 text-xs text-white rounded')
 
-    # ==========================================
-    # 9. CAN ИНТЕРФЕЙСЫ (1-3)
-    # ==========================================
-    ui.label('Интерфейсы CAN (1-3)').classes(
-        'text-sm font-bold text-sky-300 mt-3'
-    )
-    for can_idx in range(1, 4):
-      with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-        ui.label(f'CAN Интерфейс {can_idx}').classes(
-            'text-xs font-semibold text-yellow-300 mb-1'
-        )
+                    can_data_input = ui.input(
+                        placeholder='Данные через пробел (например: 11 22 AA)'
+                    ).props('dark outlined dense input-class="text-xs"').classes(
+                        'flex-1 bg-slate-700 text-xs text-white rounded'
+                    )
 
-        with ui.row().classes('w-full gap-2 items-center'):
-          can_speed_data = ui.select(
-              options=['1000', '500', '250', '125'],
-              value='1000',
-              label='Скорость Data (кб/с)',
-          ).props('dark outlined dense').classes(
-              'w-36 bg-slate-700 text-xs text-white rounded'
-          )
-          can_speed_data.disable()
+                    def send_can_msg(
+                        c_idx=can_idx,
+                        id_inp=can_id_input,
+                        data_inp=can_data_input,
+                        log=can_log,
+                    ):
+                        cid = id_inp.value.strip()
+                        cdata = data_inp.value.strip()
+                        if not cid:
+                            ui.notify(f'CAN{c_idx}: Укажите ID сообщения!', type='warning')
+                            return
 
-          def update_can_mode(e, ds=can_speed_data):
-            if e.value == 'CANFD':
-              ds.enable()
-            else:
-              ds.disable()
-              ds.set_value('1000')
+                        cmd = f'can send {c_idx} {cid} {cdata}\r\n'
+                        curr_shell = shell_ref.get('ser')
 
-          can_mode = ui.select(
-              options=['Classic', 'CANFD'],
-              value='Classic',
-              label='Режим',
-              on_change=update_can_mode,
-          ).props('dark outlined dense').classes(
-              'w-28 bg-slate-700 text-xs text-white rounded'
-          )
+                        if curr_shell and curr_shell.is_open:
+                            curr_shell.write(cmd.encode('utf-8'))
+                            log.push(f'TX -> ID: {cid} | DATA: {cdata}')
+                            id_inp.set_value('')
+                            data_inp.set_value('')
+                        else:
+                            ui.notify(
+                                'Shell порт закрыт! Невозможно отправить пакет',
+                                type='warning',
+                            )
 
-          can_speed_nom = ui.select(
-              options=['1000', '500', '250', '125'],
-              value='500',
-              label='Скорость (кб/с)',
-          ).props('dark outlined dense').classes(
-              'w-32 bg-slate-700 text-xs text-white rounded'
-          )
+                    can_id_input.on('keydown.enter', send_can_msg)
+                    can_data_input.on('keydown.enter', send_can_msg)
+                    ui.button('Отправить', on_click=send_can_msg).classes(
+                        'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
+                    )
 
-        ui.label('Входящие сообщения:').classes(
-            'text-[10px] text-slate-400 mt-1 mb-0.5'
-        )
-        can_log = ui.log(max_lines=30).classes(
-            'w-full h-20 bg-slate-900 text-green-400 font-mono text-[11px] p-1 rounded'
-        )
-        can_log.push(f'CAN{can_idx} готов к работе...')
-        can_logs_dict[can_idx] = can_log
-
-        with ui.row().classes('w-full gap-2 items-center mt-1.5'):
-          can_id_input = ui.input(placeholder='ID (например, 123)').props(
-              'dark outlined dense input-class="text-xs"'
-          ).classes('w-36 bg-slate-700 text-xs text-white rounded')
-
-          can_data_input = ui.input(
-              placeholder='Данные через пробел (например: 11 22 AA)'
-          ).props('dark outlined dense input-class="text-xs"').classes(
-              'flex-1 bg-slate-700 text-xs text-white rounded'
-          )
-
-          def send_can_msg(
-              c_idx=can_idx,
-              id_inp=can_id_input,
-              data_inp=can_data_input,
-              log=can_log,
-          ):
-            cid = id_inp.value.strip()
-            cdata = data_inp.value.strip()
-            if not cid:
-              ui.notify(f'CAN{c_idx}: Укажите ID сообщения!', type='warning')
-              return
-
-            cmd = f'can send {c_idx} {cid} {cdata}\r\n'
-            curr_shell = shell_ref.get('ser')
-
-            if curr_shell and curr_shell.is_open:
-              curr_shell.write(cmd.encode('utf-8'))
-              log.push(f'TX -> ID: {cid} | DATA: {cdata}')
-              id_inp.set_value('')
-              data_inp.set_value('')
-            else:
-              ui.notify(
-                  'Shell порт закрыт! Невозможно отправить пакет',
-                  type='warning',
-              )
-
-          can_id_input.on('keydown.enter', send_can_msg)
-          can_data_input.on('keydown.enter', send_can_msg)
-          ui.button('Отправить', on_click=send_can_msg).classes(
-              'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
-          )
-
-    # ==========================================
-    # 10. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
-    # ==========================================
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-      ui.label('Логирование данных в файл (CSV/Excel)').classes(
-          'text-xs font-semibold text-sky-400 mb-1'
-      )
-
-      with ui.row().classes('gap-3 items-center'):
-        timer_start_ts = 0.0
-        timer_active = False
-
-        timer_lbl = ui.label('00:00.000').classes(
-            'text-sm font-mono text-emerald-400 font-bold bg-slate-900 py-1 px-2.5 rounded border border-slate-700'
-        )
-
-        def update_timer_ui():
-          if timer_active:
-            elapsed = time.time() - timer_start_ts
-            mins = int(elapsed // 60)
-            secs = int(elapsed % 60)
-            millis = int((elapsed - int(elapsed)) * 1000)
-            timer_lbl.set_text(f'{mins:02d}:{secs:02d}.{millis:03d}')
-
-        log_clock_timer = ui.timer(0.05, update_timer_ui, active=False)
-
-        def toggle_log():
-          nonlocal timer_start_ts, timer_active
-          if btn_log.text.startswith('Старт'):
-            start_logger()
-            timer_start_ts = time.time()
-            timer_active = True
-            log_clock_timer.activate()
-            timer_lbl.set_text('00:00.000')
-
-            btn_log.text = 'Стоп записи'
-            btn_log.classes(remove='bg-emerald-600', add='bg-red-600')
-            ui.notify('Запись лога начата', type='positive')
-          else:
-            stop_logger()
-            timer_active = False
-            log_clock_timer.deactivate()
-            elapsed = time.time() - timer_start_ts
-            mins = int(elapsed // 60)
-            secs = int(elapsed % 60)
-            millis = int((elapsed - int(elapsed)) * 1000)
-            timer_lbl.set_text(f'{mins:02d}:{secs:02d}.{millis:03d}')
-
-            btn_log.text = 'Старт записи лога'
-            btn_log.classes(remove='bg-red-600', add='bg-emerald-600')
-            ui.notify(
-                f'Запись завершена ({mins:02d}:{secs:02d}.{millis:03d})',
-                type='info',
+        # ==========================================
+        # 10. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            ui.label('Логирование данных в файл (CSV/Excel)').classes(
+                'text-xs font-semibold text-sky-400 mb-1'
             )
 
-            # Безопасное обновление через 200 мс — ОС успевает зафиксировать файл
-            ui.timer(0.2, refresh_logs_ui, once=True)
+            with ui.row().classes('gap-3 items-center'):
+                timer_start_ts = 0.0
+                timer_active = False
 
-        btn_log = ui.button('Старт записи лога', on_click=toggle_log).classes(
-            'bg-emerald-600 text-white text-xs font-bold py-1 px-3'
-        )
+                timer_lbl = ui.label('00:00.000').classes(
+                    'text-sm font-mono text-emerald-400 font-bold bg-slate-900 py-1 px-2.5 rounded border border-slate-700'
+                )
 
-        ui.label('Формат: ММ:СС.мс (сохранение в logs/)').classes(
-            'text-[10px] text-slate-400'
-        )
+                def update_timer_ui():
+                    if timer_active:
+                        elapsed = time.time() - timer_start_ts
+                        mins = int(elapsed // 60)
+                        secs = int(elapsed % 60)
+                        millis = int((elapsed - int(elapsed)) * 1000)
+                        timer_lbl.set_text(f'{mins:02d}:{secs:02d}.{millis:03d}')
 
-    # ==========================================
-    # 11. ОСЦИЛЛОГРАФ (В самом конце)
-    # ==========================================
-    ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
-    build_oscilloscope_panel()
+                log_clock_timer = ui.timer(0.05, update_timer_ui, active=False)
 
-  container.make_sortable()
-  return can_logs_dict, lin_logs_dict, raw_logs_dict
+                def toggle_log():
+                    nonlocal timer_start_ts, timer_active
+                    if btn_log.text.startswith('Старт'):
+                        start_logger()
+                        timer_start_ts = time.time()
+                        timer_active = True
+                        log_clock_timer.activate()
+                        timer_lbl.set_text('00:00.000')
+
+                        btn_log.text = 'Стоп записи'
+                        btn_log.classes(remove='bg-emerald-600', add='bg-red-600')
+                        ui.notify('Запись лога начата', type='positive')
+                    else:
+                        stop_logger()
+                        timer_active = False
+                        log_clock_timer.deactivate()
+                        elapsed = time.time() - timer_start_ts
+                        mins = int(elapsed // 60)
+                        secs = int(elapsed % 60)
+                        millis = int((elapsed - int(elapsed)) * 1000)
+                        timer_lbl.set_text(f'{mins:02d}:{secs:02d}.{millis:03d}')
+
+                        btn_log.text = 'Старт записи лога'
+                        btn_log.classes(remove='bg-red-600', add='bg-emerald-600')
+                        ui.notify(
+                            f'Запись завершена ({mins:02d}:{secs:02d}.{millis:03d})',
+                            type='info',
+                        )
+
+                        ui.timer(0.2, refresh_logs_ui, once=True)
+
+                btn_log = ui.button('Старт записи лога', on_click=toggle_log).classes(
+                    'bg-emerald-600 text-white text-xs font-bold py-1 px-3'
+                )
+
+                ui.label('Формат: ММ:СС.мс (сохранение в logs/)').classes(
+                    'text-[10px] text-slate-400'
+                )
+
+        # ==========================================
+        # 11. ОСЦИЛЛОГРАФ (В самом конце)
+        # ==========================================
+        ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
+        build_oscilloscope_panel()
+
+    container.make_sortable()
+    return can_logs_dict, lin_logs_dict, raw_logs_dict

@@ -126,12 +126,12 @@ static void settings_listener_fn(const struct zbus_channel *chan)
             if (err == 0) 
             {
                 LOG_INF("Settings successfully written to FRAM.");
-                SYSTEM_BUS_CLEAR_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+                SERVER_CH_CLEAR_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
             } 
             else 
             {
                 LOG_ERR("EEPROM WRITE FAILED! Error code: %d", err);
-                SYSTEM_BUS_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+                SERVER_CH_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
             }
         }
     }
@@ -177,11 +177,11 @@ static int fram_settings_init(void)
                 LOG_INF("Valid settings loaded from FRAM successfully!");
             }
         }
-        SYSTEM_BUS_CLEAR_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+        SERVER_CH_CLEAR_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
     }
     else 
     {
-        SYSTEM_BUS_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+        SERVER_CH_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
         return -ENODEV;
     }
 
@@ -208,7 +208,7 @@ static int fram_settings_init(void)
         if (write_err != 0) 
         {
             LOG_ERR("CRITICAL: Failed to write initial defaults to FRAM! Code: %d", write_err);
-            SYSTEM_BUS_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
+            SERVER_CH_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1,FRAM_MU_ERROR);
         } 
         else 
         {
@@ -265,9 +265,7 @@ typedef struct
  **************************************************************************************************/
 
 
-// Предварительная декларация канала ZBUS
-
-
+// Предварительная декларация канала ZBU
 
 
 ZBUS_CHAN_DEFINE(
@@ -291,4 +289,5 @@ ZBUS_CHAN_DEFINE(
 PARAM_ROUTE_DEFINE(HARDWARE_ERROR_REGISTER1, &error_channel, 0, UINT_DATA);
 PARAM_ROUTE_DEFINE(HARDWARE_ERROR_REGISTER2, &error_channel, 1, UINT_DATA);
 PARAM_ROUTE_DEFINE(HARDWARE_ERROR_REGISTER3, &error_channel, 2, UINT_DATA);
-PARAM_ROUTE_DEFINE(HARDWARE_WARNING_REG1, &warning_channel, 0, UINT_DATA);
+
+PARAM_ROUTE_DEFINE(EVENT_1_REG, &warning_channel, 0, UINT_DATA);

@@ -6,7 +6,7 @@ extern "C" {
 #include "stdint.h"
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
-
+#include <zephyr/drivers/uart.h>
 
 #define LED_CNT 3
 
@@ -17,20 +17,7 @@ extern "C" {
 
 #define TOTAL_DAC_COUNT 3
 
-typedef enum
-{
-    EEPORM_IU_ERROR  = 0x0001 << 0,
-    EEPORM_CU_ERROR  = 0x0001 << 1,
-    FRAM_MU_ERROR    = 0x0001 << 3,
-    ADS1115_IU_ERROR = 0x0001 << 4,
-} HARDWARE_ERROR_REGISTER1_t;
 
-typedef enum
-{
-    EEPORM_IU_WARNING  = 0x0001 << 0,
-    EEPORM_CU_WARNING  = 0x0001 << 1,    
-    ADS1115_IU_WARNNIG = 0x0001 << 4,
-} HARDWARE_WARNING_REGISTER1_t;
 
 
 
@@ -154,7 +141,7 @@ typedef enum
     HARDWARE_ERROR_REGISTER1,
     HARDWARE_ERROR_REGISTER2,
     HARDWARE_ERROR_REGISTER3,
-    HARDWARE_WARNING_REG1,
+    EVENT_1_REG,
     CAN1_TX,
     CAN2_TX,
     CAN3_TX,
@@ -170,6 +157,8 @@ typedef enum
     LIN4_TX,
     LIN4_RX,
     USB_FB_MUX,    
+    UART_DETECT_DATA,
+    UART_DETECT_CONFIG,
     JTAG_MUX0,    
     JTAG_MUX_EN,    
     EN_USB_UART,
@@ -198,10 +187,43 @@ typedef enum
     SETTING_CU_USER_DATA,
     SETTING_OUT_TEST_CUR,
     SETTING_3_3_CUR_HIGH,
+    SETTING_3_3_CUR_LOW,
     SETTING_5_CUR_HIGH,
+    SETTING_5_CUR_LOW,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;
+
+
+#define EEPROM_EVENT_CH EVENT_1_REG
+
+typedef enum
+{
+    EEPORM_IU_ERROR         = 0x0001 << 0,
+    EEPORM_CU_ERROR         = 0x0001 << 1,
+    FRAM_MU_ERROR           = 0x0001 << 3,
+    ADS1115_IU_ERROR        = 0x0001 << 4,
+    BRD_LOW_CUR_SEN_ERROR   = 0x0001 << 5,
+ 
+} HARDWARE_ERROR_REGISTER1_t;
+
+
+#define EEPROM_ERROR_CH HARDWARE_ERROR_REGISTER1
+
+typedef enum
+{    
+    EVENT_EEPROM_IU_WRITE_OK    = 0x0001 << 0,
+    EVENT_EEPROM_IU_WRITE_ERROR = 0x0001 << 1,
+    EVENT_EEPROM_IU_CRC_ERROR   = 0x0001 << 2,
+    EVENT_EEPROM_CU_WRITE_OK    = 0x0001 << 3,
+    EVENT_EEPROM_CU_WRITE_ERROR = 0x0001 << 4,
+    EVENT_EEPROM_CU_CRC_ERROR   = 0x0001 << 5,    
+
+    ADS1115_IU_WARNNIG      = 0x0001 << 3,
+    BRD_LOW_CUR_SEN_WARNING = 0x0001 << 4,
+    
+} HARDWARE_WARNING_REGISTER1_t;
+
 
 typedef enum
 {
@@ -253,6 +275,7 @@ struct system_bus_handler
     const struct zbus_channel   *channel; // Ссылка на канал
     SYSTEM_BUS_DATA_TYPE  channel_type;    
     uint32_t              system_index;
+    uint32_t              set_timeout;
 };
 
 
@@ -267,14 +290,16 @@ struct system_bus_handler
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
+        .set_timeout = 0, \
     }
 
-#define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+#define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type, time_out) \
     const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
         .bus_id = id, \
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
+        .set_timeout = time_out, \
     }
     
  int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
@@ -325,13 +350,21 @@ int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
 int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
 int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
 int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val);
+int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask);
+int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask);
+uint32_t get_channel_write_timeout(SYSTEM_BUS_ID id);
 
-#define SERVER_CHANNEL_SET_BIT( id, mask) bus_set_bit(id, mask)
-#define SYSTEM_BUS_SET_BIT( id, mask) bus_set_bit(id, mask)
-#define SYSTEM_BUS_CLEAR_BIT( id, mask) bus_clear_bit(id, mask)
-#define SYSTEM_BUS_SET_BIT_IF_NEEDED( id, mask) bus_set_bit_if_needed(id, mask)
-#define SYSTEM_BUS_CLEAR_BIT_IF_NEEDED( id, mask) bus_clear_bit_if_needed(id, mask)
-#define SYSTEM_BUS_GET_BIT(id, mask, val) bus_get_bit(id, mask, val)
+#define SERVER_CH_SET_BIT( id, mask) bus_set_bit(id, mask)
+#define SERVER_CH_CLEAR_MASK( id, mask) bus_clear_mask(id, mask)
+#define SERVER_CH_SET_MASK( id, mask) bus_set_mask(id, mask)
+#define SERVER_CH_CLEAR_BIT( id, mask) bus_clear_bit(id, mask)
+#define SERVER_CH_SET_BIT_IF_NEEDED( id, mask) bus_set_bit_if_needed(id, mask)
+#define SERVER_CH_CLEAR_BIT_IF_NEEDED( id, mask) bus_clear_bit_if_needed(id, mask)
+#define SERVER_CH_GET_BIT(id, mask, val) bus_get_bit(id, mask, val)
+#define SERVER_CH_TIMEOUT(id) get_channel_write_timeout(id)
+
+
+
 
 int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
@@ -359,6 +392,38 @@ int bus_set_real_arr(float val, const SYSTEM_BUS_ID *ids, size_t count);
     
 
 int bus_listener_attach(const struct zbus_observer *listener, SYSTEM_BUS_ID id);
+
+
+static inline uint32_t uart_detect_pack_cfg(uint32_t baudrate, 
+                                            enum uart_config_parity parity,
+                                            enum uart_config_stop_bits stop,
+                                            enum uart_config_data_bits data)
+{
+    return (baudrate & 0x00FFFFFF) |
+           (((uint32_t)parity & 0x07) << 24) |
+           (((uint32_t)stop & 0x03) << 27) |
+           (((uint32_t)data & 0x07) << 29);
+}
+
+static inline uint32_t uart_detect_unpack_baud(uint32_t cfg)
+{
+    return cfg & 0x00FFFFFF;
+}
+
+static inline enum uart_config_parity uart_detect_unpack_parity(uint32_t cfg)
+{
+    return (enum uart_config_parity)((cfg >> 24) & 0x07);
+}
+
+static inline enum uart_config_stop_bits uart_detect_unpack_stop(uint32_t cfg)
+{
+    return (enum uart_config_stop_bits)((cfg >> 27) & 0x03);
+}
+
+static inline enum uart_config_data_bits uart_detect_unpack_data(uint32_t cfg)
+{
+    return (enum uart_config_data_bits)((cfg >> 29) & 0x07);
+}
 
 
 #ifdef __cplusplus
