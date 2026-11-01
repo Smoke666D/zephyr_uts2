@@ -26,10 +26,9 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/deamons/*c" 
 )
 
-target_sources(app PRIVATE 
-       src/ina228_stream_thread.c          
-       src/main.c
-        src/settings.c        
+target_sources(app PRIVATE        
+      src/main.c
+      src/settings.c        
       ${APP_SOURCES} 
 )
 

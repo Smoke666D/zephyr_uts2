@@ -43,19 +43,17 @@ static void uart_detect_isr(const struct device *dev, void *user_data)
 {
     ARG_UNUSED(user_data);
 
-    while (uart_irq_update(dev) && uart_irq_is_pending(dev)) {
-        if (uart_irq_rx_ready(dev)) {
-            uint8_t temp_buf[16];
-            int recv_len;
+    uart_irq_update(dev);
 
-            /* Вычитываем аппаратный FIFO в промежуточный ring_buf */
-            while ((recv_len = uart_fifo_read(dev, temp_buf, sizeof(temp_buf))) > 0) {
-                ring_buf_put(&rx_rb, temp_buf, recv_len);
-            }
+    if (uart_irq_rx_ready(dev)) {
+        uint8_t temp_buf[16];
+        int recv_len;
 
-            /* Запускаем воркер для публикации */
-            k_work_submit(&rx_work);
+        while ((recv_len = uart_fifo_read(dev, temp_buf, sizeof(temp_buf))) > 0) {
+            ring_buf_put(&rx_rb, temp_buf, recv_len);
         }
+
+        k_work_submit(&rx_work);
     }
 }
 
