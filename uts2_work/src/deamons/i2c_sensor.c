@@ -1,6 +1,5 @@
 /**
- *  @file       app_worker.c
- *  @headerfile app_worker.h
+ *  @file       i2c_sensor.c
  *
  *  @date       2026.09.26
  *  @author     Dymov Igor
@@ -21,28 +20,14 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/gpio.h>
 
-
 #include "app_worker.h"
 #include "system_bus_model.h"
+#include "system_define.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
  **************************************************************************************************/
 LOG_MODULE_REGISTER(sensor_poll, LOG_LEVEL_INF);
-
-#define SENSOR_IDX_TMP112_GND  0
-#define SENSOR_IDX_TMP112_VDD  1
-#define SENSOR_IDX_BH1750_GND  2
-#define SENSOR_IDX_BH1750_VDD  3
-
-ZBUS_CHAN_DEFINE(
-    sensor_channel_poll,
-    FLOAT_ARRAY_CHANNEL_4_t,
-    NULL,
-    NULL,
-    ZBUS_OBSERVERS_EMPTY,
-    ZBUS_MSG_INIT(0)
-);
 
 /***************************************************************************************************
  *                                          PRIVATE TYPES
@@ -59,6 +44,7 @@ typedef struct sensor_cache_slot
 {
     const struct device *dev;
     enum sensor_channel  channel;
+    hw_error_channel_1_t error_ch;
 } sensor_cache_slot_t;
 
 /***************************************************************************************************
@@ -72,13 +58,38 @@ static int  _app_worker_system_init(void);
  **************************************************************************************************/
 static struct k_work_delayable sensor_poll_dwork;
 
+ZBUS_CHAN_DEFINE(
+    sensor_channel_poll,
+    float_array_4_t,
+    NULL,
+    NULL,
+    ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(0)
+);
+
 // Массив слотов кэша датчиков
 static sensor_cache_slot_t sensors_cache_slots[] = 
 {
-    {.dev = DEVICE_DT_GET(DT_NODELABEL(tmp112_gnd)), .channel = SENSOR_CHAN_AMBIENT_TEMP},
-    {.dev = DEVICE_DT_GET(DT_NODELABEL(tmp112_vdd)), .channel = SENSOR_CHAN_AMBIENT_TEMP},
-    {.dev = DEVICE_DT_GET(DT_NODELABEL(bh1750_gnd)), .channel = SENSOR_CHAN_LIGHT},
-    {.dev = DEVICE_DT_GET(DT_NODELABEL(bh1750_vdd)), .channel = SENSOR_CHAN_LIGHT}
+    {
+        .dev      = DEVICE_DT_GET(DT_NODELABEL(tmp112_gnd)), 
+        .channel  = SENSOR_CHAN_AMBIENT_TEMP, 
+        .error_ch = TMP112_MU_ERROR
+    },
+    {
+        .dev      = DEVICE_DT_GET(DT_NODELABEL(tmp112_vdd)), 
+        .channel  = SENSOR_CHAN_AMBIENT_TEMP, 
+        .error_ch = TMP112_IU_ERROR
+    }, 
+    {
+        .dev      = DEVICE_DT_GET(DT_NODELABEL(bh1750_gnd)), 
+        .channel  = SENSOR_CHAN_LIGHT, 
+        .error_ch = BH1750_1_IU_ERROR
+    },
+    {
+        .dev      = DEVICE_DT_GET(DT_NODELABEL(bh1750_vdd)), 
+        .channel  = SENSOR_CHAN_LIGHT, 
+        .error_ch = BH1750_2_IU_ERROR
+    }
 };
 
 /***************************************************************************************************
@@ -95,8 +106,7 @@ static sensor_cache_slot_t sensors_cache_slots[] =
 static void _sensor_poll_handler(struct k_work *_work)
 {
     ARG_UNUSED(_work);
-    FLOAT_ARRAY_CHANNEL_4_t msg;
-
+    float_array_4_t msg;
 
     for (int i = 0; i < ARRAY_SIZE(sensors_cache_slots); i++) 
     {
@@ -104,16 +114,17 @@ static void _sensor_poll_handler(struct k_work *_work)
         struct sensor_value val;
 
         if (true  
-            && device_is_ready(slot->dev)  
             && sensor_sample_fetch(slot->dev) == 0 
             && sensor_channel_get(slot->dev, slot->channel, &val) == 0
            ) 
         {
             // Перевод struct sensor_value в стандартный float
-            msg.value[i] = (float)val.val1 + (float)val.val2 / 1000000.0f;   
+            msg.value[i] = (float)val.val1 + (float)val.val2 / 1000000.0f;  
+            SERVER_CH_CLEAR_BIT_IF_NEEDED(I2C_SENS_ERROR_CH, slot->error_ch);
         } 
         else 
         {
+            SERVER_CH_SET_BIT_IF_NEEDED(I2C_SENS_ERROR_CH, slot->error_ch);
             msg.value[i] = NAN;
         }
     }
@@ -121,7 +132,7 @@ static void _sensor_poll_handler(struct k_work *_work)
     zbus_chan_pub(&sensor_channel_poll, &msg, K_MSEC(10));
     
     // Перезапуск воркера ровно через 500 мс
-    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(500),COMMON_WORKER);
+    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(500), COMMON_WORKER);
 }
 
 /**
@@ -133,24 +144,30 @@ static void _sensor_poll_handler(struct k_work *_work)
  */
 static int _app_worker_system_init(void)
 {
+    for (int i = 0; i < ARRAY_SIZE(sensors_cache_slots); i++) 
+    {
+        if (!device_is_ready(sensors_cache_slots[i].dev))
+        {
+            LOG_ERR("I2C Sensor not ready!");
+        }  
+    }
+
     k_work_init_delayable(&sensor_poll_dwork, _sensor_poll_handler);
     
     // Запуск первого опроса через 100 мс
-    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(100),COMMON_WORKER);
+    app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(100), COMMON_WORKER);
 
-    LOG_INF("Фоновый опрос датчиков успешно инициализирован");
+    LOG_INF("Background sensor monitoring successfully initialized!");
 
-
-    
     return 0;
 }
 
-SYS_INIT(_app_worker_system_init, APPLICATION, 50);
+SYS_INIT(_app_worker_system_init, I2C_SENS_DEAMON_INIT_LEVEL, I2C_SENS_DEAMON_INIT_PRIOR);
 
-PARAM_ROUTE_DEFINE(I2C1_TEMP1, &sensor_channel_poll, 0, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(I2C1_TEMP2, &sensor_channel_poll, 1, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(I2C1_LUX1,  &sensor_channel_poll, 2, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(I2C1_LUX2,  &sensor_channel_poll, 3, FLOAT_DATA);
+SERVER_CHANNEL_DEFINE(I2C1_TEMP1, &sensor_channel_poll, 0, FLOAT_DATA, 0);
+SERVER_CHANNEL_DEFINE(I2C1_TEMP2, &sensor_channel_poll, 1, FLOAT_DATA, 0);
+SERVER_CHANNEL_DEFINE(I2C1_LUX1,  &sensor_channel_poll, 2, FLOAT_DATA, 0);
+SERVER_CHANNEL_DEFINE(I2C1_LUX2,  &sensor_channel_poll, 3, FLOAT_DATA, 0);
 
 /***************************************************************************************************
  *                                           END OF FILE

@@ -46,7 +46,6 @@ static inline int  _dma_init(const struct scan_cont_adc_config *_config,
                              const struct device *_dev);
 static inline int  _tmr_init(TIM_TypeDef *_tmr_inst);
 static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source);
-static int         _seq_mux_adc_init(const struct device *_dev);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA

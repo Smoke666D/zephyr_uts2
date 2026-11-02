@@ -203,12 +203,17 @@ typedef enum
     EEPORM_CU_ERROR         = 0x0001 << 1,
     FRAM_MU_ERROR           = 0x0001 << 3,
     ADS1115_IU_ERROR        = 0x0001 << 4,
-    BRD_LOW_CUR_SEN_ERROR   = 0x0001 << 5,
+    AD5243_IU_ERROR         = 0x0001 << 5,
+    TMP112_MU_ERROR         = 0x0001 << 6,
+    TMP112_IU_ERROR         = 0x0001 << 7,
+    BH1750_1_IU_ERROR       = 0x0001 << 8,
+    BH1750_2_IU_ERROR       = 0x0001 << 9,
  
-} HARDWARE_ERROR_REGISTER1_t;
+} hw_error_channel_1_t;
 
-
-#define EEPROM_ERROR_CH HARDWARE_ERROR_REGISTER1
+#define AD5243_ERROR_CH   HARDWARE_ERROR_REGISTER1
+#define EEPROM_ERROR_CH   HARDWARE_ERROR_REGISTER1
+#define I2C_SENS_ERROR_CH HARDWARE_ERROR_REGISTER1
 
 typedef enum
 {    
@@ -315,10 +320,6 @@ struct system_bus_handler
         float:      bus_set_real(id, val) \
     )
 
-#define SYSTEM_BUS_SET_P(id, val) _Generic(*(val), \
-    system_can_message_t: bus_set_can     \    
-)((id), (val))
-
 
 int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
 int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
@@ -369,7 +370,7 @@ uint32_t get_channel_write_timeout(SYSTEM_BUS_ID id);
 int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
 #define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
-    system_can_message_t: bus_get_can     \    
+    system_can_message_t: bus_get_can     \
 )((id), (val))
 
 /* Базовые функции установки массива параметров */

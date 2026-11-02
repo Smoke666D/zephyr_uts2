@@ -25,9 +25,6 @@ struct telemetry_packet {
 
     // VSense (1-6)
     float    vsense[6];
-
- 
-
     // Environment (P3V3, P5V0, VIN, VDOUT1, P40V, USB, VDOUT2, VDOUT3)
     float    env[8];
 
