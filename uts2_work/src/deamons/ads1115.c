@@ -249,10 +249,10 @@ static int _ads1115_driver_init(void)
 
 SYS_INIT(_ads1115_driver_init, APPLICATION, 90);
 
-PARAM_ROUTE_DEFINE(RF_POWER,   &ads_channel, 0, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(NTC,        &ads_channel, 1, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(EXT_VSENSE, &ads_channel, 2, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(BRD_DETECT, &ads_channel, 3, FLOAT_DATA);
+SERVER_CHANNEL_DEFINE(RF_POWER,   &ads_channel, 0, FLOAT_DATA);
+SERVER_CHANNEL_DEFINE(NTC,        &ads_channel, 1, FLOAT_DATA);
+SERVER_CHANNEL_DEFINE(EXT_VSENSE, &ads_channel, 2, FLOAT_DATA);
+SERVER_CHANNEL_DEFINE(BRD_DETECT, &ads_channel, 3, FLOAT_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

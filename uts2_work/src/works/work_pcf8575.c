@@ -155,15 +155,15 @@ static int mcp23017_out_init(void)
 
 SYS_INIT(mcp23017_out_init, APPLICATION, 70);
 
-PARAM_ROUTE_DEFINE(JTAG_MUX0, &pcf_mux_channel, 0, UINT_DATA);
-PARAM_ROUTE_DEFINE(USB_FB_MUX, &pcf_mux_channel, 1, UINT_DATA);
+SERVER_CHANNEL_DEFINE(JTAG_MUX0, &pcf_mux_channel, 0, UINT_DATA);
+SERVER_CHANNEL_DEFINE(USB_FB_MUX, &pcf_mux_channel, 1, UINT_DATA);
 
-PARAM_ROUTE_DEFINE(JTAG_MUX_EN, &pcf_bool_channel, 0, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_UART, &pcf_bool_channel, 1, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT1, &pcf_bool_channel, 2, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT2, &pcf_bool_channel, 3, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT3, &pcf_bool_channel, 4, BOOL_DATA);
-PARAM_ROUTE_DEFINE(UART_FB_EN,  &pcf_bool_channel, 5, BOOL_DATA);
-PARAM_ROUTE_DEFINE(UART_RX_EN,  &pcf_bool_channel, 6, BOOL_DATA);
-PARAM_ROUTE_DEFINE(OK2,         &pcf_bool_channel, 7, BOOL_DATA);
-PARAM_ROUTE_DEFINE(OK1,         &pcf_bool_channel, 8, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(JTAG_MUX_EN, &pcf_bool_channel, 0, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(EN_USB_UART, &pcf_bool_channel, 1, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(EN_USB_OUT1, &pcf_bool_channel, 2, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(EN_USB_OUT2, &pcf_bool_channel, 3, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(EN_USB_OUT3, &pcf_bool_channel, 4, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(UART_FB_EN,  &pcf_bool_channel, 5, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(UART_RX_EN,  &pcf_bool_channel, 6, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(OK2,         &pcf_bool_channel, 7, BOOL_DATA);
+SERVER_CHANNEL_DEFINE(OK1,         &pcf_bool_channel, 8, BOOL_DATA);
