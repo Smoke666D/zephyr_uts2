@@ -18,7 +18,6 @@
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 
-
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1
 
@@ -110,8 +109,6 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(AIN_AVsense5, &pkt.vsense[4]);
     SYSTEM_BUS_GET(AIN_AVsense6, &pkt.vsense[5]);
 
-  
-
     // Env (8 шт)
     SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
     SYSTEM_BUS_GET(ENV_P5V0,  &pkt.env[1]);
@@ -164,7 +161,6 @@ void send_binary_telemetry(const struct device *uart_dev) {
 
 }
 
-
 void send_uart_stream_to_dashboard(uint8_t channel, const uint8_t *data, size_t size) {
     if (!telemetry_uart || !device_is_ready(telemetry_uart) || !data || size == 0) {
         return;
@@ -208,12 +204,7 @@ typedef struct
 } lin_queue_message_t;
 
 
-
-
-
-
 K_MSGQ_DEFINE(all_lin_rx_queue, sizeof(lin_queue_message_t), 10, 4);
-
 K_MSGQ_DEFINE(all_can_rx_queue, sizeof(can_queue_message_t), 10, 4);
 
 static void _lin1_rx_listener_cb(const struct zbus_channel *_chan)
@@ -255,8 +246,6 @@ static void _lin4_rx_listener_cb(const struct zbus_channel *_chan)
     _msg.iface_id = 4;
     k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
 }
-
-
 
 
 static void _can1_rx_listener_cb(const struct zbus_channel *_chan)
@@ -311,16 +300,11 @@ ZBUS_LISTENER_DEFINE(lin3_rx_listener, _lin3_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(lin4_rx_listener, _lin4_rx_listener_cb);
 
 
-
-
-#define PCF_NODE DT_NODELABEL(pcf_test)
-
-
 int main(void)
 {
 	LOG_INF("SYSTETM START 3");	
     struct telemetry_packet _packet_to_send;
-\   
+  
     bus_listener_attach(&can1_rx_listener,CAN1_RX);
     bus_listener_attach(&can2_rx_listener,CAN2_RX);
     bus_listener_attach(&can3_rx_listener,CAN3_RX);
@@ -329,7 +313,6 @@ int main(void)
     bus_listener_attach(&lin3_rx_listener,LIN3_RX);
     bus_listener_attach(&lin4_rx_listener,LIN4_RX);
 
-   
     k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
     bool state = true;
     while (1) 

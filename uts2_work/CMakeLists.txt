@@ -12,14 +12,12 @@ include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 
 target_include_directories(app PRIVATE 
     src 
-    src/drivers
     src/logic_signal
     src/shell
     src/midelware
 )
 
-file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
-    "src/drivers/*.c"  
+file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS 
     "src/works/*.c"  
     "src/shell/*.c" 
     "src/midelware/*c"  

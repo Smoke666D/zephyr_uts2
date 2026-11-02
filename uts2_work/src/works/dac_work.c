@@ -1,23 +1,25 @@
 #include <stdint.h>
 #include <stdlib.h>  /* Для strtol */
 #include <string.h>
-#include "ad5243.h"
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>        /* Для SYS_INIT */
 #include <zephyr/shell/shell.h>
 #include "app_worker.h"
 #include "system_bus_model.h"
+#include <zephyr/drivers/i2c.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/drivers/dac.h> /* Добавляем заголовок ЦАП */
+#include <math.h>
 
-typedef struct dac_data_msg {
-    float value[TOTAL_DAC_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
-} dac_data_msg ;
+
+LOG_MODULE_REGISTER(dac_work, LOG_LEVEL_INF);
+
+#define I2C1_NODE DT_NODELABEL(i2c1)
+
+#define AD5243_DEFAULT_ADDR 0x2F
 
 #define MAX_P40V_OUT  30.0
 #define MIN_P40V_OUT  12.0
-
-#include <math.h>
 
 /* Физические константы потенциометра AD5243BRMZ100 */
 #define AD5243_R_AB_KOHM     100.0f  /* Номинал 100 кОм [1.1.2, 1.1.8] */
@@ -26,10 +28,77 @@ typedef struct dac_data_msg {
 /* Максимальное физически достижимое сопротивление (~99.73 кОм) [1.1.2] */
 #define AD5243_R_MAX_KOHM    (AD5243_R_W_KOHM + (AD5243_R_AB_KOHM * 255.0f / 256.0f))
 
-LOG_MODULE_REGISTER(dac_work, LOG_LEVEL_INF);
+
+typedef enum {
+    AD5243_CHANNEL_1 = 0,
+    AD5243_CHANNEL_2 = 1
+} ad5243_channel_t;
+
+int ad5243_init(struct device *_i2c_dev, uint8_t _ch1_def, uint8_t _ch2_def);
+int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value);
+
+typedef struct dac_data_msg {
+    float value[TOTAL_DAC_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
+} dac_data_msg ;
 
 static struct k_work dac_work; 
 static dac_data_msg _cache_dac_data={0};
+static bool dev_is_init = false;
+
+struct i2c_dt_spec spec = 
+{
+    .addr = AD5243_DEFAULT_ADDR
+};
+
+int ad5243_init(struct device *_i2c_dev, uint8_t _ch1_def, uint8_t _ch2_def)
+{
+        int ret;
+
+    spec.bus = _i2c_dev;
+   // 1. Сначала проверяем, готова ли шина I2C
+    if (!device_is_ready(spec.bus)) {
+        LOG_ERR("I2C шина не готова!");
+        return -ENODEV;
+    }
+
+    // 2. Устанавливаем дефолтное значение для канала 1
+    ret = ad5243_set_wiper(AD5243_CHANNEL_1, _ch1_def);
+    if (ret < 0) {
+        LOG_ERR("Ошибка установки канала 1, код: %d", ret);
+        return ret;
+    }
+
+    // 3. Устанавливаем дефолтное значение для канала 2
+    ret = ad5243_set_wiper(AD5243_CHANNEL_2, _ch2_def);
+    if (ret < 0) {
+        LOG_ERR("ЁЁОшибка установки канала 2, код: %d", ret);
+        return ret;
+    }
+
+    dev_is_init = true;
+    LOG_INF("AD5243 успешно инициализирован");
+    return 0;
+}
+
+int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
+{
+    
+    uint8_t tx_data[2];
+    
+    if (channel == AD5243_CHANNEL_1) {
+        tx_data[0] = 0x00; // Выбор канала 1 (W1)
+    } else {
+        tx_data[0] = 0x80; // Выбор канала 2 (W2)
+    }
+
+    tx_data[1] = value; // Значение положения движка (0..255)
+    int ret = i2c_write_dt(&spec, tx_data, sizeof(tx_data));
+    if (ret < 0) {
+        LOG_DBG("i2c_write_dt failed with error %d for channel %d", ret, channel);
+    }
+    
+    return ret;         
+}
 
 static void dac_control_line_listener_callback(const struct zbus_channel *chan)
 {
@@ -115,7 +184,7 @@ static void dac_update_handler(struct k_work *work)
     }
 }
 
-#define I2C1_NODE DT_NODELABEL(i2c1)
+
 
 static int dac_control_init(void)
 {
