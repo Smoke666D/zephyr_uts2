@@ -11,166 +11,18 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/drivers/sensor.h>
-#include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/eeprom.h>
-#include <zephyr/drivers/i2c.h>
-#include "ad5243.h"
+
 
 #include "system_bus_model.h"
 #include "telemetry.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
-
-
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1
 
-#define SPI4_NODE DT_NODELABEL(spi4)
-
-
 
 static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0));
-
-// Объявляем буферы глобально (в статической памяти), чтобы они не лежали на стеке
-static uint8_t wr_cmd[] = { 0x02, 0x00, 0x00, 0x55 }; // WEN/Write массив
-static uint8_t rd_cmd[] = { 0x03, 0x00, 0x00, 0x00 }; // Read массив
-static uint8_t rd_resp[4] = { 0 };
-static uint8_t wren_cmd = 0x06;
-
-static void FRAM_Test(void)
-{
-    LOG_INF("Starting safe SPI test for FRAM (Static buffers)...");
-
-    const struct device *spi_dev = DEVICE_DT_GET(SPI4_NODE);
-    if (!device_is_ready(spi_dev)) {
-        LOG_ERR("SPI4 bus not ready!");
-        return;
-    }
-
-    const struct device *gpioe_dev = DEVICE_DT_GET(DT_NODELABEL(gpioe));
-    if (!device_is_ready(gpioe_dev)) {
-        LOG_ERR("GPIOE device not ready!");
-        return;
-    }
-
-    // Настраиваем PE4 как выход для CS (изначально высокий уровень - неактивен)
-    gpio_pin_configure(gpioe_dev, 4, GPIO_OUTPUT_ACTIVE);
-    gpio_pin_set(gpioe_dev, 4, 1);
-
-    struct spi_config spi_cfg = {
-        .frequency = 1000000, // 1 МГц
-        .operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB,
-        .slave = 0,
-    };
-
-    // 1. Команда WREN (Write Enable = 0x06)
-    {
-        struct spi_buf tx_buf = { .buf = &wren_cmd, .len = 1 };
-        struct spi_buf_set tx = { .buffers = &tx_buf, .count = 1 };
-        
-        gpio_pin_set(gpioe_dev, 4, 0);
-        spi_transceive(spi_dev, &spi_cfg, &tx, NULL);
-        gpio_pin_set(gpioe_dev, 4, 1);
-    }
-
-    k_busy_wait(10);
-
-    // 2. Запись байта 0x55 по адресу 0x0000
-    {
-        struct spi_buf tx_buf = { .buf = wr_cmd, .len = sizeof(wr_cmd) };
-        struct spi_buf_set tx = { .buffers = &tx_buf, .count = 1 };
-
-        gpio_pin_set(gpioe_dev, 4, 0);
-        spi_transceive(spi_dev, &spi_cfg, &tx, NULL);
-        gpio_pin_set(gpioe_dev, 4, 1);
-    }
-
-    k_busy_wait(100);
-
-    // 3. Чтение байта по адресу 0x0000
-    {
-        struct spi_buf tx_buf = { .buf = rd_cmd, .len = sizeof(rd_cmd) };
-        struct spi_buf_set tx = { .buffers = &tx_buf, .count = 1 };
-
-        struct spi_buf rx_buf = { .buf = rd_resp, .len = sizeof(rd_resp) };
-        struct spi_buf_set rx = { .buffers = &rx_buf, .count = 1 };
-
-        gpio_pin_set(gpioe_dev, 4, 0);
-        spi_transceive(spi_dev, &spi_cfg, &tx, &rx);
-        gpio_pin_set(gpioe_dev, 4, 1);
-
-        LOG_INF("FRAM Read result -> Opcode resp: 0x%02X, AddrHi: 0x%02X, AddrLo: 0x%02X, DATA: 0x%02X", 
-                rd_resp[0], rd_resp[1], rd_resp[2], rd_resp[3]);
-    }
-}
-
-
-#define EEPROM_1_NODE DT_NODELABEL(eeprom_1)
-#define EEPROM_2_NODE DT_NODELABEL(eeprom_2)
-
- const struct device *dev1 = DEVICE_DT_GET(EEPROM_1_NODE);
-const struct device *dev2 = DEVICE_DT_GET(EEPROM_2_NODE);
-
-
-void EEPROM_Test()
-{
-/* Проверяем доступность первой */
-    if (!device_is_ready(dev1)) {
-        LOG_ERR("EEPROM 1 (0x50) device is not ready!");
-        
-    }
-    LOG_INF("EEPROM 1 (0x50) is ready.");
-
-    /* Проверяем доступность второй */
-    if (!device_is_ready(dev2)) {
-        LOG_ERR("EEPROM 2 (0x52) device is not ready!");
-        
-    }
-    LOG_INF("EEPROM 2 (0x52) is ready.");
-
-    char msg1[] = "Chip #1: EEPROM 0x50 OK";
-    char msg2[] = "Chip #2: EEPROM 0x52 OK";
-    
-    char buf1[35] = {0};
-    char buf2[35] = {0};
-    off_t offset = 0;
-
-    /* --- Тестируем первую микросхему (0x50) --- */
-    if (eeprom_write(dev1, offset, msg1, sizeof(msg1)) < 0) {
-        LOG_ERR("Failed to write to EEPROM 1");
-    } else {
-        LOG_INF("EEPROM 1 write: '%s'", msg1);
-    }
-
-    k_msleep(10); // Время на внутреннюю запись цикла EEPROM
-
-    if (eeprom_read(dev1, offset, buf1, sizeof(msg1)) < 0) {
-        LOG_ERR("Failed to read from EEPROM 1");
-    } else {
-        LOG_INF("EEPROM 1 read:  '%s'", buf1);
-    }
-
-    /* --- Тестируем вторую микросхему (0x52) --- */
-    if (eeprom_write(dev2, offset, msg2, sizeof(msg2)) < 0) {
-        LOG_ERR("Failed to write to EEPROM 2");
-    } else {
-        LOG_INF("EEPROM 2 write: '%s'", msg2);
-    }
-
-    k_msleep(10);
-
-    if (eeprom_read(dev2, offset, buf2, sizeof(msg2)) < 0) {
-        LOG_ERR("Failed to read from EEPROM 2");
-    } else {
-        LOG_INF("EEPROM 2 read:  '%s'", buf2);
-    }
-
-    
-}
-#define I2C1_NODE DT_NODELABEL(i2c1)
-
 
 void send_can_message_binary(const struct device *uart_dev, uint8_t can_num, const system_can_message_t *msg) {
     if (!uart_dev || !device_is_ready(uart_dev) || !msg) {
@@ -443,8 +295,6 @@ static void telemetry_timer_expiry(struct k_timer *timer)
 {
 
     send_binary_telemetry(telemetry_uart);  
-
-
 }
 
 // Инициализация периодического таймера на 1 кГц (1 мс)
@@ -458,22 +308,13 @@ ZBUS_LISTENER_DEFINE(lin2_rx_listener, _lin2_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(lin3_rx_listener, _lin3_rx_listener_cb);
 ZBUS_LISTENER_DEFINE(lin4_rx_listener, _lin4_rx_listener_cb);
 
-
-
-
 #define PCF_NODE DT_NODELABEL(pcf_test)
-
 
 int main(void)
 {
-	LOG_INF("SYSTETM START 3");	
+	LOG_INF("SYSTETM START");	
     struct telemetry_packet _packet_to_send;
-/*	int ret;
-    EEPROM_Test();
-	FRAM_Test();
-	init_all_sensors();
-    //settings_fram_init();
-    */    
+
     bus_listener_attach(&can1_rx_listener,CAN1_RX);
     bus_listener_attach(&can2_rx_listener,CAN2_RX);
     bus_listener_attach(&can3_rx_listener,CAN3_RX);
@@ -482,13 +323,10 @@ int main(void)
     bus_listener_attach(&lin3_rx_listener,LIN3_RX);
     bus_listener_attach(&lin4_rx_listener,LIN4_RX);
 
-   
-
     k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
     bool state = true;
     while (1) 
-	{    
-      
+	{          
         can_queue_message_t rx_msg;       
         while (k_msgq_get(&all_can_rx_queue, &rx_msg, K_NO_WAIT) == 0) 
         {
@@ -513,6 +351,4 @@ int main(void)
     }
 	return 0;
 }
-
-
 
