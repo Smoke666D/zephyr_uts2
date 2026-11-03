@@ -190,6 +190,7 @@ typedef enum
     SETTING_3_3_CUR_LOW,
     SETTING_5_CUR_HIGH,
     SETTING_5_CUR_LOW,
+    UART_DETECT_RX,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
 } SYSTEM_BUS_ID;

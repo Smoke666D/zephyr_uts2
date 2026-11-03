@@ -44,15 +44,15 @@ ZBUS_CHAN_DEFINE(pcf_mux_channel,
                  ZBUS_MSG_INIT(0));
 
 static const uint8_t mcp_pin_mapping[9] = {
-    8,  // 0 -> GPA0
-    12,  // 1 -> GPA4
-    13,  // 2 -> GPA5
-    14,  // 3 -> GPA6
-    15,  // 4 -> GPA7
-    3,  // 5 -> GPB3 (индекс 8 в маске = порт B, пин 3)
-    5, // 6 -> GPB5
-    6, // 7 -> GPB6
-    7  // 8 -> GPB7
+    8,  
+    12,  
+    13,  
+    14,  
+    15, 
+    3,  
+    5, 
+    6,
+    7 
 };
 
 static void mcp23017_dump_all_registers(const struct i2c_dt_spec *spec, const char *tag)

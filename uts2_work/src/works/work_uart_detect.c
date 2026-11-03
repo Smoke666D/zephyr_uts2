@@ -45,7 +45,7 @@ static void uart_detect_isr(const struct device *dev, void *user_data)
 
         uart_irq_update(dev);
 
-    if (uart_irq_rx_ready(dev)) {
+        if (uart_irq_rx_ready(dev)) {
         uint8_t temp_buf[16];
         int recv_len;
 
@@ -137,10 +137,12 @@ static int uart_detect_init(void)
         UART_CFG_DATA_BITS_8
     );
 
-    LOG_INF("UART_DETECT init: публикация дефолтных настроек...");
+    LOG_INF("UART_DETECT init: default setting init...");
     zbus_chan_pub(&uart_detect_cfg_chan, &default_cfg, K_FOREVER);
 
     return 0;
 }
 
 SYS_INIT(uart_detect_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+
+PARAM_ROUTE_DEFINE(UART_DETECT_RX, &uart_detect_rx_chan, 0, UINT_DATA);

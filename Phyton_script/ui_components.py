@@ -826,6 +826,190 @@ def build_dashboard(ports_refs, ui_labels):
         # ==========================================
         ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
         build_oscilloscope_panel()
+# ==========================================
+        # БЛОК: АВТООПРЕДЕЛЕНИЕ ПОРТОВ (USB UART HUB TEST)
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            ui.label('Автоопределение портов').classes(
+                'text-sm font-bold text-yellow-300 text-center w-full mb-1.5'
+            )
 
+            discovered_ports = []
+            selected_test_ports = set()
+            test_serial_handles = {}
+            is_testing_active = False
+
+            checkboxes_box = ui.row().classes('w-full gap-4 items-center justify-center my-1')
+
+            async def wait_for_shell_response(target_str, timeout=5.0):
+                """Ожидает появление target_str в Shell-порту до timeout секунд"""
+                curr_shell = shell_ref.get('ser')
+                if not curr_shell or not curr_shell.is_open:
+                    return False
+
+                start_t = time.time()
+                recv_accum = ""
+                # Нормализуем строку поиска (без пробелов по краям)
+                clean_target = target_str.strip().lower()
+
+                while time.time() - start_t < timeout:
+                    if curr_shell.in_waiting > 0:
+                        raw = curr_shell.read(curr_shell.in_waiting)
+                        text_chunk = raw.decode('utf-8', errors='ignore')
+                        recv_accum += text_chunk
+                        # Проверяем совпадение без учета регистра
+                        if clean_target in recv_accum.lower():
+                            print(f'[SHELL ACK]: Найдено подтверждение "{target_str}"')
+                            return True
+                    await asyncio.sleep(0.05)
+                
+                print(f'[SHELL TIMEOUT]: Не дождались "{target_str}". Буфер: {repr(recv_accum)}')
+                return False
+
+            async def on_enable_click():
+                nonlocal discovered_ports, selected_test_ports
+                curr_shell = shell_ref.get('ser')
+                if not curr_shell or not curr_shell.is_open:
+                    ui.notify('Shell порт закрыт! Сначала откройте Shell.', type='warning')
+                    return
+
+                btn_enable.disable()
+
+                # Снимаем слепок портов ДО включения чипа
+                initial_ports = set(get_available_ports())
+                print(f'[AUTODETECT] Порты до включения: {initial_ports}')
+
+                # Шаг 1: I2C_OUT2 2 ON
+                ui.notify('Шаг 1: Отправка I2C_OUT2 2 ON...', type='info')
+                curr_shell.reset_input_buffer()
+                curr_shell.write(b'I2C_OUT2 2 ON\r\n')
+                ok1 = await wait_for_shell_response("EN_USB_UART (2) set to ON", timeout=5.0)
+                if not ok1:
+                    ui.notify('Таймаут ответа на I2C_OUT2 2 ON!', type='negative')
+                    btn_enable.enable()
+                    return
+
+                # Небольшая пауза между командами
+                await asyncio.sleep(0.1)
+
+                # Шаг 2: I2C_OUT2 6 ON
+                ui.notify('Шаг 2: Отправка I2C_OUT2 6 ON...', type='info')
+                curr_shell.write(b'I2C_OUT2 6 ON\r\n')
+                ok2 = await wait_for_shell_response("UART_FB_EN (6) set to ON", timeout=5.0)
+                if not ok2:
+                    ui.notify('Таймаут ответа на I2C_OUT2 6 ON!', type='negative')
+                    btn_enable.enable()
+                    return
+
+                # Шаг 3: Динамическое ожидание регистрации 4 портов в ОС (до 8 секунд)
+                ui.notify('Ожидание подключения USB-устройства в Windows...', type='info')
+                new_ports = []
+                scan_start = time.time()
+
+                while time.time() - scan_start < 8.0:
+                    current_ports = set(get_available_ports())
+                    diff = sorted(list(current_ports - initial_ports))
+                    if len(diff) >= 4:
+                        new_ports = diff
+                        break
+                    # Проверяем каждые 500 мс
+                    await asyncio.sleep(0.5)
+
+                if not new_ports:
+                    # Если за 8 секунд 4 порта не набралось, берем всё, что появилось
+                    current_ports = set(get_available_ports())
+                    new_ports = sorted(list(current_ports - initial_ports))
+
+                print(f'[AUTODETECT] Итог сканирования. Найдено новых портов: {new_ports}')
+                discovered_ports = new_ports
+                selected_test_ports = set(new_ports)
+
+                # Отрисовка чекбоксов
+                checkboxes_box.clear()
+                with checkboxes_box:
+                    if not new_ports:
+                        ui.label('Новые COM-порты не появились в системе').classes('text-xs text-rose-400')
+                    else:
+                        for p_name in new_ports:
+                            def make_cb_handler(name):
+                                def on_change(e):
+                                    if e.value:
+                                        selected_test_ports.add(name)
+                                    else:
+                                        selected_test_ports.discard(name)
+                                return on_change
+
+                            ui.checkbox(p_name, value=True, on_change=make_cb_handler(p_name)).classes('text-white text-xs')
+
+                if len(new_ports) == 4:
+                    ui.notify(f'Успешно! Обнаружены все 4 порта: {", ".join(new_ports)}', type='positive')
+                elif len(new_ports) > 0:
+                    ui.notify(f'Внимание: обнаружено только {len(new_ports)} из 4 портов: {", ".join(new_ports)}', type='warning')
+                else:
+                    ui.notify('Не удалось зафиксировать появление новых портов в диспетчере устройств', type='negative')
+
+                btn_enable.enable()
+
+            # Функция отправки "test" раз в 100 мс
+            def send_test_tick():
+                if not is_testing_active:
+                    return
+                for p_name, ser_h in list(test_serial_handles.items()):
+                    if ser_h and ser_h.is_open:
+                        try:
+                            ser_h.write(b'test\r\n')
+                        except Exception as e:
+                            print(f'[AUTOTEST SEND ERROR {p_name}]: {e}')
+
+            test_timer = ui.timer(0.1, send_test_tick, active=False)
+
+            def toggle_test():
+                nonlocal is_testing_active, test_serial_handles
+                if not is_testing_active:
+                    if not selected_test_ports:
+                        ui.notify('Не выбрано ни одного порта для теста!', type='warning')
+                        return
+
+                    opened_count = 0
+                    test_serial_handles.clear()
+                    for p_name in selected_test_ports:
+                        try:
+                            s = serial.Serial(p_name, baudrate=115200, timeout=0.05)
+                            test_serial_handles[p_name] = s
+                            opened_count += 1
+                        except Exception as e:
+                            ui.notify(f'Ошибка открытия {p_name}: {e}', type='negative')
+
+                    if opened_count == 0:
+                        return
+
+                    is_testing_active = True
+                    test_timer.activate()
+                    btn_test.text = 'СТОП'
+                    btn_test.classes(remove='bg-emerald-600', add='bg-red-600')
+                    ui.notify(f'Тест запущен ({opened_count} портов, 100 мс)', type='positive')
+                else:
+                    is_testing_active = False
+                    test_timer.deactivate()
+
+                    for p_name, ser_h in test_serial_handles.items():
+                        try:
+                            if ser_h and ser_h.is_open:
+                                ser_h.close()
+                        except Exception:
+                            pass
+                    test_serial_handles.clear()
+
+                    btn_test.text = 'СТАРТ'
+                    btn_test.classes(remove='bg-red-600', add='bg-emerald-600')
+                    ui.notify('Тест остановлен. Порты закрыты.', type='info')
+
+            with ui.row().classes('w-full justify-center gap-4 items-center mt-1'):
+                btn_enable = ui.button('ВКЛЮЧИТЬ', on_click=on_enable_click).classes(
+                    'bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs py-1.5 px-4 rounded shadow'
+                )
+                btn_test = ui.button('СТАРТ', on_click=toggle_test).classes(
+                    'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 px-4 rounded shadow'
+                )
     container.make_sortable()
     return can_logs_dict, lin_logs_dict, raw_logs_dict
