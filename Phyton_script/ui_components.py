@@ -757,7 +757,217 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 10. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
+        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART
+        # ==========================================
+        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+            ui.label('Автоопределение и калибровка портов UART').classes(
+                'text-sm font-bold text-yellow-300 text-center w-full mb-1.5'
+            )
+
+            port_labels_box = ui.row().classes('w-full gap-3 items-center justify-center my-2')
+
+            async def shell_cmd_wait(cmd_bytes, target_ack, timeout=4.0):
+                curr_shell = shell_ref.get('ser')
+                if not curr_shell or not curr_shell.is_open:
+                    return False, ""
+
+                curr_shell.reset_input_buffer()
+                curr_shell.write(cmd_bytes)
+                print(f'[SHELL TX]: {cmd_bytes.strip().decode(errors="ignore")}')
+
+                start_t = time.time()
+                accum = ""
+                clean_target = target_ack.strip().lower()
+
+                while time.time() - start_t < timeout:
+                    if curr_shell.in_waiting > 0:
+                        raw = curr_shell.read(curr_shell.in_waiting)
+                        accum += raw.decode('utf-8', errors='ignore')
+                        if clean_target in accum.lower():
+                            print(f'[SHELL ACK OK]: Найдено "{target_ack}"')
+                            return True, accum
+                    await asyncio.sleep(0.04)
+
+                print(f'[SHELL ACK TIMEOUT]: Не дождались "{target_ack}". Буфер: {repr(accum)}')
+                return False, accum
+
+            async def run_full_detect_procedure():
+                curr_shell = shell_ref.get('ser')
+                if not curr_shell or not curr_shell.is_open:
+                    ui.notify('Shell порт закрыт! Сначала откройте Shell.', type='warning')
+                    return
+
+                btn_start_detect.disable()
+                port_labels_box.clear()
+
+                # Шаг 1: Выключение EN_USB_UART
+                ui.notify('Шаг 1: Выключение EN_USB_UART...', type='info')
+                ok, _ = await shell_cmd_wait(b'I2C_OUT2 2 OFF\r\n', 'EN_USB_UART (2) set to OFF')
+                if not ok:
+                    ui.notify('Ошибка/Таймаут I2C_OUT2 2 OFF', type='negative')
+                    btn_start_detect.enable()
+                    return
+
+                # Шаг 2: Выключение UART_FB_EN
+                ui.notify('Шаг 2: Выключение UART_FB_EN...', type='info')
+                ok, _ = await shell_cmd_wait(b'I2C_OUT2 6 OFF\r\n', 'UART_FB_EN (6) set to OFF')
+                if not ok:
+                    ui.notify('Ошибка/Таймаут I2C_OUT2 6 OFF', type='negative')
+                    btn_start_detect.enable()
+                    return
+
+                # Шаг 3: Переключение MUXFB на канал 1
+                ui.notify('Шаг 3: Переключение MUXFB на канал 1...', type='info')
+                ok, _ = await shell_cmd_wait(b'I2C_OUT2 MUXFB 1\r\n', 'USB_FB_MUX set to 1')
+                if not ok:
+                    ui.notify('Ошибка/Таймаут I2C_OUT2 MUXFB 1', type='negative')
+                    btn_start_detect.enable()
+                    return
+
+                ui.notify('Ожидание отключения старых портов в ОС (2 сек)...', type='info')
+                await asyncio.sleep(2.0)
+
+                # Снимаем слепок базовых портов
+                base_ports = set(get_available_ports())
+                print(f'[DETECT] Базовые порты системы (без хаба): {base_ports}')
+
+                # Шаг 4: Включение EN_USB_UART
+                ui.notify('Шаг 4: Включение EN_USB_UART...', type='info')
+                ok, _ = await shell_cmd_wait(b'I2C_OUT2 2 ON\r\n', 'EN_USB_UART (2) set to ON')
+                if not ok:
+                    ui.notify('Ошибка/Таймаут I2C_OUT2 2 ON', type='negative')
+                    btn_start_detect.enable()
+                    return
+
+                # Шаг 5: Включение UART_FB_EN
+                ui.notify('Шаг 5: Включение UART_FB_EN...', type='info')
+                ok, _ = await shell_cmd_wait(b'I2C_OUT2 6 ON\r\n', 'UART_FB_EN (6) set to ON')
+                if not ok:
+                    ui.notify('Ошибка/Таймаут I2C_OUT2 6 ON', type='negative')
+                    btn_start_detect.enable()
+                    return
+                ui.notify('Шаг 6: Запуск UART_DETECT start...', type='info')
+                curr_shell.write(b'UART_DETECT start\r\n')
+                print('[SHELL TX]: UART_DETECT start')
+                await asyncio.sleep(0.2)
+
+                ui.notify('Ожидание подключения 4 новых COM-портов в Windows...', type='info')
+                scan_start = time.time()
+                new_ports = []
+
+                while time.time() - scan_start < 8.0:
+                    curr_ports = set(get_available_ports())
+                    diff = sorted(list(curr_ports - base_ports))
+                    if len(diff) >= 4:
+                        new_ports = diff
+                        break
+                    await asyncio.sleep(0.5)
+
+                if len(new_ports) < 4:
+                    curr_ports = set(get_available_ports())
+                    new_ports = sorted(list(curr_ports - base_ports))
+
+                print(f'[DETECT] Обнаруженные порты хаба: {new_ports}')
+                if len(new_ports) < 4:
+                    ui.notify(f'Найдено только {len(new_ports)} из 4 портов ({", ".join(new_ports)}). Проверьте хаб!', type='negative')
+                    btn_start_detect.enable()
+                    return
+
+                label_widgets = {}
+                with port_labels_box:
+                    for p in new_ports:
+                        with ui.card().classes('bg-slate-700 py-1.5 px-3 rounded text-center border border-slate-600 min-w-[130px]'):
+                            ui.label(p).classes('text-xs font-mono font-bold text-sky-300')
+                            lbl = ui.label('Определение...').classes('text-[11px] font-mono text-amber-400')
+                            label_widgets[p] = lbl
+
+                open_handles = {}
+                for p in new_ports:
+                    try:
+                        s = serial.Serial(p, baudrate=115200, timeout=0.05)
+                        open_handles[p] = s
+                    except Exception as e:
+                        print(f'[DETECT ERROR]: Не удалось открыть {p}: {e}')
+
+                remaining_ports = list(new_ports)
+                identified_mapping = {}
+
+                for channel_num in range(1, 5):
+                    ui.notify(f'Поиск физического Порта {channel_num}...', type='info')
+
+                    if channel_num > 1:
+                        cmd = f'I2C_OUT2 MUXFB {channel_num}\r\n'.encode()
+                        target = f'USB_FB_MUX set to {channel_num}'
+                        ok, _ = await shell_cmd_wait(cmd, target, timeout=4.0)
+                        if not ok:
+                            ui.notify(f'Ошибка переключения на MUXFB {channel_num}', type='warning')
+                        await asyncio.sleep(0.15)
+
+                    matched_port = None
+                    test_payload = b'TEST'
+
+                    for attempt in range(3):
+                        if matched_port:
+                            break
+
+                        for candidate_p in list(remaining_ports):
+                            handle = open_handles.get(candidate_p)
+                            if not handle or not handle.is_open:
+                                continue
+
+                            curr_shell.reset_input_buffer()
+                            curr_shell.write(b'UART_DETECT\r\n')
+                            await asyncio.sleep(0.05)
+
+                            handle.reset_input_buffer()
+                            handle.reset_output_buffer()
+                            handle.write(test_payload + b'\r\n')
+                            print(f'[DETECT PING] TEST -> {candidate_p} (для Порта {channel_num})...')
+
+                            t_listen = time.time()
+                            urc_buf = ""
+                            got_urc = False
+
+                            while time.time() - t_listen < 0.6:
+                                if curr_shell.in_waiting > 0:
+                                    urc_buf += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
+                                    if '+UART_DETECT' in urc_buf:
+                                        print(f'[DETECT URC MATCH] {candidate_p} -> Порт {channel_num}! URC: {urc_buf.strip()}')
+                                        got_urc = True
+                                        break
+                                await asyncio.sleep(0.04)
+
+                            if got_urc:
+                                matched_port = candidate_p
+                                break
+
+                    if matched_port:
+                        identified_mapping[channel_num] = matched_port
+                        remaining_ports.remove(matched_port)
+                        lbl_w = label_widgets.get(matched_port)
+                        if lbl_w:
+                            lbl_w.set_text(f'Порт {channel_num}')
+                            lbl_w.classes(remove='text-amber-400', add='text-emerald-400 font-bold')
+                        ui.notify(f'Успех! {matched_port} определен как Порт {channel_num}', type='positive')
+                    else:
+                        ui.notify(f'Не удалось определить порт для MUXFB {channel_num}', type='warning')
+
+                for p, h in open_handles.items():
+                    try:
+                        h.close()
+                    except Exception:
+                        pass
+
+                btn_start_detect.enable()
+                ui.notify('Процедура автоопределения завершена!', type='info')
+
+            with ui.row().classes('w-full justify-center gap-4 items-center mt-1'):
+                btn_start_detect = ui.button('СТАРТ', on_click=run_full_detect_procedure).classes(
+                    'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-6 rounded shadow'
+                )
+
+        # ==========================================
+        # 11. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Логирование данных в файл (CSV/Excel)').classes(
@@ -822,194 +1032,10 @@ def build_dashboard(ports_refs, ui_labels):
                 )
 
         # ==========================================
-        # 11. ОСЦИЛЛОГРАФ (В самом конце)
+        # 12. ОСЦИЛЛОГРАФ (В самом конце)
         # ==========================================
         ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
         build_oscilloscope_panel()
-# ==========================================
-        # БЛОК: АВТООПРЕДЕЛЕНИЕ ПОРТОВ (USB UART HUB TEST)
-        # ==========================================
-        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            ui.label('Автоопределение портов').classes(
-                'text-sm font-bold text-yellow-300 text-center w-full mb-1.5'
-            )
 
-            discovered_ports = []
-            selected_test_ports = set()
-            test_serial_handles = {}
-            is_testing_active = False
-
-            checkboxes_box = ui.row().classes('w-full gap-4 items-center justify-center my-1')
-
-            async def wait_for_shell_response(target_str, timeout=5.0):
-                """Ожидает появление target_str в Shell-порту до timeout секунд"""
-                curr_shell = shell_ref.get('ser')
-                if not curr_shell or not curr_shell.is_open:
-                    return False
-
-                start_t = time.time()
-                recv_accum = ""
-                # Нормализуем строку поиска (без пробелов по краям)
-                clean_target = target_str.strip().lower()
-
-                while time.time() - start_t < timeout:
-                    if curr_shell.in_waiting > 0:
-                        raw = curr_shell.read(curr_shell.in_waiting)
-                        text_chunk = raw.decode('utf-8', errors='ignore')
-                        recv_accum += text_chunk
-                        # Проверяем совпадение без учета регистра
-                        if clean_target in recv_accum.lower():
-                            print(f'[SHELL ACK]: Найдено подтверждение "{target_str}"')
-                            return True
-                    await asyncio.sleep(0.05)
-                
-                print(f'[SHELL TIMEOUT]: Не дождались "{target_str}". Буфер: {repr(recv_accum)}')
-                return False
-
-            async def on_enable_click():
-                nonlocal discovered_ports, selected_test_ports
-                curr_shell = shell_ref.get('ser')
-                if not curr_shell or not curr_shell.is_open:
-                    ui.notify('Shell порт закрыт! Сначала откройте Shell.', type='warning')
-                    return
-
-                btn_enable.disable()
-
-                # Снимаем слепок портов ДО включения чипа
-                initial_ports = set(get_available_ports())
-                print(f'[AUTODETECT] Порты до включения: {initial_ports}')
-
-                # Шаг 1: I2C_OUT2 2 ON
-                ui.notify('Шаг 1: Отправка I2C_OUT2 2 ON...', type='info')
-                curr_shell.reset_input_buffer()
-                curr_shell.write(b'I2C_OUT2 2 ON\r\n')
-                ok1 = await wait_for_shell_response("EN_USB_UART (2) set to ON", timeout=5.0)
-                if not ok1:
-                    ui.notify('Таймаут ответа на I2C_OUT2 2 ON!', type='negative')
-                    btn_enable.enable()
-                    return
-
-                # Небольшая пауза между командами
-                await asyncio.sleep(0.1)
-
-                # Шаг 2: I2C_OUT2 6 ON
-                ui.notify('Шаг 2: Отправка I2C_OUT2 6 ON...', type='info')
-                curr_shell.write(b'I2C_OUT2 6 ON\r\n')
-                ok2 = await wait_for_shell_response("UART_FB_EN (6) set to ON", timeout=5.0)
-                if not ok2:
-                    ui.notify('Таймаут ответа на I2C_OUT2 6 ON!', type='negative')
-                    btn_enable.enable()
-                    return
-
-                # Шаг 3: Динамическое ожидание регистрации 4 портов в ОС (до 8 секунд)
-                ui.notify('Ожидание подключения USB-устройства в Windows...', type='info')
-                new_ports = []
-                scan_start = time.time()
-
-                while time.time() - scan_start < 8.0:
-                    current_ports = set(get_available_ports())
-                    diff = sorted(list(current_ports - initial_ports))
-                    if len(diff) >= 4:
-                        new_ports = diff
-                        break
-                    # Проверяем каждые 500 мс
-                    await asyncio.sleep(0.5)
-
-                if not new_ports:
-                    # Если за 8 секунд 4 порта не набралось, берем всё, что появилось
-                    current_ports = set(get_available_ports())
-                    new_ports = sorted(list(current_ports - initial_ports))
-
-                print(f'[AUTODETECT] Итог сканирования. Найдено новых портов: {new_ports}')
-                discovered_ports = new_ports
-                selected_test_ports = set(new_ports)
-
-                # Отрисовка чекбоксов
-                checkboxes_box.clear()
-                with checkboxes_box:
-                    if not new_ports:
-                        ui.label('Новые COM-порты не появились в системе').classes('text-xs text-rose-400')
-                    else:
-                        for p_name in new_ports:
-                            def make_cb_handler(name):
-                                def on_change(e):
-                                    if e.value:
-                                        selected_test_ports.add(name)
-                                    else:
-                                        selected_test_ports.discard(name)
-                                return on_change
-
-                            ui.checkbox(p_name, value=True, on_change=make_cb_handler(p_name)).classes('text-white text-xs')
-
-                if len(new_ports) == 4:
-                    ui.notify(f'Успешно! Обнаружены все 4 порта: {", ".join(new_ports)}', type='positive')
-                elif len(new_ports) > 0:
-                    ui.notify(f'Внимание: обнаружено только {len(new_ports)} из 4 портов: {", ".join(new_ports)}', type='warning')
-                else:
-                    ui.notify('Не удалось зафиксировать появление новых портов в диспетчере устройств', type='negative')
-
-                btn_enable.enable()
-
-            # Функция отправки "test" раз в 100 мс
-            def send_test_tick():
-                if not is_testing_active:
-                    return
-                for p_name, ser_h in list(test_serial_handles.items()):
-                    if ser_h and ser_h.is_open:
-                        try:
-                            ser_h.write(b'test\r\n')
-                        except Exception as e:
-                            print(f'[AUTOTEST SEND ERROR {p_name}]: {e}')
-
-            test_timer = ui.timer(0.1, send_test_tick, active=False)
-
-            def toggle_test():
-                nonlocal is_testing_active, test_serial_handles
-                if not is_testing_active:
-                    if not selected_test_ports:
-                        ui.notify('Не выбрано ни одного порта для теста!', type='warning')
-                        return
-
-                    opened_count = 0
-                    test_serial_handles.clear()
-                    for p_name in selected_test_ports:
-                        try:
-                            s = serial.Serial(p_name, baudrate=115200, timeout=0.05)
-                            test_serial_handles[p_name] = s
-                            opened_count += 1
-                        except Exception as e:
-                            ui.notify(f'Ошибка открытия {p_name}: {e}', type='negative')
-
-                    if opened_count == 0:
-                        return
-
-                    is_testing_active = True
-                    test_timer.activate()
-                    btn_test.text = 'СТОП'
-                    btn_test.classes(remove='bg-emerald-600', add='bg-red-600')
-                    ui.notify(f'Тест запущен ({opened_count} портов, 100 мс)', type='positive')
-                else:
-                    is_testing_active = False
-                    test_timer.deactivate()
-
-                    for p_name, ser_h in test_serial_handles.items():
-                        try:
-                            if ser_h and ser_h.is_open:
-                                ser_h.close()
-                        except Exception:
-                            pass
-                    test_serial_handles.clear()
-
-                    btn_test.text = 'СТАРТ'
-                    btn_test.classes(remove='bg-red-600', add='bg-emerald-600')
-                    ui.notify('Тест остановлен. Порты закрыты.', type='info')
-
-            with ui.row().classes('w-full justify-center gap-4 items-center mt-1'):
-                btn_enable = ui.button('ВКЛЮЧИТЬ', on_click=on_enable_click).classes(
-                    'bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs py-1.5 px-4 rounded shadow'
-                )
-                btn_test = ui.button('СТАРТ', on_click=toggle_test).classes(
-                    'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 px-4 rounded shadow'
-                )
     container.make_sortable()
     return can_logs_dict, lin_logs_dict, raw_logs_dict

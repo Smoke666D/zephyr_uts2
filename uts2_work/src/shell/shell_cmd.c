@@ -8,7 +8,7 @@
 #include "shell_common.h"
 
  /* ------------------------------------------------------------------ */
-/*  Аналогоавые выхода                                                */
+/*  Аналоговые выходы                                                 */
 /* ------------------------------------------------------------------ */    
 static int cmd_dac_set(const struct shell *sh, size_t argc, char **argv)
 {
@@ -28,13 +28,13 @@ static int cmd_dac_set(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    SYSTEM_BUS_SET(DAC_VALUE,voltage);
+    SYSTEM_BUS_SET(DAC_VALUE, voltage);
     
     return 0;
 }
 
 SHELL_CMD_REGISTER(dac_set, NULL, 
-                   "Set DAC output value: dac_set <0-4095>", 
+                   "Set DAC output value: dac_set <0-30>", 
                    cmd_dac_set);
 
 uint32_t adj_res_name[] =
@@ -43,58 +43,40 @@ uint32_t adj_res_name[] =
     ADJ_RES2,  
 };
 
-
 static int cmd_adj_res_set(const struct shell *sh, size_t argc, char **argv)
 {
-    LOW_CUR_OUT_STATE_t out_state;
-    /* Проверяем количество переданных аргументов (команда + 2 параметра) */
     if (argc != 3)
     {
-        shell_error(sh, "Usage: discrete_set <1-%d> <ON/OFF>", 2 );
+        shell_error(sh, "Usage: adj_res_set <1-%d> <0.0-100.0>", 2);
         return -EINVAL;
     }
     
     char *endptr;
     long channel_num = strtol(argv[1], &endptr, 10);
-    if (*endptr != '\0' || channel_num < 1 || channel_num > 2 ) 
+    if (*endptr != '\0' || channel_num < 1 || channel_num > 2) 
     {
-        shell_error(sh, "Invalid channel: %s (Must be 1 to %d)", argv[1], 2 );
+        shell_error(sh, "Invalid channel: %s (Must be 1 to %d)", argv[1], 2);
         return -EINVAL;
     }
 
-
-     /* Парсим вещественное значение напряжения (float) из аргумента */
-  
     float resistance = strtof(argv[2], &endptr);
     
-    /* Проверяем корректность парсинга и границы диапазона */
     if (*endptr != '\0' || resistance < 0.0f || resistance > 100.0f) 
     {
-        shell_error(sh, "Invalid voltage: %s (Must be between 0.0 and 100.0 kOm)", argv[2]);
+        shell_error(sh, "Invalid resistance: %s (Must be between 0.0 and 100.0 kOm)", argv[2]);
         return -EINVAL;
     }
 
-    
-    /* 4. Выполняем безопасный атомарный Zero-Copy доступ к каналу Zbus [2] */
-    SYSTEM_BUS_SET(adj_res_name[channel_num-1],(float)resistance);
+    SYSTEM_BUS_SET(adj_res_name[channel_num - 1], (float)resistance);
     return 0;
 }
 
 SHELL_CMD_REGISTER(adj_res_set, NULL, 
-                   "Set state of out: out_set <1-18> <IN/HI/LO>", 
+                   "Set resistance value: adj_res_set <1-2> <0.0-100.0>", 
                    cmd_adj_res_set);                   
-
-
-
-
-                   
-
-
-
 
 /* 
  * Обработчик команд консоли для отправки данных в LIN/UART каналы.
- * Синтаксис: lin_send <канал 1-4> <байт1> [байт2] [байт3] ...
  */
 static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
 {
@@ -104,17 +86,15 @@ static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
         return -EINVAL;
     }
 
-    // 1. Парсим номер канала (1, 2, 3 или 4)
     int channel = atoi(argv[1]);
     if (channel < 1 || channel > 4) {
         shell_error(sh, "Ошибка: Номер канала должен быть от 1 до 4.");
         return -EINVAL;
     }
 
-    // 2. Определяем SYSTEM_BUS_ID для передачи в зависимости от канала
     SYSTEM_BUS_ID target_bus_id;
     switch (channel) {
-        case 1: target_bus_id = LIN1_TX; break; // Замени на свои реальные ID из system_bus_model.h
+        case 1: target_bus_id = LIN1_TX; break;
         case 2: target_bus_id = LIN2_TX; break;
         case 3: target_bus_id = LIN3_TX; break;
         case 4: target_bus_id = LIN4_TX; break;
@@ -123,9 +103,7 @@ static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
 
     shell_print(sh, "Отправка в канал LIN %d (аргументов: %zu)...", channel, argc - 2);
 
-    // 3. Парсим все последующие аргументы как байты данных
     for (size_t i = 2; i < argc; i++) {
-        // Поддерживаем как десятичный формат (например, 255), так и hex (например, 0xFF)
         char *endptr;
         unsigned long byte_val = strtoul(argv[i], &endptr, 0);
 
@@ -136,8 +114,6 @@ static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
 
         uint8_t byte_data = (uint8_t)byte_val;
 
-        // 4. Перекладываем байт через твой макрос SYSTEM_BUS_SET
-        // (Предполагается, что на стороне шины настроен обработчик u32 или raw для этих ID)
         int err = SYSTEM_BUS_SET(target_bus_id, (float)byte_data);
         if (err != 0) {
             shell_error(sh, "Ошибка отправки байта 0x%02X в шину (err: %d)", byte_data, err);
@@ -151,24 +127,19 @@ static int cmd_lin_send(const struct shell *sh, size_t argc, char **argv)
     return 0;
 }
 
-
-
-/* 
- * Регистрация команды в подсистеме Zephyr Shell
- * Синтаксис макроса: SHELL_CMD_ARG(имя_команды, табуляция_подкомманд, справка, указатель_на_функцию, мин_аргументов, макс_аргументов)
- */
-SHELL_CMD_ARG_REGISTER(lin_send, NULL, 
+SHELL_CMD_ARG_REGISTER(
+    lin_send, NULL, 
     "Отправить данные в LIN канал.\nИспользование: lin_send <1-4> <байт1> [байт2] ...", 
-    cmd_lin_send, 3, SHELL_OPT_ARG_CHECK_SKIP);
+    cmd_lin_send, 3, SHELL_OPT_ARG_CHECK_SKIP
+);
 
 /***************************************************************************************************
  *                                           DEFINITIONS & TABLES
  **************************************************************************************************/
 #define TEST_TOTAL_CHANNELS  40
 #define TEST_CHANNELS_PER_ROW 5
-#define TEST_TOTAL_ROWS      8  // 8 рядов по 5 каналов = 40 каналов
+#define TEST_TOTAL_ROWS      8 
 
-/* Массив имен всех 40 каналов в точном порядке их вывода */
 static const char *const test_channel_names[TEST_TOTAL_CHANNELS] = {
     "AIN_AO1",    "AIN_AO7",    "AIN_AO13",   "AIN_AVsense1", "LIN_AO1",
     "AIN_AO2",    "AIN_AO8",    "AIN_AO14",   "AIN_AVsense2", "LIN_AO2",
@@ -180,12 +151,10 @@ static const char *const test_channel_names[TEST_TOTAL_CHANNELS] = {
     "AIN_DA11_2", "AIN_DA20_2", "AIN_DA33_2", "AIN_DA44_2",   "AIN_DA41_2"
 };
 
-/* Универсальная функция получения float-значения по имени канала из вашей шины */
 static float _get_bus_float(const char *name)
 {
     float val = 0.0f;
 
-    // Автоматический поиск и чтение через макросы системы (добавьте недостающие, если имена отличаются)
     if      (strcmp(name, "AIN_AO1") == 0)    { SYSTEM_BUS_GET(AIN_AO1, &val); }
     else if (strcmp(name, "AIN_AO2") == 0)    { SYSTEM_BUS_GET(AIN_AO2, &val); }
     else if (strcmp(name, "AIN_AO3") == 0)    { SYSTEM_BUS_GET(AIN_AO3, &val); }
@@ -223,21 +192,17 @@ static float _get_bus_float(const char *name)
     else if (strcmp(name, "AIN_DA11_1") == 0) { SYSTEM_BUS_GET(AIN_DA11_test1, &val); }
     else if (strcmp(name, "AIN_DA20_1") == 0) { SYSTEM_BUS_GET(AIN_DA20_test1, &val); }
     else if (strcmp(name, "AIN_DA33_1") == 0) { SYSTEM_BUS_GET(AIN_DA33_test1, &val); }
-    else if (strcmp(name, "AIN_DA44_1") == 0) { SYSTEM_BUS_GET(AIN_DA41_test1, &val); } // Проверьте суффикс _test1 для 44
+    else if (strcmp(name, "AIN_DA44_1") == 0) { SYSTEM_BUS_GET(AIN_DA41_test1, &val); }
     else if (strcmp(name, "AIN_DA41_1") == 0) { SYSTEM_BUS_GET(AIN_DA41_test1, &val); }
 
     else if (strcmp(name, "AIN_DA11_2") == 0) { SYSTEM_BUS_GET(AIN_DA11_test2, &val); }
     else if (strcmp(name, "AIN_DA20_2") == 0) { SYSTEM_BUS_GET(AIN_DA20_test2, &val); }
     else if (strcmp(name, "AIN_DA33_2") == 0) { SYSTEM_BUS_GET(AIN_DA33_test2, &val); }
-    else if (strcmp(name, "AIN_DA44_2") == 0) { SYSTEM_BUS_GET(AIN_DA41_test2, &val); } // Проверьте суффикс _test2 для 44
+    else if (strcmp(name, "AIN_DA44_2") == 0) { SYSTEM_BUS_GET(AIN_DA41_test2, &val); }
     else if (strcmp(name, "AIN_DA41_2") == 0) { SYSTEM_BUS_GET(AIN_DA41_test2, &val); }
 
     return val;
 }
-
-/***************************************************************************************************
- *                                        COMMAND HANDLER
- **************************************************************************************************/
 
 static int _cmd_ai_test(const struct shell *_sh, size_t _argc, char **_argv)
 {
@@ -259,15 +224,12 @@ static int _cmd_ai_test(const struct shell *_sh, size_t _argc, char **_argv)
             const char *name = test_channel_names[ch_index];
             float val = _get_bus_float(name);
 
-            // Форматируем колонку: "Имя: Значение V" (с фикс. отступами для красоты)
             int written = snprintf(row_buf + offset, sizeof(row_buf) - offset, 
                                    "%-12s: %8.4f V   ", name, (double)val);
             if (written > 0) {
                 offset += written;
             }
         }
-
-        // Выводим готовый ряд из 5 каналов
         shell_print(_sh, "%s", row_buf);
     }
 
@@ -275,7 +237,6 @@ static int _cmd_ai_test(const struct shell *_sh, size_t _argc, char **_argv)
     return 0;
 }
 
-// Регистрация тестовой команды
 SHELL_CMD_ARG_REGISTER(
     AI_TEST, 
     NULL, 
@@ -288,7 +249,6 @@ SHELL_CMD_ARG_REGISTER(
 
 #define NUM_I2C_OUT2_CHANNELS 9
 
-/* Массив имен каналов (индекс 0 - заглушка) */
 static const char *const i2c_out2_names[NUM_I2C_OUT2_CHANNELS + 1] = {
     "",
     "JTAG_MUX_EN",
@@ -302,7 +262,6 @@ static const char *const i2c_out2_names[NUM_I2C_OUT2_CHANNELS + 1] = {
     "OK1"
 };
 
-/* Маппинг номера канала (1-9) на SYSTEM_BUS_ID */
 static inline SYSTEM_BUS_ID _get_i2c_out2_bus_id(int ch_num)
 {
     switch (ch_num) {
@@ -325,10 +284,44 @@ static inline SYSTEM_BUS_ID _get_i2c_out2_bus_id(int ch_num)
 
 static int _cmd_i2c_out2(const struct shell *_sh, size_t _argc, char **_argv)
 {
+    // НОВАЯ ВЕТКА 1.1: Управление MUXJTAG <1-5>
+    if (_argc == 3 && strcmp(_argv[1], "MUXJTAG") == 0)
+    {
+        int val = atoi(_argv[2]);
+        if (val < 1 || val > 5) {
+            shell_error(_sh, "Error: MUXJTAG value must be from 1 to 5.");
+            return -EINVAL;
+        }
+        int ret = SYSTEM_BUS_SET(JTAG_MUX0, (uint32_t)val);
+        if (ret == 0) {
+            shell_print(_sh, "JTAG_MUX0 set to %d", val);
+        } else {
+            shell_error(_sh, "Failed to set JTAG_MUX0 (err: %d)", ret);
+        }
+        return 0;
+    }
+
+    // НОВАЯ ВЕТКА 1.2: Управление MUXFB <1-4>
+    if (_argc == 3 && strcmp(_argv[1], "MUXFB") == 0)
+    {
+        int val = atoi(_argv[2]);
+        if (val < 1 || val > 4) {
+            shell_error(_sh, "Error: MUXFB value must be from 1 to 4.");
+            return -EINVAL;
+        }
+        int ret = SYSTEM_BUS_SET(USB_FB_MUX, (uint32_t)val);
+        if (ret == 0) {
+            shell_print(_sh, "USB_FB_MUX set to %d", val);
+        } else {
+            shell_error(_sh, "Failed to set USB_FB_MUX (err: %d)", ret);
+        }
+        return 0;
+    }
+
     // ВЕТКА 1: Вывод статуса (если вызвано как "I2C_OUT2" или "I2C_OUT2 ?")
     if (_argc == 1 || (_argc == 2 && strcmp(_argv[1], "?") == 0)) 
     {
-        shell_print(_sh, "Current I2C_OUT2 states:");
+        shell_print(_sh, "Current I2C_OUT2 states and mux values:");
         for (int i = 1; i <= NUM_I2C_OUT2_CHANNELS; i++) 
         {
             bool state = false;
@@ -340,10 +333,19 @@ static int _cmd_i2c_out2(const struct shell *_sh, size_t _argc, char **_argv)
                 shell_print(_sh, "  %d - %-13s: [N/A]", i, i2c_out2_names[i]);
             }
         }
+        
+        // Выведем также текущие значения мультиплексоров для наглядности
+        uint32_t m_jtag = 0, m_fb = 0;
+        if (SYSTEM_BUS_GET(JTAG_MUX0, &m_jtag) == 0) {
+            shell_print(_sh, "  MUXJTAG           : %u", (unsigned int)m_jtag);
+        }
+        if (SYSTEM_BUS_GET(USB_FB_MUX, &m_fb) == 0) {
+            shell_print(_sh, "  MUXFB             : %u", (unsigned int)m_fb);
+        }
         return 0;
     }
 
-    // ВЕТКА 2: Глобальное управление ВСЕМИ каналами (например: I2C_OUT2 ON или I2C_OUT2 OFF)
+    // ВЕТКА 2: Глобальное управление ВСЕМИ каналами (ON / OFF)
     if (_argc == 2) 
     {
         bool state = false;
@@ -369,7 +371,7 @@ static int _cmd_i2c_out2(const struct shell *_sh, size_t _argc, char **_argv)
         return 0;
     }
 
-    // ВЕТКА 3: Управление конкретным каналом (ожидаем: I2C_OUT2 <1-9> <ON|OFF>)
+    // ВЕТКА 3: Управление конкретным каналом (<1-9> <ON|OFF>)
     if (_argc < 3) 
     {
         shell_error(_sh, "Invalid arguments.");
@@ -378,6 +380,8 @@ static int _cmd_i2c_out2(const struct shell *_sh, size_t _argc, char **_argv)
         shell_print(_sh, "  I2C_OUT2 ?               - Show status of all channels");
         shell_print(_sh, "  I2C_OUT2 <ON|OFF>        - Turn ALL channels ON or OFF");
         shell_print(_sh, "  I2C_OUT2 <1-9> <ON|OFF>  - Turn specific channel ON or OFF");
+        shell_print(_sh, "  I2C_OUT2 MUXJTAG <1-5>   - Set JTAG mux value (1-5)");
+        shell_print(_sh, "  I2C_OUT2 MUXFB <1-4>     - Set USB FB mux value (1-4)");
         shell_print(_sh, "\nChannels map:");
         for (int i = 1; i <= NUM_I2C_OUT2_CHANNELS; i++) {
             shell_print(_sh, "  %d: %s", i, i2c_out2_names[i]);
@@ -423,8 +427,10 @@ SHELL_CMD_ARG_REGISTER(
     "  I2C_OUT2                 - Show status of all channels\n"
     "  I2C_OUT2 ?               - Show status of all channels\n"
     "  I2C_OUT2 <ON|OFF>        - Turn ALL channels ON or OFF\n"
-    "  I2C_OUT2 <1-9> <ON|OFF>  - Turn specific channel ON or OFF", 
+    "  I2C_OUT2 <1-9> <ON|OFF>  - Turn specific channel ON or OFF\n"
+    "  I2C_OUT2 MUXJTAG <1-5>   - Set JTAG mux value (1-5)\n"
+    "  I2C_OUT2 MUXFB <1-4>     - Set USB FB mux value (1-4)", 
     _cmd_i2c_out2, 
     1, 
-    2
+    3
 );

@@ -81,6 +81,7 @@ static void pcf_work_handler(struct k_work *work)
     uint8_t porta = 0x00; 
     uint8_t portb = 0x00; 
 
+    /* 1. Обрабатываем булевы пины */
     for (int i = 0; i < 9; i++) {
         if (current_bools.states[i]) {
             uint8_t pin = mcp_pin_mapping[i];
@@ -91,11 +92,54 @@ static void pcf_work_handler(struct k_work *work)
             }
         }
     }        
-    portb |= (current_mux.group[0] & 0x0003) << 1;
-    porta |= (current_mux.group[1] & 0x0003);
 
-    LOG_INF("Target values to write -> porta=0x%02X, portb=0x%02X", porta, portb);
+    /* 
+     * 2. Обрабатываем group[1] (1-е слово mux канала).
+     * Значение минус 1 пишется в первые 3 бита Порта А (биты 0, 1, 2).
+     */
+    uint32_t val_g1 = current_mux.group[1];
+    if (val_g1 > 0) {
+        uint8_t mapped_val = (uint8_t)(val_g1 - 1) & 0x07; // Берем (val - 1), маска на 3 бита
+        porta |= mapped_val; // Записываем в биты 0, 1, 2 Порта А
+    }
 
+    /* 
+     * 3. Обрабатываем group[0] (0-е слово mux канала).
+     * Значения от 1 до 5 маппятся в биты 9, 10, 11 Порта B (в байт portb это биты 1, 2, 3, так как pin - 8).
+     * Нам нужно управлять битами 9, 10, 11 -> в байтах portb (начиная с GPB0) это соответствует битам 1, 2, 3.
+     */
+    uint32_t val_g0 = current_mux.group[0];
+    
+    // Сначала очищаем биты 1, 2, 3 в portb перед записью новой комбинации
+    portb &= ~((1 << 1) | (1 << 2) | (1 << 3));
+
+    switch (val_g0) {
+        case 1:
+            // бит 9 ("1"), бит 10 ("0"), бит 11 ("0") -> в portb это бит 1 = 1
+            portb |= (1 << 1);
+            break;
+        case 2:
+            // бит 9 ("0"), бит 10 ("1"), бит 11 ("0") -> в portb это бит 2 = 1
+            portb |= (1 << 2);
+            break;
+        case 3:
+            // бит 9 ("0"), бит 10 ("0"), бит 11 ("1") -> в portb это бит 1 = 1
+            portb |= (1 << 3);
+            break;
+        case 4:
+            // бит 9 ("1"), бит 10 ("0"), бит 11 ("1") -> в portb биты 1 и 3 = 1
+            portb |= (1 << 3) | (1 << 1);
+            break;
+        case 5:
+            // бит 9 ("1"), бит 10 ("1"), бит 11 ("0") -> в portb биты 1 и 2 = 1
+            portb |= (1 << 3) | (1 << 2);
+            break;
+        default:
+            break;
+    }
+
+    LOG_INF("Target values to write -> porta=0x%02X, portb=0x%02X (g0=%d, g1=%d)", 
+             porta, portb, (int)val_g0, (int)val_g1);
 
     // Записываем данные в GPIOA (0x12) и GPIOB (0x13)
     uint8_t cmd_a[2] = { 0x12, porta }; 
@@ -103,8 +147,6 @@ static void pcf_work_handler(struct k_work *work)
 
     i2c_write_dt(&mcp_spec, cmd_a, sizeof(cmd_a));
     i2c_write_dt(&mcp_spec, cmd_b, sizeof(cmd_b));
-
-
 }
 
 static void pcf_zbus_listener(const struct zbus_channel *chan)
