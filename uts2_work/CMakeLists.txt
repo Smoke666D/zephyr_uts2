@@ -29,7 +29,7 @@ file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
 target_sources(app PRIVATE 
               
        src/main.c
-        src/settings.c        
+    src/settings.c        
       ${APP_SOURCES} 
 )
 

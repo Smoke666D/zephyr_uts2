@@ -71,6 +71,11 @@ typedef struct ina_energy_msg
 } ina_energy_msg_t;
 
 
+typedef struct ina_power_msg 
+{
+    float power[CUR_SENS_NUM_SENSORS];
+} ina_power_msg_t;
+
 #define FAST_POLL_INTERVAL_MS     1   /* Быстрый опрос U и I каждые 10 мс (100 Гц) */
 #define SLOW_ENERGY_POLL_TICKS    10   /* Опрос энергии каждые 10 тиков (100 мс / 10 Гц) */
 
@@ -92,6 +97,14 @@ ZBUS_CHAN_DEFINE(ina_energy_chan,
                  NULL,
                  ZBUS_OBSERVERS_EMPTY,
                  ZBUS_MSG_INIT(0));
+
+// Канал ZBUS для накопленной энергии
+ZBUS_CHAN_DEFINE(ina_power_chan,
+                 ina_power_msg_t,
+                 NULL,
+                 NULL,
+                 ZBUS_OBSERVERS_EMPTY,
+                 ZBUS_MSG_INIT(0));                 
 
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
@@ -171,7 +184,7 @@ static inline double _q31_to_double(int32_t _value, int8_t _shift)
 static void _process_fast_measurements(ina_batch_msg_t *_batch)
 {
     int expected_completions = 0;
-
+    ina_power_msg_t power;
     for (int i = 0; i < CUR_SENS_NUM_SENSORS; i++) 
     {
         int rc = sensor_read_async_mempool(fast_iodevs[i], &ina_rtio, (void *)(uintptr_t)i);
@@ -223,8 +236,11 @@ static void _process_fast_measurements(ina_batch_msg_t *_batch)
                 struct sensor_chan_spec i_spec = { .chan_type = SENSOR_CHAN_CURRENT, .chan_idx = 0 };
                 if (decoder->decode(buf, i_spec, &fit, 1, &i_data) > 0) 
                 {
-                    _batch->sensors[idx * 2 + 1] = _q31_to_double(i_data.readings[0].value, i_data.shift);
-                }
+                    float _temp_cur = (float)_q31_to_double(i_data.readings[0].value, i_data.shift);
+                    _batch->sensors[idx * 2 + 1] = (_temp_cur > 0) ? _temp_cur : 0;
+
+                }                
+                power.power[idx] = _batch->sensors[idx * 2] * _batch->sensors[idx * 2 + 1];
             }
 
             rtio_release_buffer(&ina_rtio, buf, buf_len);
@@ -237,8 +253,10 @@ static void _process_fast_measurements(ina_batch_msg_t *_batch)
         rtio_cqe_release(&ina_rtio, cqe);
         completions_received++;
     }
+    
 
     zbus_chan_pub(&ina_batch_chan, _batch, K_NO_WAIT);
+    zbus_chan_pub(&ina_power_chan, &power, K_NO_WAIT);
 }
 
 /**
@@ -376,14 +394,14 @@ PARAM_ROUTE_DEFINE(SENS_VD5_CURRENT,       &ina_batch_chan, 14, FLOAT_DATA);
 PARAM_ROUTE_DEFINE(SENS_VD5_VOLTAGE,       &ina_batch_chan, 15, FLOAT_DATA); 
 
 // Регистрация путей шины параметров для Накопленной Энергии
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_LOW,   &ina_energy_chan, 0, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_HIGH,  &ina_energy_chan, 1, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT2,     &ina_energy_chan, 2, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT3,     &ina_energy_chan, 3, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VIN,       &ina_energy_chan, 4, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_DCDC_3_3,  &ina_energy_chan, 5, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDOUT_PWR, &ina_energy_chan, 6, FLOAT_DATA);
-PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VD5,       &ina_energy_chan, 7, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_LOW,   &ina_power_chan, 0, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_BRD_HIGH,  &ina_power_chan, 1, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT2,     &ina_power_chan, 2, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDUT3,     &ina_power_chan, 3, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VIN,       &ina_power_chan, 4, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_DCDC_3_3,  &ina_power_chan, 5, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VDOUT_PWR, &ina_power_chan, 6, FLOAT_DATA);
+PARAM_ROUTE_DEFINE(SENS_I2C_POWER_VD5,       &ina_power_chan, 7, FLOAT_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE
