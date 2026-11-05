@@ -3,14 +3,14 @@
     {
       "name": "primary",
       "board": "uts2_motherboard",
-      "active": "true",
-      "default-runner": "jlink"
+      "active": "true"
     }
   ],
-  "zephyr-workbench.westWorkspace": "c:\\work\\zephyr_workspace\\zephyrproject_4_5",
+  "zephyr-workbench.westWorkspace": "${workspaceFolder}/../../zephyr_workspace/zephyrproject_4_5",
   "zephyr-workbench.toolchain": "zephyr",
   "zephyr-workbench.sdk": "${workspaceFolder}/../../../SDK/zephyr-sdk-1.0.1",
   "zephyr-workbench.intellisense.provider": "cpptools",
   "cmake.configureOnOpen": false,
-  "cmake.enableAutomaticKitScan": false
+  "cmake.enableAutomaticKitScan": false,
+  "terminal.integrated.stickyScroll.enabled": false
 }

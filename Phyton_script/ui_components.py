@@ -598,7 +598,7 @@ def build_dashboard(ports_refs, ui_labels):
 
                     def handle_pull_down(e, idx=l_idx):
                         state = 'ON' if e.value else 'OFF'
-                        cmd = f'linpb_set {idx} {state}\r\n'
+                        cmd = f'LIN_PD {idx} {state}\r\n'
                         curr_shell = shell_ref.get('ser')
                         if curr_shell and curr_shell.is_open:
                             curr_shell.write(cmd.encode('utf-8'))
@@ -756,8 +756,8 @@ def build_dashboard(ports_refs, ui_labels):
                         'bg-sky-600 text-white text-xs py-1 px-3 font-bold'
                     )
 
-        # ==========================================
-        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART
+  # ==========================================
+        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (С JTAG)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Автоопределение и калибровка портов UART').classes(
@@ -846,6 +846,7 @@ def build_dashboard(ports_refs, ui_labels):
                     ui.notify('Ошибка/Таймаут I2C_OUT2 6 ON', type='negative')
                     btn_start_detect.enable()
                     return
+
                 ui.notify('Шаг 6: Запуск UART_DETECT start...', type='info')
                 curr_shell.write(b'UART_DETECT start\r\n')
                 print('[SHELL TX]: UART_DETECT start')
@@ -867,7 +868,7 @@ def build_dashboard(ports_refs, ui_labels):
                     curr_ports = set(get_available_ports())
                     new_ports = sorted(list(curr_ports - base_ports))
 
-                print(f'[DETECT] Обнаруженные порты хаба: {new_ports}')
+                print(f'[DETECT] Новые порты хаба: {new_ports}')
                 if len(new_ports) < 4:
                     ui.notify(f'Найдено только {len(new_ports)} из 4 портов ({", ".join(new_ports)}). Проверьте хаб!', type='negative')
                     btn_start_detect.enable()
@@ -965,6 +966,48 @@ def build_dashboard(ports_refs, ui_labels):
                 btn_start_detect = ui.button('СТАРТ', on_click=run_full_detect_procedure).classes(
                     'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-6 rounded shadow'
                 )
+
+            # --- УПРАВЛЕНИЕ JTAG (CHECKBOX + MULTIPLEXER COMBOBOX) ---
+            with ui.row().classes('w-full justify-center gap-6 items-center mt-3 pt-2 border-t border-slate-700'):
+                # Чекбокс включения JTAG питания/линии
+                def handle_jtag_enable(e):
+                    state = 'ON' if e.value else 'OFF'
+                    cmd = f'I2C_OUT2 1 {state}\r\n'
+                    curr_shell = shell_ref.get('ser')
+                    if curr_shell and curr_shell.is_open:
+                        curr_shell.write(cmd.encode('utf-8'))
+                        ui.notify(f'[JTAG] Отправлено: {cmd.strip()}', type='info')
+                    else:
+                        ui.notify('Shell порт закрыт!', type='warning')
+
+                ui.checkbox('JTAG ENABLE', value=False, on_change=handle_jtag_enable).classes(
+                    'text-white text-xs font-semibold'
+                )
+
+                # Выпадающий список на 5 позиций JTAG
+                def handle_jtag_mux(e):
+                    mux_val = e.value
+                    cmd = f'I2C_OUT2 MUXJTAG {mux_val}\r\n'
+                    curr_shell = shell_ref.get('ser')
+                    if curr_shell and curr_shell.is_open:
+                        curr_shell.write(cmd.encode('utf-8'))
+                        ui.notify(f'[JTAG MUX] Отправлено: {cmd.strip()}', type='info')
+                    else:
+                        ui.notify('Shell порт закрыт!', type='warning')
+
+                jtag_options = {
+                    1: 'JTAG 1',
+                    2: 'JTAG 2',
+                    3: 'JTAG 3',
+                    4: 'JTAG 4',
+                    5: 'JTAG 5',
+                }
+                ui.select(
+                    options=jtag_options,
+                    value=1,
+                    label='Канал JTAG',
+                    on_change=handle_jtag_mux,
+                ).props('dark outlined dense').classes('w-36 bg-slate-700 text-xs text-white rounded')
 
         # ==========================================
         # 11. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
