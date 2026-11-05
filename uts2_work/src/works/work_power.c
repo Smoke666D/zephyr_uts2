@@ -47,7 +47,6 @@ typedef struct power_control_line_msg
  **********************************************************************************/
 
 static void _power_control_listener_cb(const struct zbus_channel *_chan);
-static void _out_update_handler(struct k_work *_work);
 static void _enable_port_init(void);
 static void _power_control_update_handler(struct k_work *_work);
 

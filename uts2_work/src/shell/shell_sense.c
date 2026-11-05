@@ -126,17 +126,17 @@ static int _cmd_sensor_generic(const struct shell *_sh,
         shell_print(
             _sh, 
             "%s: %.2f %s   |   %s: %.2f %s", 
-            _desc->label1, val1, _desc->unit, 
-            _desc->label2, val2, _desc->unit
+            _desc->label1, (double)val1, _desc->unit, 
+            _desc->label2, (double)val2, _desc->unit
         );
     } 
     else if (sensor_idx == 1) 
     {     
-        shell_print(_sh, "%s: %.2f %s", _desc->label1, val1, _desc->unit);
+        shell_print(_sh, "%s: %.2f %s", _desc->label1, (double)val1, _desc->unit);
     } 
     else 
     {     
-        shell_print(_sh, "%s: %.2f %s", _desc->label2, val2, _desc->unit);
+        shell_print(_sh, "%s: %.2f %s", _desc->label2, (double)val2, _desc->unit);
     }
 
     return 0;

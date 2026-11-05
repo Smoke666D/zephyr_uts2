@@ -46,13 +46,12 @@ static inline int  _dma_init(const struct scan_cont_adc_config *_config,
                              const struct device *_dev);
 static inline int  _tmr_init(TIM_TypeDef *_tmr_inst);
 static inline void _adc_init(ADC_TypeDef *_adc_inst, uint32_t trg_source);
-static int         _seq_mux_adc_init(const struct device *_dev);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-static uint16_t adc_buf_a[ADC_CHANNELS_CNT] __nocache;
-static uint16_t adc_buf_b[ADC_CHANNELS_CNT] __nocache;
+static uint16_t adc_buf_a[ ADC_SCAN_CHANNELS_CNT] __nocache;
+static uint16_t adc_buf_b[ ADC_SCAN_CHANNELS_CNT] __nocache;
 static volatile uint16_t *active_adc_buf;
 
 static struct k_sem   sem_data_ready;
@@ -97,7 +96,7 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
 static int _scan_adc_get_buf_p(const struct device *_dev,  uint16_t *_user_buf)
 {
     ARG_UNUSED(_dev);
-    memcpy(_user_buf, (const void *)active_adc_buf, ADC_CHANNELS_CNT * sizeof(uint16_t));
+    memcpy(_user_buf, (const void *)active_adc_buf,  ADC_SCAN_CHANNELS_CNT * sizeof(uint16_t));
     return 0;
 
 }
@@ -139,7 +138,7 @@ static inline int _dma_init(const struct scan_cont_adc_config *_config,
     {
         .source_address   = (uint32_t)&(_adc_inst->DR),
         .dest_address     = (uint32_t)adc_buf_a,
-        .block_size       = ADC_CHANNELS_CNT  * sizeof(uint16_t),
+        .block_size       =  ADC_SCAN_CHANNELS_CNT  * sizeof(uint16_t),
         .source_addr_adj  = DMA_ADDR_ADJ_NO_CHANGE,
         .dest_addr_adj    = DMA_ADDR_ADJ_INCREMENT,
         .source_reload_en = 1,

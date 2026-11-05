@@ -123,7 +123,7 @@ static void _print_channels(const struct shell *_sh, const char *_prefix,
             }
 
             int written = snprintf(line_buf + offset, sizeof(line_buf) - offset, 
-                                   "%s: %.4f V   ", label, _voltages[i]);
+                                   "%s: %.4f V   ", label, (double)_voltages[i]);
             if (written > 0) { offset += written; }
         }
         shell_print(_sh, "%s", line_buf);
@@ -138,7 +138,7 @@ static void _print_channels(const struct shell *_sh, const char *_prefix,
             snprintf(dyn_label, sizeof(dyn_label), "%s%d", _prefix, _ch_idx);
             label = dyn_label;
         }
-        shell_print(_sh, "%s: %.4f V", label, _voltages[_ch_idx - 1]);
+        shell_print(_sh, "%s: %.4f V", label, (double)_voltages[_ch_idx - 1]);
     }
 }
 

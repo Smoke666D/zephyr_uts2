@@ -55,26 +55,6 @@ static const uint8_t mcp_pin_mapping[9] = {
     7 
 };
 
-static void mcp23017_dump_all_registers(const struct i2c_dt_spec *spec, const char *tag)
-{
-    uint8_t all_regs[22];
-    for (uint8_t reg = 0; reg <= 0x15; reg++) {
-        uint8_t reg_addr = reg;
-        uint8_t val = 0;
-        if (i2c_write_read_dt(spec, &reg_addr, 1, &val, 1) < 0) {
-            all_regs[reg] = 0xEE;
-        } else {
-            all_regs[reg] = val;
-        }
-    }
-
-    LOG_INF("========== MCP23017 DUMP: %s ==========", tag);
-    LOG_INF("0x00 IODIRA: 0x%02X | 0x01 IODIRB: 0x%02X", all_regs[0x00], all_regs[0x01]);
-    LOG_INF("0x0A IOCONA: 0x%02X | 0x0B IOCONB: 0x%02X", all_regs[0x0A], all_regs[0x0B]);
-    LOG_INF("0x12 GPIOA:  0x%02X | 0x13 GPIOB:  0x%02X", all_regs[0x12], all_regs[0x13]);
-    LOG_INF("0x14 OLATA:  0x%02X | 0x15 OLATB:  0x%02X", all_regs[0x14], all_regs[0x15]);
-    LOG_INF("============================================");
-}
 
 static void pcf_work_handler(struct k_work *work)
 {

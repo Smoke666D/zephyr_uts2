@@ -45,11 +45,11 @@ LOG_MODULE_REGISTER(seq_mux_adc_drv, LOG_LEVEL_INF);
 /* Структура сообщения АЦП */
 typedef struct sens_adc_msg {
     float channels_mv[TOTAL_CHANNEL_COUNT]; // Наш тестовый буфер (8 шагов * 2 канала)
-};
+} sens_adc_msg;
 
 typedef struct env_adc_msg {
     float channels_mv[ENV_ADC_BUF_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
-};
+} env_adc_msg;
 
 
 

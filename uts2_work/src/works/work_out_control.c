@@ -40,7 +40,7 @@ LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
 typedef struct hc595_channels_msg {
     uint32_t channels_mv[CHANNEL_DATA_SIZE]; // Наш тестовый буфер (8 шагов * 2 канала)
-};
+} hc595_channels_msg;
 
 /***********************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES

@@ -69,96 +69,97 @@ void send_binary_telemetry(const struct device *uart_dev) {
     pkt.magic = TELEMETRY_MAGIC_BYTE;
 
     pkt.timestamp_ms = k_uptime_get_32();
+
+    float _temp;
     // Заполняем данными из твоего системного буфера
-    SYSTEM_BUS_GET(RF_POWER, &pkt.rf_power);
-    SYSTEM_BUS_GET(NTC, &pkt.ntc);
-    SYSTEM_BUS_GET(EXT_VSENSE, &pkt.ext_vsense);
-    SYSTEM_BUS_GET(BRD_DETECT, &pkt.brd_detect);
+    SYSTEM_BUS_GET(RF_POWER, &_temp);   pkt.rf_power = _temp;
+    SYSTEM_BUS_GET(NTC, &_temp);        pkt.ntc = _temp;
+    SYSTEM_BUS_GET(EXT_VSENSE, &_temp); pkt.ext_vsense = _temp;
+    SYSTEM_BUS_GET(BRD_DETECT, &_temp); pkt.brd_detect =  _temp;
 
-    SYSTEM_BUS_GET(I2C1_TEMP1, &pkt.temp_gnd);
-    SYSTEM_BUS_GET(I2C1_TEMP2, &pkt.temp_vdd);
-    SYSTEM_BUS_GET(I2C1_LUX1, &pkt.light_gnd);
-    SYSTEM_BUS_GET(I2C1_LUX2, &pkt.light_vdd);
+    SYSTEM_BUS_GET(I2C1_TEMP1, &_temp); pkt.temp_gnd = _temp;
+    SYSTEM_BUS_GET(I2C1_TEMP2, &_temp); pkt.temp_vdd = _temp;
+    SYSTEM_BUS_GET(I2C1_LUX1, &_temp); pkt.light_gnd = _temp;
+    SYSTEM_BUS_GET(I2C1_LUX2, &_temp); pkt.light_vdd = _temp;
 
-    // AO 1-6, 7-12, 13-18
-    SYSTEM_BUS_GET(AIN_AO1, &pkt.ao[0]);
-    SYSTEM_BUS_GET(AIN_AO2, &pkt.ao[1]);
-    SYSTEM_BUS_GET(AIN_AO3, &pkt.ao[2]);
-    SYSTEM_BUS_GET(AIN_AO4, &pkt.ao[3]);
-    SYSTEM_BUS_GET(AIN_AO5, &pkt.ao[4]);
-    SYSTEM_BUS_GET(AIN_AO6, &pkt.ao[5]);
+   // AO 1-18
+    SYSTEM_BUS_GET(AIN_AO1, &_temp);   pkt.ao[0] = _temp;    
+    SYSTEM_BUS_GET(AIN_AO2, &_temp);   pkt.ao[1] = _temp;    
+    SYSTEM_BUS_GET(AIN_AO3, &_temp);   pkt.ao[2] = _temp;
+    SYSTEM_BUS_GET(AIN_AO4, &_temp);   pkt.ao[3] = _temp;
+    SYSTEM_BUS_GET(AIN_AO5, &_temp);   pkt.ao[4] = _temp;
+    SYSTEM_BUS_GET(AIN_AO6, &_temp);   pkt.ao[5] = _temp;
     
-    SYSTEM_BUS_GET(AIN_AO7, &pkt.ao[6]);
-    SYSTEM_BUS_GET(AIN_AO8, &pkt.ao[7]);
-    SYSTEM_BUS_GET(AIN_AO9, &pkt.ao[8]);
-    SYSTEM_BUS_GET(AIN_AO10, &pkt.ao[9]);
-    SYSTEM_BUS_GET(AIN_AO11, &pkt.ao[10]);
-    SYSTEM_BUS_GET(AIN_AO12, &pkt.ao[11]);
+    SYSTEM_BUS_GET(AIN_AO7, &_temp);   pkt.ao[6] = _temp;
+    SYSTEM_BUS_GET(AIN_AO8, &_temp);   pkt.ao[7] = _temp;
+    SYSTEM_BUS_GET(AIN_AO9, &_temp);   pkt.ao[8] = _temp;
+    SYSTEM_BUS_GET(AIN_AO10, &_temp);  pkt.ao[9] = _temp;
+    SYSTEM_BUS_GET(AIN_AO11, &_temp);  pkt.ao[10] = _temp;
+    SYSTEM_BUS_GET(AIN_AO12, &_temp);  pkt.ao[11] = _temp;
     
-    SYSTEM_BUS_GET(AIN_AO13, &pkt.ao[12]);
-    SYSTEM_BUS_GET(AIN_AO14, &pkt.ao[13]);
-    SYSTEM_BUS_GET(AIN_AO15, &pkt.ao[14]);
-    SYSTEM_BUS_GET(AIN_AO16, &pkt.ao[15]);
-    SYSTEM_BUS_GET(AIN_AO17, &pkt.ao[16]);
-    SYSTEM_BUS_GET(AIN_AO18, &pkt.ao[17]);
+    SYSTEM_BUS_GET(AIN_AO13, &_temp);  pkt.ao[12] = _temp;
+    SYSTEM_BUS_GET(AIN_AO14, &_temp);  pkt.ao[13] = _temp;
+    SYSTEM_BUS_GET(AIN_AO15, &_temp);  pkt.ao[14] = _temp;
+    SYSTEM_BUS_GET(AIN_AO16, &_temp);  pkt.ao[15] = _temp;
+    SYSTEM_BUS_GET(AIN_AO17, &_temp);  pkt.ao[16] = _temp;
+    SYSTEM_BUS_GET(AIN_AO18, &_temp);  pkt.ao[17] = _temp;
 
     // AIN_VSense 1-6
-    SYSTEM_BUS_GET(AIN_AVsense1, &pkt.vsense[0]);
-    SYSTEM_BUS_GET(AIN_AVsense2, &pkt.vsense[1]);
-    SYSTEM_BUS_GET(AIN_AVsense3, &pkt.vsense[2]);
-    SYSTEM_BUS_GET(AIN_AVsense4, &pkt.vsense[3]);
-    SYSTEM_BUS_GET(AIN_AVsense5, &pkt.vsense[4]);
-    SYSTEM_BUS_GET(AIN_AVsense6, &pkt.vsense[5]);
-
-  
+    SYSTEM_BUS_GET(AIN_AVsense1, &_temp); pkt.vsense[0] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense2, &_temp); pkt.vsense[1] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense3, &_temp); pkt.vsense[2] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense4, &_temp); pkt.vsense[3] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense5, &_temp); pkt.vsense[4] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense6, &_temp); pkt.vsense[5] = _temp;
 
     // Env (8 шт)
-    SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
-    SYSTEM_BUS_GET(ENV_P5V0,  &pkt.env[1]);
-    SYSTEM_BUS_GET(ENV_VIN,   &pkt.env[2]);
-    SYSTEM_BUS_GET(ENV_VDOUT1, &pkt.env[3]);
-    SYSTEM_BUS_GET(ENV_P40V,  &pkt.env[4]);
-    SYSTEM_BUS_GET(ENV_USB,   &pkt.env[5]);
-    SYSTEM_BUS_GET(ENV_VDOUT2, &pkt.env[6]);
-    SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
+    SYSTEM_BUS_GET(ENV_P3V3,  &_temp);    pkt.env[0] = _temp;
+    SYSTEM_BUS_GET(ENV_P5V0,  &_temp);    pkt.env[1] = _temp;
+    SYSTEM_BUS_GET(ENV_VIN,   &_temp);    pkt.env[2] = _temp;
+    SYSTEM_BUS_GET(ENV_VDOUT1, &_temp);   pkt.env[3] = _temp;
+    SYSTEM_BUS_GET(ENV_P40V,  &_temp);    pkt.env[4] = _temp;
+    SYSTEM_BUS_GET(ENV_USB,   &_temp);    pkt.env[5] = _temp;
+    SYSTEM_BUS_GET(ENV_VDOUT2, &_temp);   pkt.env[6] = _temp;
+    SYSTEM_BUS_GET(ENV_VDOUT3, &_temp);   pkt.env[7] = _temp;
 
+    // Current sensors (24 шт)
+    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,     &_temp); pkt.current_sensors[0] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,    &_temp);  pkt.current_sensors[1] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_LOW,   &_temp); pkt.current_sensors[2] = _temp;
 
-    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,   &pkt.current_sensors[0]);
-    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[1]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_LOW,       &pkt.current_sensors[2]);
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT,   &_temp);  pkt.current_sensors[3] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE,   &_temp);  pkt.current_sensors[4] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_HIGH, &_temp);  pkt.current_sensors[5] = _temp;
 
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &pkt.current_sensors[3]);
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &pkt.current_sensors[4]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_HIGH,       &pkt.current_sensors[5]);
+    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,      &_temp);  pkt.current_sensors[6] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,     &_temp);   pkt.current_sensors[7] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT2,   &_temp);   pkt.current_sensors[8] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,    &pkt.current_sensors[6]);
-    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,   &pkt.current_sensors[7]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT2,       &pkt.current_sensors[8]);
+    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,     &_temp);   pkt.current_sensors[9] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,     &_temp);   pkt.current_sensors[10] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT3,   &_temp);   pkt.current_sensors[11] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,   &pkt.current_sensors[9]);
-    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,   &pkt.current_sensors[10]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT3,       &pkt.current_sensors[11]);
+    SYSTEM_BUS_GET(SENS_VIN_CURRENT,       &_temp);   pkt.current_sensors[12] = _temp;
+    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,       &_temp);   pkt.current_sensors[13] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VIN,     &_temp);   pkt.current_sensors[14] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VIN_CURRENT,     &pkt.current_sensors[12]);
-    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,     &pkt.current_sensors[13]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_VIN,       &pkt.current_sensors[14]);
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT,   &_temp);  pkt.current_sensors[15] = _temp;
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE,  &_temp);  pkt.current_sensors[16] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_DCDC_3_3, &_temp);  pkt.current_sensors[17] = _temp;
 
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT, &pkt.current_sensors[15]);
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE, &pkt.current_sensors[16]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_DCDC_3_3,       &pkt.current_sensors[17]);
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &_temp);   pkt.current_sensors[18] = _temp;
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &_temp);   pkt.current_sensors[19] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR, &_temp); pkt.current_sensors[20] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &pkt.current_sensors[18]);
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &pkt.current_sensors[19]);
-    SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR, &pkt.current_sensors[20]);
+    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &_temp);   pkt.current_sensors[21] = _temp;
+    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &_temp);   pkt.current_sensors[22] = _temp;                    
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,     &_temp);   pkt.current_sensors[23] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &pkt.current_sensors[21]);
-    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &pkt.current_sensors[22]);                    
-    SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,     &pkt.current_sensors[23]);
-
-    SYSTEM_BUS_GET(LIN_AO1,       &pkt.lin_voltages[0]);
-    SYSTEM_BUS_GET(LIN_AO2,       &pkt.lin_voltages[1]);
-    SYSTEM_BUS_GET(LIN_AO3,       &pkt.lin_voltages[2]);
-    SYSTEM_BUS_GET(LIN_AO4,       &pkt.lin_voltages[3]);
+    // LIN voltages (4 шт)
+    SYSTEM_BUS_GET(LIN_AO1, &_temp); pkt.lin_voltages[0] = _temp;
+    SYSTEM_BUS_GET(LIN_AO2, &_temp); pkt.lin_voltages[1] = _temp;
+    SYSTEM_BUS_GET(LIN_AO3, &_temp); pkt.lin_voltages[2] = _temp;
+    SYSTEM_BUS_GET(LIN_AO4, &_temp); pkt.lin_voltages[3] = _temp;
 
      k_msgq_put(&telemetry_queue,&pkt,K_NO_WAIT);
 
@@ -324,7 +325,6 @@ int main(void)
     bus_listener_attach(&lin4_rx_listener,LIN4_RX);
 
     k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
-    bool state = true;
     while (1) 
 	{          
         can_queue_message_t rx_msg;       
@@ -332,7 +332,7 @@ int main(void)
         {
             send_can_message_binary(telemetry_uart, rx_msg.iface_id, &rx_msg.msg);        
         }
-        uint8_t ch = 0;
+  
         lin_queue_message_t lin_msg;
         while (k_msgq_get(&all_lin_rx_queue, &lin_msg, K_NO_WAIT) == 0) 
         {

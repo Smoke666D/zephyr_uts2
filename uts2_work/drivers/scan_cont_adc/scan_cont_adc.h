@@ -31,7 +31,7 @@
 
 
 
-#define ADC_CHANNELS_CNT       DT_PROP(SEQ_NODE, channel_count)
+#define ADC_SCAN_CHANNELS_CNT       DT_PROP(SEQ_NODE, channel_count)
 
 
 

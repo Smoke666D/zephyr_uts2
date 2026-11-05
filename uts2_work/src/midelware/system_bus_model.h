@@ -283,6 +283,7 @@ struct system_bus_handler
     SYSTEM_BUS_DATA_TYPE  channel_type;    
     uint32_t              system_index;
     uint32_t              set_timeout;
+    const struct k_msgq   * p_cmd_queue;
 };
 
 
@@ -298,6 +299,7 @@ struct system_bus_handler
         .channel_type = chan_type, \
         .system_index = index, \
         .set_timeout = 0, \
+        .p_cmd_queue = NULL, \
     }
 
 #define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type, time_out) \
@@ -307,6 +309,7 @@ struct system_bus_handler
         .channel_type = chan_type, \
         .system_index = index, \
         .set_timeout = time_out, \
+        .p_cmd_queue = NULL, \
     }
     
  int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
