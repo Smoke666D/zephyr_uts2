@@ -112,6 +112,10 @@ static float get_channel_value_by_name(const char *name)
     else if (strcmp(name, "DOUT16") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT16, &u); val = (float)u; }
     else if (strcmp(name, "DOUT17") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT17, &u); val = (float)u; }
     else if (strcmp(name, "DOUT18") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DOUT18, &u); val = (float)u; }
+
+    else if (strcmp(name, "DAC") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(DAC_VALUE, &u); val = (float)u; }
+    else if (strcmp(name, "ADJ_RES1") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(ADJ_RES1, &u); val = (float)u; }
+    else if (strcmp(name, "ADJ_RES2") == 0) { uint32_t u = 0; SYSTEM_BUS_GET(ADJ_RES2, &u); val = (float)u; }
     return val;
 }
 

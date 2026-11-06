@@ -283,9 +283,22 @@ struct system_bus_handler
     SYSTEM_BUS_DATA_TYPE  channel_type;    
     uint32_t              system_index;
     uint32_t              set_timeout;
-    const struct k_msgq   * p_cmd_queue;
 };
 
+typedef union erver_data
+{
+    bool sd_bool;
+    uint32_t sd_uint;
+    float sd_float;
+} server_data_t;
+
+typedef struct server_request
+{
+    server_data_t value;
+    SYSTEM_BUS_ID id;
+    struct k_sem * sync;
+    uint8_t * response;
+} server_request;
 
 
 /* 
@@ -299,7 +312,6 @@ struct system_bus_handler
         .channel_type = chan_type, \
         .system_index = index, \
         .set_timeout = 0, \
-        .p_cmd_queue = NULL, \
     }
 
 #define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type, time_out) \
@@ -309,7 +321,6 @@ struct system_bus_handler
         .channel_type = chan_type, \
         .system_index = index, \
         .set_timeout = time_out, \
-        .p_cmd_queue = NULL, \
     }
     
  int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
@@ -324,6 +335,35 @@ struct system_bus_handler
         unsigned:   bus_set_u32(id, val),  \
         float:      bus_set_real(id, val) \
     )
+
+
+#define SERVER_OUT_CHANNEL_DEFINE(id, chan_ptr, index, chan_type, cmd_queue) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = chan_ptr, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+        .set_timeout = 0, \
+    }
+
+ int serever_set_bool(SYSTEM_BUS_ID id, bool _val,     struct k_sem * sync, uint8_t * ret);
+ int serever_set_u32( SYSTEM_BUS_ID id, uint32_t _val, struct k_sem * sync, uint8_t * ret);
+ int serever_set_real(SYSTEM_BUS_ID id, float _val,    struct k_sem * sync, uint8_t * ret);
+ 
+
+
+#define SERVER_CH_SET_ASYC(id, val) _Generic((val), \
+        bool:       serever_set_bool(id, val, NULL, NULL), \
+        int:        serever_set_u32(id, val, NULL, NULL),  \
+        float:      serever_set_real(id, val, NULL, NULL) \
+    )
+
+#define SERVER_CH_SET_SYC(id, val, sync, ret) _Generic((val), \
+        bool:       serever_set_bool(id, val, sync, ret), \
+        int:        serever_set_u32(id, val, sync, ret),  \
+        float:   serever_set_real(id, val,  sync, ret) \
+    )
+
 
 #define SYSTEM_BUS_SET_P(id, val) _Generic(*(val), \
     system_can_message_t: bus_set_can              \

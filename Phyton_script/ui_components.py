@@ -294,7 +294,7 @@ def build_dashboard(ports_refs, ui_labels):
             def make_led_handler(l_id, l_name):
                 def handler(e):
                     state = 'ON' if e.value else 'OFF'
-                    cmd = f'LED {l_id} {state}\r\n'
+                    cmd = f'LED set {l_id} {state}\r\n'
                     curr_shell = shell_ref.get('ser')
                     if curr_shell and curr_shell.is_open:
                         curr_shell.write(cmd.encode('utf-8'))
@@ -380,7 +380,7 @@ def build_dashboard(ports_refs, ui_labels):
                         try:
                             val = float(dac_input.value)
                             if 15.00 <= val <= 30.00:
-                                cmd = f'dac_set {val:.2f}\r\n'
+                                cmd = f'DAC set {val:.2f}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
                                     curr_shell.write(cmd.encode('utf-8'))
@@ -411,7 +411,7 @@ def build_dashboard(ports_refs, ui_labels):
                         try:
                             val = float(res1_input.value)
                             if 0.00 <= val <= 100.00:
-                                cmd = f'adj_res_set 1 {val:.2f}\r\n'
+                                cmd = f'ADJ_RES set 1 {val:.2f}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
                                     curr_shell.write(cmd.encode('utf-8'))
@@ -447,7 +447,7 @@ def build_dashboard(ports_refs, ui_labels):
                         try:
                             val = float(res2_input.value)
                             if 0.00 <= val <= 100.00:
-                                cmd = f'adj_res_set 2 {val:.2f}\r\n'
+                                cmd = f'ADJ_RES set 2 {val:.2f}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
                                     curr_shell.write(cmd.encode('utf-8'))

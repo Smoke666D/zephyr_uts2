@@ -151,6 +151,104 @@ int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
     return 0;
 }
 
+
+
+int serever_set_bool(SYSTEM_BUS_ID id, bool _val, struct k_sem * sync, uint8_t * ret)
+{
+    if (id >= SYSTEM_BUS_COUNT) 
+    {
+        return -ENODEV;;
+    }
+    // Проверяем что декспритор канала существует и канал нужного типа
+    const struct system_bus_handler *handler = cache[id];
+    if (false 
+        || handler == NULL 
+        || handler->channel_type != BOOL_DATA       
+    ) 
+    {
+        return -ENODEV;
+    }
+
+    struct k_msgq *target_queue = (struct k_msgq *)handler->channel->user_data;
+    if (target_queue == NULL) {
+        return -ENODEV; // У этого канала нет очереди (например, это чистый датчик)
+    }
+
+    struct server_request _request =
+    {
+        .response = ret,
+        .sync = sync,
+        .value.sd_bool = _val,
+        .id  = id,        
+    };
+    
+    return k_msgq_put(target_queue, &_request, K_MSEC(10));
+    
+}
+
+ int serever_set_u32(SYSTEM_BUS_ID id, uint32_t _val,struct k_sem * sync, uint8_t * ret)
+ {
+         if (id >= SYSTEM_BUS_COUNT) 
+    {
+        return -ENODEV;;
+    }
+    // Проверяем что декспритор канала существует и канал нужного типа
+    const struct system_bus_handler *handler = cache[id];
+    if (false 
+        || handler == NULL 
+        || handler->channel_type != UINT_DATA      
+    ) 
+    {
+        return -ENODEV;
+    }
+
+    struct k_msgq *target_queue = (struct k_msgq *)handler->channel->user_data;
+    if (target_queue == NULL) {
+        return -ENODEV; // У этого канала нет очереди (например, это чистый датчик)
+    }
+
+    struct server_request _request =
+    {
+        .response = ret,
+        .sync = sync,
+        .value.sd_uint = _val,
+        .id  = id,        
+    };
+    return k_msgq_put(target_queue, &_request, K_MSEC(10));
+ }
+ int serever_set_real(SYSTEM_BUS_ID id, float _val,struct k_sem * sync, uint8_t * ret)
+ {
+     if (id >= SYSTEM_BUS_COUNT) 
+    {
+        return -ENODEV;;
+    }
+    // Проверяем что декспритор канала существует и канал нужного типа
+    const struct system_bus_handler *handler = cache[id];
+    if (false 
+        || handler == NULL 
+        || handler->channel_type != FLOAT_DATA       
+    ) 
+    {
+        return -ENODEV;
+    }
+
+    struct k_msgq *target_queue = (struct k_msgq *)handler->channel->user_data;
+    if (target_queue == NULL) {
+        return -ENODEV; // У этого канала нет очереди (например, это чистый датчик)
+    }
+
+    struct server_request _request =
+    {
+        .response = ret,
+        .sync = sync,
+        .value.sd_float = _val,
+        .id  = id,        
+    };
+    return k_msgq_put(target_queue, &_request, K_MSEC(10));
+
+ }
+ 
+
 int bus_get_bool(SYSTEM_BUS_ID id, bool *_val)
 {
     if (_val == NULL) 

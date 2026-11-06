@@ -1,12 +1,13 @@
 /**
  *  @file       dac.c
+ *  @headerfile dac.h
  *
  *  @date       2026.11.02
  *  @author     Dymov Igor
  *
  *  @brief      Управление ЦАП и цифровым потенциометром AD5243
- *  @details    Обрабатывает события ZBUS для настройки выходного напряжения ЦАП
- *              и изменения сопротивления каналов цифрового потенциометра AD5243 по I2C.
+ *  @details    Обрабатывает сообщения и запросы из очереди для настройки 
+ *              выходного напряжения ЦАП и изменения сопротивления каналов AD5243.
  */
 
 /***************************************************************************************************
@@ -67,7 +68,6 @@ typedef struct dac_data_msg
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
 static int  _ad5243_set_wiper(ad5243_channel_t _channel, uint8_t _value);
-static void _dac_control_line_listener_callback(const struct zbus_channel *_chan);
 static int  _ad5243_set_resistance_kohm(ad5243_channel_t _ch, float _target_r_kohm);
 static void _dac_update_handler(struct k_work *_work);
 static int  _dac_control_init(void);
@@ -77,10 +77,10 @@ static int  _dac_control_init(void);
  **************************************************************************************************/
 static const struct device *dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
-static struct k_work dac_work; 
-
-static uint32_t       cur_dac_value   __attribute__((section("DTCM"))) = 0;
-static dac_data_msg_t cache_dac_data  __attribute__((section("DTCM"))) = {0};
+static struct k_work_poll  dac_task        __attribute__((section("DTCM")));
+static struct k_poll_event dac_poll_events[1] __attribute__((section("DTCM")));
+static uint32_t            cur_dac_value   __attribute__((section("DTCM"))) = 0;
+static dac_data_msg_t      cache_dac_data  __attribute__((section("DTCM"))) = {0};
 
 static struct i2c_dt_spec i2c_spec = 
 {
@@ -88,15 +88,15 @@ static struct i2c_dt_spec i2c_spec =
     .bus  = DEVICE_DT_GET(I2C1_NODE)
 };
 
-ZBUS_LISTENER_DEFINE(dac_control_line_listener, _dac_control_line_listener_callback);
+K_MSGQ_DEFINE(dac_rx_queue, sizeof(server_request), 3, 4);
 
 ZBUS_CHAN_DEFINE(
     dac_chan,
     struct dac_data_msg,
     NULL,
-    NULL,
-    ZBUS_OBSERVERS(dac_control_line_listener),
-    {0}
+    &dac_rx_queue,
+    ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(0)
 );
 
 /***************************************************************************************************
@@ -133,18 +133,6 @@ static int _ad5243_set_wiper(ad5243_channel_t _channel, uint8_t _value)
     }
     
     return ret;         
-}
-
-/**
- *  @brief      Коллбэк слушателя ZBUS для канала dac_chan
- *  @details    Передает задачу обновления ЦАП и потенциометра в обычный воркер.
- *
- *  @param      _chan - Указатель на канал ZBUS
- */
-static void _dac_control_line_listener_callback(const struct zbus_channel *_chan)
-{
-    ARG_UNUSED(_chan);
-    app_worker_submit(&dac_work, COMMON_WORKER);
 }
 
 /**
@@ -185,50 +173,73 @@ static int _ad5243_set_resistance_kohm(ad5243_channel_t _ch, float _target_r_koh
 
 /**
  *  @brief      Обработчик воркера обновления параметров ЦАП и AD5243
- *  @details    Вычитывает данные из ZBUS, сравнивает с кэшем и обновляет
- *              выходное значение ЦАП и сопротивления двух каналов AD5243.
+ *  @details    Вычитывает запрос из очереди msgq, обновляет ЦАП или канал AD5243
+ *              в зависимости от ID запроса и отсылает уведомление/ответ.
  *
  *  @param      _work - Указатель на структуру задачи
  */
 static void _dac_update_handler(struct k_work *_work)
-{    
+{
     ARG_UNUSED(_work);
-    dac_data_msg_t msg;
     int err = 0;
+    server_request req;
 
-    if (zbus_chan_read(&dac_chan, &msg, K_MSEC(50)) == 0)
-    {
-        if (msg.value[0] != cache_dac_data.value[0])
+    if (k_msgq_get(&dac_rx_queue, &req, K_NO_WAIT) == 0)
+    {    
+
+        if (true
+            && req.id == DAC_VALUE
+            && cache_dac_data.value[0] != req.value.sd_float
+           )
         {
-            cache_dac_data.value[0] = msg.value[0];
+            cache_dac_data.value[0] = req.value.sd_float;
             float low_v = 0.0f;
-            SYSTEM_BUS_GET(ENV_VIN, &low_v);
+            SYSTEM_BUS_GET(ENV_VIN, &low_v);                    
+            float temp = 0.0f;
 
-            float temp = msg.value[0] - low_v;
+            if (cache_dac_data.value[0] > low_v)
+            {
+                temp = req.value.sd_float - low_v;
+            }
+
             float step = (MAX_P40V_OUT - low_v) / 4095.0f;
             cur_dac_value = 4095 - (uint32_t)(temp / step);
-
             dac_write_value(dac_dev, 2, (uint32_t)cur_dac_value);
         }
-
-        if (msg.value[1] != cache_dac_data.value[1])
+        else if (true
+                 && req.id == ADJ_RES1
+                 && cache_dac_data.value[1] != req.value.sd_float
+                )        
         {
-            cache_dac_data.value[1] = msg.value[1];
+            cache_dac_data.value[1] = req.value.sd_float;
             err = _ad5243_set_resistance_kohm(AD5243_CHANNEL_1, cache_dac_data.value[1]);
         }
-
-        if (msg.value[2] != cache_dac_data.value[2])
+        else if (true
+                 && req.id == ADJ_RES2
+                 && cache_dac_data.value[2] != req.value.sd_float
+                )                
         {
-            cache_dac_data.value[2] = msg.value[2];
+            cache_dac_data.value[2] = req.value.sd_float;
             err |= _ad5243_set_resistance_kohm(AD5243_CHANNEL_2, cache_dac_data.value[2]);
         }
 
         if (err < 0)
         {
-            SERVER_CH_SET_BIT(AD5243_ERROR_CH, AD5243_IU_ERROR);
             LOG_ERR("AD5243 connection error!");
         }
+
+        if (req.sync != NULL)
+        {
+            if (req.response != NULL)
+            {
+                *req.response = err;
+            }
+            k_sem_give(req.sync);
+        }
     }
+
+    dac_poll_events[0].state = K_POLL_STATE_NOT_READY;
+    app_worker_poll_submit(&dac_task, dac_poll_events, COMMON_WORKER);  
 }
 
 /**
@@ -262,7 +273,13 @@ static int _dac_control_init(void)
         return err;
     }
 
-    k_work_init(&dac_work, _dac_update_handler);
+    k_poll_event_init(&dac_poll_events[0],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
+                      K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
+                      &dac_rx_queue); 
+
+    k_work_poll_init(&dac_task, _dac_update_handler); 
+    app_worker_poll_submit(&dac_task, dac_poll_events, COMMON_WORKER);
 
     LOG_INF("DAC1 Channel 2 (PA5) successfully initialized!");
 

@@ -7,73 +7,7 @@
 #include <zephyr/zbus/zbus.h>
 #include "shell_common.h"
 
- /* ------------------------------------------------------------------ */
-/*  Аналоговые выходы                                                 */
-/* ------------------------------------------------------------------ */    
-static int cmd_dac_set(const struct shell *sh, size_t argc, char **argv)
-{
-    if (argc != 2) 
-    {        
-        return -EINVAL;
-    }
-
-     /* Парсим вещественное значение напряжения (float) из аргумента */
-    char *endptr;
-    float voltage = strtof(argv[1], &endptr);
-    
-    /* Проверяем корректность парсинга и границы диапазона */
-    if (*endptr != '\0' || voltage < 0.0f || voltage > 30.0f) 
-    {
-        shell_error(sh, "Invalid voltage: %s (Must be between 0.0 and 30 V)", argv[1]);
-        return -EINVAL;
-    }
-
-    SYSTEM_BUS_SET(DAC_VALUE, voltage);
-    
-    return 0;
-}
-
-SHELL_CMD_REGISTER(dac_set, NULL, 
-                   "Set DAC output value: dac_set <0-30>", 
-                   cmd_dac_set);
-
-uint32_t adj_res_name[] =
-{
-    ADJ_RES1,
-    ADJ_RES2,  
-};
-
-static int cmd_adj_res_set(const struct shell *sh, size_t argc, char **argv)
-{
-    if (argc != 3)
-    {
-        shell_error(sh, "Usage: adj_res_set <1-%d> <0.0-100.0>", 2);
-        return -EINVAL;
-    }
-    
-    char *endptr;
-    long channel_num = strtol(argv[1], &endptr, 10);
-    if (*endptr != '\0' || channel_num < 1 || channel_num > 2) 
-    {
-        shell_error(sh, "Invalid channel: %s (Must be 1 to %d)", argv[1], 2);
-        return -EINVAL;
-    }
-
-    float resistance = strtof(argv[2], &endptr);
-    
-    if (*endptr != '\0' || resistance < 0.0f || resistance > 100.0f) 
-    {
-        shell_error(sh, "Invalid resistance: %s (Must be between 0.0 and 100.0 kOm)", argv[2]);
-        return -EINVAL;
-    }
-
-    SYSTEM_BUS_SET(adj_res_name[channel_num - 1], (float)resistance);
-    return 0;
-}
-
-SHELL_CMD_REGISTER(adj_res_set, NULL, 
-                   "Set resistance value: adj_res_set <1-2> <0.0-100.0>", 
-                   cmd_adj_res_set);                   
+                
 
 /* 
  * Обработчик команд консоли для отправки данных в LIN/UART каналы.
