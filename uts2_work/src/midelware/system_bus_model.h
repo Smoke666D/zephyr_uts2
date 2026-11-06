@@ -354,13 +354,13 @@ typedef struct server_request
 
 #define SERVER_CH_SET_ASYC(id, val) _Generic((val), \
         bool:       serever_set_bool(id, val, NULL, NULL), \
-        int:        serever_set_u32(id, val, NULL, NULL),  \
+        uint32_t:        serever_set_u32(id, val, NULL, NULL),  \
         float:      serever_set_real(id, val, NULL, NULL) \
     )
 
 #define SERVER_CH_SET_SYC(id, val, sync, ret) _Generic((val), \
         bool:       serever_set_bool(id, val, sync, ret), \
-        int:        serever_set_u32(id, val, sync, ret),  \
+        uint32_t:        serever_set_u32(id, val, sync, ret),  \
         float:   serever_set_real(id, val,  sync, ret) \
     )
 

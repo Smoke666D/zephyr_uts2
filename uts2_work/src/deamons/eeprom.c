@@ -83,8 +83,6 @@ typedef struct eeprom_entry
     const struct zbus_channel *chan;
     const char                *name;
     uint32_t                   error_bit;
-    uint32_t                   set_ok_bit;
-    uint32_t                   set_error_bit;
     uint32_t                   set_crc_error_bit;
 
     /* Задачи очередей (управление потокобезопасно через API Zephyr) */
@@ -144,8 +142,6 @@ static eeprom_entry_t eeprom_entries[] = {
         .chan               = &eeprom1_chan,
         .name               = "IU",
         .error_bit          = EEPORM_IU_ERROR,
-        .set_ok_bit         = EVENT_EEPROM_IU_WRITE_OK,
-        .set_error_bit      = EVENT_EEPROM_IU_WRITE_ERROR,
         .set_crc_error_bit  = EVENT_EEPROM_IU_CRC_ERROR,
         .is_busy            = false,
         .is_dirty           = false,
@@ -155,8 +151,6 @@ static eeprom_entry_t eeprom_entries[] = {
         .chan               = &eeprom2_chan,
         .name               = "CU",
         .error_bit          = EEPORM_CU_ERROR,
-        .set_ok_bit         = EVENT_EEPROM_CU_WRITE_OK,
-        .set_error_bit      = EVENT_EEPROM_CU_WRITE_ERROR,
         .set_crc_error_bit  = EVENT_EEPROM_CU_CRC_ERROR,
         .is_busy            = false,
         .is_dirty           = false,
@@ -230,7 +224,6 @@ static void _start_write_transaction(eeprom_entry_t *entry)
     if (memcmp(&new_payload, &entry->disk_cache, sizeof(eeprom_disk_payload_t)) == 0) 
     {
         entry->is_dirty = false;
-        SERVER_CH_SET_BIT_IF_NEEDED(EEPROM_EVENT_CH, entry->set_ok_bit);
         return;
     }
 
@@ -262,7 +255,6 @@ static void _write_page_step(eeprom_entry_t *entry)
         entry->remaining = 0;
         entry->is_busy   = false;
         entry->is_dirty  = false;        
-        SERVER_CH_SET_BIT_IF_NEEDED(EEPROM_EVENT_CH, entry->set_error_bit);
         return;
     }
 
@@ -279,11 +271,10 @@ static void _write_page_step(eeprom_entry_t *entry)
     else 
     {
         LOG_INF("Data successfully persisted to %s", entry->name);
-        SERVER_CH_SET_BIT(EEPROM_EVENT_CH, entry->set_ok_bit);
         SERVER_CH_CLEAR_BIT(EEPROM_EVENT_CH, entry->set_crc_error_bit);
         uint32_t flags = 0;
-         SYSTEM_BUS_GET(EEPROM_EVENT_CH,&flags);
-         LOG_INF("flalg stat %d", flags);
+        SYSTEM_BUS_GET(EEPROM_EVENT_CH,&flags);
+        LOG_INF("flalg stat %d", flags);
         // Если пока шла запись, поступили новые данные — запускаем новый цикл
         if (entry->is_dirty) 
         {
@@ -343,7 +334,7 @@ static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid
             else 
             {
                 LOG_WRN("CRC mismatch on %s user data!", _entry->name);
-                memset(&_entry->disk_cache, 0xFF, sizeof(_entry->disk_cache));
+                memset(&_entry->disk_cache, 0x00, sizeof(_entry->disk_cache));                
                 SERVER_CH_SET_BIT(EEPROM_EVENT_CH, _entry->set_crc_error_bit);
             }
         }
@@ -364,7 +355,7 @@ static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid
     {
         SERVER_CH_SET_BIT(EEPROM_ERROR_CH, _entry->error_bit);
     }
-    SERVER_CH_SET_MASK(EEPROM_EVENT_CH, _entry->set_ok_bit | _entry->set_error_bit);    
+     
 }
 
 /**
