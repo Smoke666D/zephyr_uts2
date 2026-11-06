@@ -91,6 +91,7 @@ typedef struct eeprom_entry
     struct k_work_delayable    debounce_task; // Отвечает за дебаунс ZBUS (10 мс)
     struct k_work_delayable    write_task;    // Отвечает за постраничную запись (15 мс)
 
+
     /* ========================================================================= */
     /* ПРИВАТНОЕ СОСТОЯНИЕ АВТОМАТА (ДОСТУПНО ТОЛЬКО ИЗ ПОТОКА COMMON_WORKER!)   */
     /* ========================================================================= */
@@ -116,6 +117,10 @@ static int      _eeprom_mgr_init(void);
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
+
+K_MSGQ_DEFINE(eeprom1_rx_queue, sizeof(server_request), 3, 4);
+K_MSGQ_DEFINE(eeprom2_rx_queue, sizeof(server_request), 3, 4);
+
 
 ZBUS_LISTENER_DEFINE(eeprom_lis, _eeprom_zbus_listener_callback);
 

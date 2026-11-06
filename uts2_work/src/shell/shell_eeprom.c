@@ -44,8 +44,8 @@ typedef struct eeprom_shell_cfg
 {
     const char *prefix;         // "IU_EEPROM" или "CU_EEPROM"
     uint32_t    error_bit;      // EEPORM_IU_ERROR или EEPORM_CU_ERROR
-    uint32_t    set_ok_bit;     // EEPORM_IU_WARNING или EEPORM_CU_WARNING
-    uint32_t    set_error_bit;  // EEPORM_IU_WARNING или EEPORM_CU_WARNING
+    uint32_t    set_ok_bit;     // EVENT_EEPROM_IU_WRITE_OK или EVENT_EEPROM_CU_WRITE_OK
+    uint32_t    set_error_bit;  // EVENT_EEPROM_IU_WRITE_ERROR или EVENT_EEPROM_CU_WRITE_ERROR
     uint32_t    set_crc_error_bit;
     uint32_t    id_param;       // SETTING_IU_ID или SETTING_CU_ID
     uint32_t    sn_param;       // SETTING_IU_SN или SETTING_CU_SN
@@ -85,36 +85,37 @@ static int  _eeprom_shell_init(void);
  **************************************************************************************************/
 static const eeprom_shell_cfg_t iu_cfg = 
 {
-    .prefix        = "IU_EEPROM",
-    .error_bit     = EEPORM_IU_ERROR,
-    .set_ok_bit    = EVENT_EEPROM_IU_WRITE_OK,
-    .set_error_bit = EVENT_EEPROM_IU_WRITE_ERROR,    
-    .id_param      = SETTING_IU_ID,
-    .sn_param      = SETTING_IU_SN,
-    .hw_id_param   = SETTING_IU_HW_ID,
-    .hw_ver_param  = SETTING_IU_HW_VER,
+    .prefix             = "IU_EEPROM",
+    .error_bit          = EEPORM_IU_ERROR,
+    .set_ok_bit         = EVENT_EEPROM_IU_WRITE_OK,
+    .set_error_bit      = EVENT_EEPROM_IU_WRITE_ERROR,    
+    .id_param           = SETTING_IU_ID,
+    .sn_param           = SETTING_IU_SN,
+    .hw_id_param        = SETTING_IU_HW_ID,
+    .hw_ver_param       = SETTING_IU_HW_VER,
     .set_crc_error_bit  = EVENT_EEPROM_IU_CRC_ERROR,
-    .user_param    = SETTING_IU_USER_DATA,
+    .user_param         = SETTING_IU_USER_DATA,
 };
 
 static const eeprom_shell_cfg_t cu_cfg = 
 {
-    .prefix       = "CU_EEPROM",
-    .error_bit    = EEPORM_CU_ERROR,
-    .set_ok_bit    = EVENT_EEPROM_CU_WRITE_OK,
-    .set_error_bit = EVENT_EEPROM_CU_WRITE_ERROR,
-    .id_param     = SETTING_CU_ID,
-    .sn_param     = SETTING_CU_SN,
-    .hw_id_param  = SETTING_CU_HW_ID,
-    .hw_ver_param = SETTING_CU_HW_VER,
-     .set_crc_error_bit  = EVENT_EEPROM_CU_CRC_ERROR,
-    .user_param   = SETTING_CU_USER_DATA,
+    .prefix             = "CU_EEPROM",
+    .error_bit          = EEPORM_CU_ERROR,
+    .set_ok_bit         = EVENT_EEPROM_CU_WRITE_OK,
+    .set_error_bit      = EVENT_EEPROM_CU_WRITE_ERROR,
+    .id_param           = SETTING_CU_ID,
+    .sn_param           = SETTING_CU_SN,
+    .hw_id_param        = SETTING_CU_HW_ID,
+    .hw_ver_param       = SETTING_CU_HW_VER,
+    .set_crc_error_bit  = EVENT_EEPROM_CU_CRC_ERROR,
+    .user_param         = SETTING_CU_USER_DATA,
 };
 
 // Раздельные контексты исключают взаимное влияние при одновременной записи
 static eeprom_shell_ctx_t iu_ctx = {.cfg = &iu_cfg};
 static eeprom_shell_ctx_t cu_ctx = {.cfg = &cu_cfg};
 static uint32_t timeout = 0;
+
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
  **************************************************************************************************/
@@ -140,7 +141,6 @@ static void _eeprom_check_work_handler(struct k_work *_work)
     {
          if (error_bit)
          {
-            // Формат URC: +IU_EEPROM ERROR: write error!
             shell_print(ctx->sh, "+%s ERROR: write error!", ctx->cfg->prefix);
          }
          else if (ok_bit)
@@ -152,12 +152,11 @@ static void _eeprom_check_work_handler(struct k_work *_work)
             shell_print(ctx->sh, "+%s ERROR: timeout error!", ctx->cfg->prefix);
          }
     }
-    
 }
 
 /**
  *  @brief      Планирование отложенной проверки записи
- *  @details    Сбрасывает предыдущий флаг ошибки и ставит воркер проверки в очередь на 100 мс.
+ *  @details    Сбрасывает предыдущий флаг ошибки и ставит воркер проверки в очередь.
  *
  *  @param      _ctx - Указатель на контекст EEPROM
  *  @param      _sh  - Указатель на контекст Shell
@@ -165,7 +164,6 @@ static void _eeprom_check_work_handler(struct k_work *_work)
 static void _schedule_write_check(eeprom_shell_ctx_t *_ctx, const struct shell *_sh)
 {
     _ctx->sh = _sh;
-    // Сбрасываем флаг перед проверкой, чтобы не читать устаревшую ошибку
     SERVER_CH_CLEAR_MASK(EEPROM_EVENT_CH, _ctx->cfg->set_error_bit | _ctx->cfg->set_ok_bit);    
     app_worker_reschedule_submit(
         &_ctx->check_work, 
@@ -176,24 +174,20 @@ static void _schedule_write_check(eeprom_shell_ctx_t *_ctx, const struct shell *
 
 /**
  *  @brief      Обработчик субкоманды чтения EEPROM
- *  @details    Считывает запрашиваемый параметр (UID, SN, HW, USER) из системной шины
- *              и выводит результат в консоль Shell.
- *
- *  @param      _sh   - Указатель на контекст Shell
- *  @param      _ctx  - Указатель на контекст EEPROM
- *  @param      _argc - Количество аргументов команды
- *  @param      _argv - Массив аргументов команды
- *
- *  @return     int - Всегда 0
+ *  @details    Считывает параметр (или все сразу, если аргумент не указан) из системной шины.
  */
 static int _eeprom_cmd_get(const struct shell *_sh, eeprom_shell_ctx_t *_ctx, 
                             size_t _argc, char **_argv)
 {
     const eeprom_shell_cfg_t *cfg = _ctx->cfg;
 
-    if (_argc != 2) 
+    // ОТЛАДКА: Посмотрим в лог, что реально пришло от Shell
+    // shell_print(_sh, "DEBUG: _argc = %zu", _argc);
+
+    // Допускаем _argc == 0 или 1 (вывод всех), либо _argc == 2 (вывод конкретного)
+    if (_argc > 2) 
     {
-        shell_print(_sh, "%s ERROR: invalid data!", cfg->prefix);
+        shell_print(_sh, "%s ERROR: invalid data! (argc=%zu)", cfg->prefix, _argc);
         return 0;
     }
 
@@ -204,12 +198,52 @@ static int _eeprom_cmd_get(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
     {
         shell_print(_sh, "%s ERROR: Eeprom not found!", cfg->prefix);
         return 0;
-    }     
+    }
 
+    // Проверяем флаг CRC / очистки EEPROM
+    bool crc_err_bit = false;
+    SERVER_CH_GET_BIT(EVENT_1_REG, cfg->set_crc_error_bit, &crc_err_bit);
+    if (crc_err_bit) 
+    {
+        shell_print(_sh, "%s ERROR: Clear eeprom detected!", cfg->prefix);
+        return 0;
+    }
 
+    // ВЕТКА А: Аргумент не указан (_argc == 0 или _argc == 1) -> Выводим ВСЕ параметры
+    if (_argc == 0 || _argc == 1)
+    {
+        uint32_t uid = 0, sn = 0, user = 0, val_hw_id = 0, val_hw_ver = 0;
+        int r_uid  = SYSTEM_BUS_GET(cfg->id_param, &uid);
+        int r_sn   = SYSTEM_BUS_GET(cfg->sn_param, &sn);
+        int r_user = SYSTEM_BUS_GET(cfg->user_param, &user);
+        int r_hw1  = SYSTEM_BUS_GET(cfg->hw_id_param, &val_hw_id);
+        int r_hw2  = SYSTEM_BUS_GET(cfg->hw_ver_param, &val_hw_ver);
+
+        char hw_str[32] = "N/A";
+        if (r_hw1 == 0 && r_hw2 == 0) 
+        {
+            uint32_t mm = val_hw_id % 100;
+            uint32_t temp = val_hw_id / 100;
+            uint32_t a = temp % 10;
+            uint32_t ccc = temp / 10;
+
+            uint32_t ee = val_hw_ver % 100;
+            uint32_t dd = val_hw_ver / 100;
+            snprintf(hw_str, sizeof(hw_str), "%03u.%u.%02u.%02u.%02u", ccc, a, mm, dd, ee);
+        }
+
+        shell_print(_sh, "%s OK UID: 0x%08X | SN: %u | USER: %u | HW: %s",
+                    cfg->prefix,
+                    (r_uid == 0) ? uid : 0,
+                    (r_sn == 0) ? sn : 0,
+                    (r_user == 0) ? user : 0,
+                    hw_str);
+        return 0;
+    }
+
+    // ВЕТКА Б: Указан конкретный параметр (_argc == 2) -> Выводим его
     const char *data_type = _argv[1];
 
-    // 2. UID
     if (strcmp(data_type, "UID") == 0) 
     {
         uint32_t val = 0;
@@ -223,77 +257,60 @@ static int _eeprom_cmd_get(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
             shell_print(_sh, "%s OK UID: 0x%08X", cfg->prefix, val);
         }
     }
-    else 
+    else if (strcmp(data_type, "SN") == 0) 
     {
-        SERVER_CH_GET_BIT(EVENT_1_REG, cfg->set_crc_error_bit, &err_bit);
-        if (err_bit) 
+        uint32_t val = 0;
+        int res = SYSTEM_BUS_GET(cfg->sn_param, &val);
+        if (res != 0) 
         {
-            shell_print(_sh, "%s ERROR: Clear eeprom detected!", cfg->prefix);
-            return 0;
-        }
-    
-        // 3. SN
-        if (strcmp(data_type, "SN") == 0) 
-        {
-            uint32_t val = 0;
-            int res = SYSTEM_BUS_GET(cfg->sn_param, &val);
-            if (res != 0) 
-            {
-                shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
-            } 
-            else 
-            {
-                shell_print(_sh, "%s OK SN: %u", cfg->prefix, val);
-            }
-        }
-        // 4. USER
-        else if (strcmp(data_type, "USER") == 0) 
-        {
-            uint32_t val = 0;
-            int res = SYSTEM_BUS_GET(cfg->user_param, &val);
-            if (res != 0) 
-            {
-                shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
-            } 
-            else 
-            {
-                shell_print(_sh, "%s OK USER: %u", cfg->prefix, val);
-            }
-        }
-        // 5. HW
-        else if (strcmp(data_type, "HW") == 0) 
-        {
-            uint32_t val_hw_id = 0;
-            uint32_t val_hw_ver = 0;
-            int res1 = SYSTEM_BUS_GET(cfg->hw_id_param, &val_hw_id);
-            int res2 = SYSTEM_BUS_GET(cfg->hw_ver_param, &val_hw_ver);
-
-            if (false
-                || res1 != 0 
-                || res2 != 0
-               ) 
-            {
-                shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
-            } 
-            else 
-            {
-                uint32_t mm = val_hw_id % 100;
-                uint32_t temp = val_hw_id / 100;
-                uint32_t a = temp % 10;
-                uint32_t ccc = temp / 10;
-
-                uint32_t ee = val_hw_ver % 100;
-                uint32_t dd = val_hw_ver / 100;
-
-                shell_print(_sh, "%s OK HW: %03u.%u.%02u.%02u.%02u", 
-                        cfg->prefix, ccc, a, mm, dd, ee);
-            }
-        }        
-        // 6. Неизвестный параметр
+            shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
+        } 
         else 
         {
-            shell_print(_sh, "%s ERROR: invalid data!", cfg->prefix);
+            shell_print(_sh, "%s OK SN: %u", cfg->prefix, val);
         }
+    }
+    else if (strcmp(data_type, "USER") == 0) 
+    {
+        uint32_t val = 0;
+        int res = SYSTEM_BUS_GET(cfg->user_param, &val);
+        if (res != 0) 
+        {
+            shell_print(_sh, "%s ERROR: not support!", cfg->prefix);
+        } 
+        else 
+        {
+            shell_print(_sh, "%s OK USER: %u", cfg->prefix, val);
+        }
+    }
+    else if (strcmp(data_type, "HW") == 0) 
+    {
+        uint32_t val_hw_id = 0;
+        uint32_t val_hw_ver = 0;
+        int res1 = SYSTEM_BUS_GET(cfg->hw_id_param, &val_hw_id);
+        int res2 = SYSTEM_BUS_GET(cfg->hw_ver_param, &val_hw_ver);
+
+        if (res1 != 0 || res2 != 0) 
+        {
+            shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
+        } 
+        else 
+        {
+            uint32_t mm = val_hw_id % 100;
+            uint32_t temp = val_hw_id / 100;
+            uint32_t a = temp % 10;
+            uint32_t ccc = temp / 10;
+
+            uint32_t ee = val_hw_ver % 100;
+            uint32_t dd = val_hw_ver / 100;
+
+            shell_print(_sh, "%s OK HW: %03u.%u.%02u.%02u.%02u", 
+                    cfg->prefix, ccc, a, mm, dd, ee);
+        }
+    }        
+    else 
+    {
+        shell_print(_sh, "%s ERROR: invalid data!", cfg->prefix);
     }
 
     return 0;
@@ -301,15 +318,6 @@ static int _eeprom_cmd_get(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
 
 /**
  *  @brief      Обработчик субкоманды записи EEPROM
- *  @details    Записывает передаваемое значение (SN, HW, USER) в системную шину
- *              и планирует проверку отложенной записи URC.
- *
- *  @param      _sh   - Указатель на контекст Shell
- *  @param      _ctx  - Указатель на контекст EEPROM
- *  @param      _argc - Количество аргументов команды
- *  @param      _argv - Массив аргументов команды
- *
- *  @return     int - Всегда 0
  */
 static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx, 
                             size_t _argc, char **_argv)
@@ -334,12 +342,10 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
     const char *data_type = _argv[1];
     const char *data_val_str = _argv[2];
 
-    // 2. UID — только чтение
     if (strcmp(data_type, "UID") == 0) 
     {
         shell_print(_sh, "%s ERROR: read only!", cfg->prefix);
     }
-    // 3. SN (uint32_t)
     else if (strcmp(data_type, "SN") == 0) 
     {
         char *endptr;
@@ -362,7 +368,6 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
             _schedule_write_check(_ctx, _sh);
         }
     }
-    // 4. USER (uint32_t)
     else if (strcmp(data_type, "USER") == 0) 
     {
         char *endptr;
@@ -385,7 +390,6 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
             _schedule_write_check(_ctx, _sh);
         }
     }
-    // 5. HW (Формат: ccc.a.mm.dd.ee)
     else if (strcmp(data_type, "HW") == 0) 
     {
         unsigned int ccc, a, mm, dd, ee;
@@ -413,10 +417,7 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
 
         int res1 = SYSTEM_BUS_SET(cfg->hw_id_param, hw_id);
         int res2 = SYSTEM_BUS_SET(cfg->hw_ver_param, hw_ver);        
-        if (false
-            || res1 != 0 
-            || res2 != 0
-           ) 
+        if (res1 != 0 || res2 != 0) 
         {
             shell_print(_sh, "%s ERROR: not supported!", cfg->prefix);
         } 
@@ -427,7 +428,6 @@ static int _eeprom_cmd_set(const struct shell *_sh, eeprom_shell_ctx_t *_ctx,
             _schedule_write_check(_ctx, _sh);
         }
     }
-    // 6. Неизвестный параметр
     else 
     {
         shell_print(_sh, "%s ERROR: invalid data!", cfg->prefix);
@@ -449,7 +449,7 @@ static int _cmd_iu_set(const struct shell *_sh, size_t _argc, char **_argv)
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
     iu_eeprom_sub,
-    SHELL_CMD(get, NULL, "Get parameter: IU_EEPROM get <UID|SN|HW|USER>", _cmd_iu_get),
+    SHELL_CMD(get, NULL, "Get parameter: IU_EEPROM get [<UID|SN|HW|USER>]", _cmd_iu_get),
     SHELL_CMD(set, NULL, "Set parameter: IU_EEPROM set <SN|HW|USER> <val>", _cmd_iu_set),
     SHELL_SUBCMD_SET_END
 );
@@ -469,7 +469,7 @@ static int _cmd_cu_set(const struct shell *_sh, size_t _argc, char **_argv)
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
     cu_eeprom_sub,
-    SHELL_CMD(get, NULL, "Get parameter: CU_EEPROM get <UID|SN|HW|USER>", _cmd_cu_get),
+    SHELL_CMD(get, NULL, "Get parameter: CU_EEPROM get [<UID|SN|HW|USER>]", _cmd_cu_get),
     SHELL_CMD(set, NULL, "Set parameter: CU_EEPROM set <SN|HW|USER> <val>", _cmd_cu_set),
     SHELL_SUBCMD_SET_END
 );
@@ -478,9 +478,6 @@ SHELL_CMD_REGISTER(CU_EEPROM, &cu_eeprom_sub, "CU EEPROM commands", NULL);
 
 /**
  *  @brief      Инициализация изолированных воркеров проверки записи
- *  @details    Инициализирует отложенные воркеры k_work_delayable для IU и CU.
- *
- *  @return     int - Ноль при успехе
  */
 static int _eeprom_shell_init(void)
 {

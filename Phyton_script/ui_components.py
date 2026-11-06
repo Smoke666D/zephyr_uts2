@@ -1073,7 +1073,184 @@ def build_dashboard(ports_refs, ui_labels):
                 ui.label('Формат: ММ:СС.мс (сохранение в logs/)').classes(
                     'text-[10px] text-slate-400'
                 )
+# ==========================================
+        # 13. БЛОК УПРАВЛЕНИЯ EEPROM (IU & CU)
+        # ==========================================
+        import re
 
+        with ui.card().classes('bg-slate-800 p-3 w-full cursor-grab'):
+            ui.label('Управление микросхемами EEPROM (IU & CU)').classes(
+                'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
+            )
+
+            eeprom_ui = {
+                'IU': {'uid': None, 'sn': None, 'hw': None, 'user': None, 'status': None},
+                'CU': {'uid': None, 'sn': None, 'hw': None, 'user': None, 'status': None},
+            }
+
+            async def eeprom_read_all(chip_name):
+                """Вычитывает все параметры чипа одной командой <CHIP>_EEPROM get"""
+                curr_shell = shell_ref.get('ser')
+                if not curr_shell or not curr_shell.is_open:
+                    ui.notify('Shell порт закрыт!', type='warning')
+                    return False
+
+                cmd = f'{chip_name}_EEPROM get\r\n'.encode()
+                curr_shell.reset_input_buffer()
+                curr_shell.write(cmd)
+
+                start_t = time.time()
+                recv = ""
+                # Ожидаем ответ со строкой статуса чипа
+                while time.time() - start_t < 2.5:
+                    if curr_shell.in_waiting > 0:
+                        recv += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
+                        if f"{chip_name}_EEPROM OK" in recv or f"{chip_name}_EEPROM ERROR" in recv:
+                            break
+                    await asyncio.sleep(0.04)
+
+                if f"{chip_name}_EEPROM ERROR" in recv:
+                    err_msg = recv.strip()
+                    eeprom_ui[chip_name]['status'].set_text(err_msg)
+                    eeprom_ui[chip_name]['status'].classes('text-rose-400')
+                    ui.notify(f'{chip_name}: {err_msg}', type='negative')
+                    return False
+
+                # Парсинг ответа: <CHIP>_EEPROM OK UID: 0x... | SN: ... | USER: ... | HW: ...
+                m_uid = re.search(r'UID:\s*(0x[0-9A-Fa-f]+|\d+)', recv)
+                m_sn = re.search(r'SN:\s*(\d+)', recv)
+                m_user = re.search(r'USER:\s*(\d+)', recv)
+                m_hw = re.search(r'HW:\s*([\d\.]+)', recv)
+
+                if m_uid:
+                    eeprom_ui[chip_name]['uid'].set_value(m_uid.group(1))
+                if m_sn:
+                    eeprom_ui[chip_name]['sn'].set_value(m_sn.group(1))
+                if m_user:
+                    eeprom_ui[chip_name]['user'].set_value(m_user.group(1))
+                if m_hw:
+                    eeprom_ui[chip_name]['hw'].set_value(m_hw.group(1))
+
+                eeprom_ui[chip_name]['status'].set_text('Данные успешно вычитаны')
+                eeprom_ui[chip_name]['status'].classes('text-emerald-400')
+                return True
+
+            async def read_both_eeproms():
+                ui.notify('Чтение данных EEPROM...', type='info')
+                await eeprom_read_all('IU')
+                await asyncio.sleep(0.1)
+                await eeprom_read_all('CU')
+
+            async def eeprom_write_param(chip_name, param_name, input_elem):
+                """Записывает параметр: <CHIP>_EEPROM set <PARAM> <VAL> и слушает URC"""
+                curr_shell = shell_ref.get('ser')
+                if not curr_shell or not curr_shell.is_open:
+                    ui.notify('Shell порт закрыт!', type='warning')
+                    return
+
+                val_str = input_elem.value.strip()
+                if not val_str:
+                    ui.notify(f'{chip_name} {param_name}: значение не может быть пустым!', type='warning')
+                    return
+
+                # Проверка формата HW
+                if param_name == 'HW':
+                    parts = val_str.split('.')
+                    if len(parts) != 5 or not all(p.isdigit() for p in parts):
+                        ui.notify('Формат HW должен быть: CCC.A.MM.DD.EE (например, 001.0.01.01.00)', type='negative')
+                        return
+
+                cmd = f'{chip_name}_EEPROM set {param_name} {val_str}\r\n'.encode()
+                curr_shell.reset_input_buffer()
+                curr_shell.write(cmd)
+
+                eeprom_ui[chip_name]['status'].set_text(f'Запись {param_name}...')
+                eeprom_ui[chip_name]['status'].classes('text-amber-400')
+
+                # Ждем отложенный URC (+<CHIP>_EEPROM DONE: write ok! или ERROR)
+                start_t = time.time()
+                recv_urc = ""
+                success = False
+
+                while time.time() - start_t < 3.0:
+                    if curr_shell.in_waiting > 0:
+                        recv_urc += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
+                        if f'+{chip_name}_EEPROM DONE' in recv_urc:
+                            success = True
+                            break
+                        if f'+{chip_name}_EEPROM ERROR' in recv_urc:
+                            break
+                    await asyncio.sleep(0.05)
+
+                if success:
+                    eeprom_ui[chip_name]['status'].set_text(f'{param_name} успешно записан!')
+                    eeprom_ui[chip_name]['status'].classes('text-emerald-400')
+                    ui.notify(f'{chip_name}: {param_name} успешно сохранен в EEPROM', type='positive')
+                else:
+                    err_txt = recv_urc.strip() if recv_urc.strip() else 'Таймаут подтверждения записи!'
+                    eeprom_ui[chip_name]['status'].set_text(err_txt)
+                    eeprom_ui[chip_name]['status'].classes('text-rose-400')
+                    ui.notify(f'{chip_name} Ошибка записи: {err_txt}', type='negative')
+
+            # Верхняя панель карточки с кнопкой глобального чтения
+            with ui.row().classes('w-full justify-between items-center mb-2 px-1'):
+                ui.label('Конфигурация параметров идентификации плат').classes('text-xs text-slate-400')
+                ui.button('Вычитать все данные', on_click=read_both_eeproms).classes(
+                    'bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs py-1.5 px-3 rounded shadow'
+                )
+
+            # Две симметричные колонки (IU и CU)
+            with ui.row().classes('w-full gap-4'):
+                for chip in ['IU', 'CU']:
+                    with ui.card().classes('bg-slate-700/60 p-2.5 flex-1 rounded border border-slate-600'):
+                        with ui.row().classes('w-full justify-between items-center mb-1 pb-1 border-b border-slate-600'):
+                            ui.label(f'{chip} EEPROM').classes('text-xs font-bold text-sky-300')
+                            st_lbl = ui.label('Не вычитано').classes('text-[10px] font-mono text-slate-400')
+                            eeprom_ui[chip]['status'] = st_lbl
+
+                        # 1. UID (Read-Only)
+                        with ui.row().classes('w-full items-center gap-2 mb-1.5'):
+                            ui.label('UID:').classes('text-xs text-slate-300 w-16 font-semibold')
+                            uid_in = ui.input(placeholder='Только чтение').props(
+                                'dark outlined dense readonly'
+                            ).classes('flex-1 bg-slate-800 text-xs text-slate-400 rounded')
+                            eeprom_ui[chip]['uid'] = uid_in
+
+                        # 2. Серийный номер (SN)
+                        with ui.row().classes('w-full items-center gap-2 mb-1.5'):
+                            ui.label('SN:').classes('text-xs text-white w-16 font-semibold')
+                            sn_in = ui.input(placeholder='Число (SN)').props(
+                                'dark outlined dense type=number'
+                            ).classes('flex-1 bg-slate-800 text-xs text-white rounded')
+                            eeprom_ui[chip]['sn'] = sn_in
+                            ui.button(
+                                'Записать',
+                                on_click=lambda c=chip, inp=sn_in: eeprom_write_param(c, 'SN', inp)
+                            ).classes('bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] py-1 px-2 font-bold')
+
+                        # 3. Версия HW (CCC.A.MM.DD.EE)
+                        with ui.row().classes('w-full items-center gap-2 mb-1.5'):
+                            ui.label('HW Ver:').classes('text-xs text-white w-16 font-semibold')
+                            hw_in = ui.input(placeholder='CCC.A.MM.DD.EE').props(
+                                'dark outlined dense'
+                            ).classes('flex-1 bg-slate-800 text-xs text-white rounded')
+                            eeprom_ui[chip]['hw'] = hw_in
+                            ui.button(
+                                'Записать',
+                                on_click=lambda c=chip, inp=hw_in: eeprom_write_param(c, 'HW', inp)
+                            ).classes('bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] py-1 px-2 font-bold')
+
+                        # 4. USER DATA
+                        with ui.row().classes('w-full items-center gap-2 mb-1'):
+                            ui.label('USER:').classes('text-xs text-white w-16 font-semibold')
+                            user_in = ui.input(placeholder='Число (User Data)').props(
+                                'dark outlined dense type=number'
+                            ).classes('flex-1 bg-slate-800 text-xs text-white rounded')
+                            eeprom_ui[chip]['user'] = user_in
+                            ui.button(
+                                'Записать',
+                                on_click=lambda c=chip, inp=user_in: eeprom_write_param(c, 'USER', inp)
+                            ).classes('bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] py-1 px-2 font-bold')
         # ==========================================
         # 12. ОСЦИЛЛОГРАФ (В самом конце)
         # ==========================================
