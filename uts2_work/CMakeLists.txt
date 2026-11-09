@@ -10,27 +10,31 @@ project(uts2_work)
 
 include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 
+
 target_include_directories(app PRIVATE 
     src 
     src/drivers
     src/logic_signal
-    src/uts2/shell
+  #  src/uts2/shell
     src/midelware
+    src/lib/scpi/libscpi/inc
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"  
     "src/works/*.c"  
-    "src/uts2/shell/*.c" 
+    #"src/uts2/shell/*.c" 
     "src/midelware/*c"  
     "src/deamons/*c" 
+    "src/lib/scpi/libscpi/src/*.c"
 )
 
 target_sources(app PRIVATE 
               
-       src/main.c
-    src/settings.c        
-      ${APP_SOURCES} 
+    src/main.c
+    src/settings.c 
+    src/scpi_init.c    
+     ${APP_SOURCES} 
 )
 
 

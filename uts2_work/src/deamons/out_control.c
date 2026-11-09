@@ -48,7 +48,7 @@ typedef struct hc595_channels_msg {
 
 static void _hc595_calculate_mask(const struct hc595_channels_msg *_msg, 
                                   uint8_t *_tx_data, size_t _len);
-static void _out_update_handler(struct k_work *_work);
+static void _hc595_ctl_update_handler(struct k_work *_work);
 static int  _out_manager_system_init(void);
 
 /***************************************************************************************************
@@ -135,31 +135,6 @@ static void _hc595_calculate_mask(const struct hc595_channels_msg *_msg,
         {
             _tx_data[chip_index] |= (state_to_bits[state] << bit_indx);
         }
-    }
-}
-
-/**
- *  @brief      Обработчик воркера обновления сдвиговых регистров
- *  @details    Считывает сообщение из канала ZBUS, рассчитывает маску
- *              и записывает её в цепочку сдвиговых регистров по SPI.
- *
- *  @param      _work - Указатель на структуру задачи
- */
-static void _out_update_handler(struct k_work *_work)
-{    
-    ARG_UNUSED(_work);
-    struct hc595_channels_msg msg;
-    
-    if (zbus_chan_read(&hc595_chan, &msg, K_MSEC(50)) == 0)
-    {
-        uint8_t tx_data[5] = {0};
-
-        _hc595_calculate_mask(&msg, tx_data, sizeof(tx_data));
-                   
-        if (hc595_chain_write(hc595_dev, tx_data, sizeof(tx_data)))         
-        {
-            LOG_ERR("Failed to write registers");
-        } 
     }
 }
 
