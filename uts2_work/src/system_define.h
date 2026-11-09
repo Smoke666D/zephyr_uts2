@@ -11,3 +11,5 @@
 #define DAC_DEAMON_INIT_PRIOR       50
 #define LED_DEAMON_INIT_LEVEL       APPLICATION
 #define LED_DEAMON_INIT_PRIOR       80
+#define PWR_CTL_INIT_LEVEL          APPLICATION
+#define PWR_CTL_INIT_PRIOR          40

@@ -226,18 +226,16 @@ static void _dac_update_handler(struct k_work *_work)
         if (err < 0)
         {
             LOG_ERR("AD5243 connection error!");
-        }
-
-        if (req.sync != NULL)
-        {
-            if (req.response != NULL)
-            {
-                *req.response = err;
-            }
-            k_sem_give(req.sync);
-        }
+        }        
     }
-
+    if (req.sync != NULL)
+    {
+        if (req.response != NULL)
+        {
+            *req.response = err;
+        }
+        k_sem_give(req.sync);
+    }
     dac_poll_events[0].state = K_POLL_STATE_NOT_READY;
     app_worker_poll_submit(&dac_task, dac_poll_events, COMMON_WORKER);  
 }
@@ -309,9 +307,9 @@ static int _dac_control_init(void)
 
 SYS_INIT(_dac_control_init, DAC_DEAMON_INIT_LEVEL, DAC_DEAMON_INIT_PRIOR);
 
-SERVER_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, 0, FLOAT_DATA, 1);
-SERVER_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, 1, FLOAT_DATA, 10);
-SERVER_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, 2, FLOAT_DATA, 10);
+SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, 0, FLOAT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, 1, FLOAT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, 2, FLOAT_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

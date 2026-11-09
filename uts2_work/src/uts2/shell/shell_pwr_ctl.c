@@ -90,7 +90,7 @@ static int _cmd_pwr_ctl(const struct shell *_sh, size_t _argc, char **_argv)
         shell_print(_sh, "Applying state %s to ALL power channels:", state ? "ON" : "OFF");
         for (int i = 1; i <= NUM_PWR_CHANNELS; i++) {
             SYSTEM_BUS_ID id = _get_pwr_bus_id(i);
-            int ret = bus_set_bool(id, state);
+            int ret = SERVER_CH_SET_ASYC(id, (bool)state);
             if (ret == 0) {
                 shell_print(_sh, "  %s -> %s", pwr_channel_names[i], state ? "ON" : "OFF");
             } else {
@@ -139,7 +139,7 @@ static int _cmd_pwr_ctl(const struct shell *_sh, size_t _argc, char **_argv)
     }
 
     SYSTEM_BUS_ID id = _get_pwr_bus_id(ch_num);
-    int ret = bus_set_bool(id, state);
+    int ret = SERVER_CH_SET_ASYC(id, (bool)state);
 
     if (ret == 0) 
     {

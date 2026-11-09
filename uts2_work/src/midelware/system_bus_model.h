@@ -337,7 +337,7 @@ typedef struct server_request
     )
 
 
-#define SERVER_OUT_CHANNEL_DEFINE(id, chan_ptr, index, chan_type, cmd_queue) \
+#define SERVER_OUT_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
     const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
         .bus_id = id, \
         .channel = chan_ptr, \
@@ -402,7 +402,7 @@ int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
 int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val);
 int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask);
 int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask);
-uint32_t get_channel_write_timeout(SYSTEM_BUS_ID id);
+
 
 #define SERVER_CH_SET_BIT( id, mask) bus_set_bit(id, mask)
 #define SERVER_CH_CLEAR_MASK( id, mask) bus_clear_mask(id, mask)
@@ -411,7 +411,7 @@ uint32_t get_channel_write_timeout(SYSTEM_BUS_ID id);
 #define SERVER_CH_SET_BIT_IF_NEEDED( id, mask) bus_set_bit_if_needed(id, mask)
 #define SERVER_CH_CLEAR_BIT_IF_NEEDED( id, mask) bus_clear_bit_if_needed(id, mask)
 #define SERVER_CH_GET_BIT(id, mask, val) bus_get_bit(id, mask, val)
-#define SERVER_CH_TIMEOUT(id) get_channel_write_timeout(id)
+
 
 
 

@@ -89,7 +89,7 @@ static void _led_hardware_update_handler(struct k_work *_work)
 {
     ARG_UNUSED(_work);
     server_request req;
-
+    int err = 0;
     // Считываем запрос из очереди с проверкой успешности
     if (k_msgq_get(&led_rx_queue, &req, K_NO_WAIT) == 0)
     {
@@ -100,11 +100,23 @@ static void _led_hardware_update_handler(struct k_work *_work)
             {
                 cache_value.value[led_index] = req.value.sd_bool;
                 gpio_pin_set_dt(&leds[led_index], cache_value.value[led_index] ? 1 : 0);        
+                
             }
+            zbus_chan_pub(&led_state_channel, &cache_value, K_MSEC(2));
         }
-        zbus_chan_pub(&led_state_channel, &cache_value, K_MSEC(2));
+        else 
+        {
+            err = -EINVAL;
+        }        
     }
-
+    if (req.sync != NULL)
+    {
+        if (req.response != NULL)
+        {
+            *req.response = 0;
+        }
+        k_sem_give(req.sync);
+    }
     // Сброс статуса события перед повторным сабмитом поллинга
     led_poll_events[0].state = K_POLL_STATE_NOT_READY;
     app_worker_poll_submit(&led_task, led_poll_events, COMMON_WORKER);    
@@ -150,9 +162,9 @@ static int _led_manager_system_init(void)
 
 SYS_INIT(_led_manager_system_init, LED_DEAMON_INIT_LEVEL, LED_DEAMON_INIT_PRIOR);
 
-SERVER_OUT_CHANNEL_DEFINE(LED1, &led_state_channel, 0, BOOL_DATA, NULL);
-SERVER_OUT_CHANNEL_DEFINE(LED2, &led_state_channel, 1, BOOL_DATA, NULL);
-SERVER_OUT_CHANNEL_DEFINE(LED3, &led_state_channel, 2, BOOL_DATA, NULL);
+SERVER_OUT_CHANNEL_DEFINE(LED1, &led_state_channel, 0, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LED2, &led_state_channel, 1, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LED3, &led_state_channel, 2, BOOL_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

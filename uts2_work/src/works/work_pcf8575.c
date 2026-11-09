@@ -177,7 +177,7 @@ static int mcp23017_out_init(void)
 
 SYS_INIT(mcp23017_out_init, APPLICATION, 70);
 
-PARAM_ROUTE_DEFINE(JTAG_MUX0, &pcf_mux_channel, 0, UINT_DATA);
+PARAM_ROUTE_DEFINE(JTAG_MUX0,  &pcf_mux_channel, 0, UINT_DATA);
 PARAM_ROUTE_DEFINE(USB_FB_MUX, &pcf_mux_channel, 1, UINT_DATA);
 
 PARAM_ROUTE_DEFINE(JTAG_MUX_EN, &pcf_bool_channel, 0, BOOL_DATA);

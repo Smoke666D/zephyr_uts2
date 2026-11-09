@@ -14,14 +14,14 @@ target_include_directories(app PRIVATE
     src 
     src/drivers
     src/logic_signal
-    src/shell
+    src/uts2/shell
     src/midelware
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"  
     "src/works/*.c"  
-    "src/shell/*.c" 
+    "src/uts2/shell/*.c" 
     "src/midelware/*c"  
     "src/deamons/*c" 
 )

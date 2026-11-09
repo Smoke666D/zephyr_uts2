@@ -126,17 +126,17 @@ static int _sync_eeprom_set(eeprom_shell_ctx_t *_ctx, SYSTEM_BUS_ID id, uint32_t
     *_ctx->resp_code = 0;
 
     // Передаем персональный семафор и переменную ответа в систему шин
-    int ret = SYSTEM_BUS_SET(id, (uint32_t)val);//, _ctx->done_sem, _ctx->resp_code);
+    int ret = SERVER_CH_SET_SYC(id, (uint32_t)val, _ctx->done_sem, _ctx->resp_code);
     if (ret != 0) {
         return ret; // Ошибка постановки в очередь
     }
 
     // Ждем окончания физической записи именно для этого чипа (с запасом 300 мс)
-    /*if (k_sem_take(_ctx->done_sem, K_MSEC(300)) != 0) {
+    if (k_sem_take(_ctx->done_sem, K_MSEC(300)) != 0) {
         return -ETIMEDOUT; // Таймаут ожидания железа
-    }*/
+    }
 
-    return 0;//*_ctx->resp_code; // Возвращаем реальный статус от воркера (0 = успех)
+    return *_ctx->resp_code; // Возвращаем реальный статус от воркера (0 = успех)
 }
 
 /**

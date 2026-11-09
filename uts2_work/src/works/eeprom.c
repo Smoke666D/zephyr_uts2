@@ -5,10 +5,7 @@
  *  @date       2026.10.28
  *  @author     Dymov Igor (Refactored)
  *
- *  @brief      Менеджер энергонезависимой памяти EEPROM
- *  @details    Обеспечивает чтение данных при старте, проверку CRC16,
- *              публикацию в ZBUS и неблокирующую запись с полной
- *              изоляцией состояния внутри потока COMMON_WORKER.
+ *  @brief      Менеджер энергонезависимой памяти EEPROM с поддержкой k_msgq и квитирования
  */
 
 /***************************************************************************************************
@@ -38,8 +35,9 @@ LOG_MODULE_REGISTER(eeprom_mgr, LOG_LEVEL_INF);
 
 #define EEPROM_UID_OFFSET         0xFC
 #define EEPROM_PAGE_SIZE          16U    // Размер страницы 24AA025UID
-#define EEPROM_DEBOUNCE_DELAY_MS  10U    // Окно агрегации изменений ZBUS
+#define EEPROM_DEBOUNCE_DELAY_MS  100U   // Окно агрегации изменений
 #define EEPROM_PAGE_WRITE_TIME_MS 15U    // Пауза между страницами для t_WC EEPROM
+#define MAX_PENDING_SYNCS         4      // Максимум одновременно ждущих потоков квитирования
 
 #define EEPROM_PAYLOAD_DATA_SIZE  (sizeof(eeprom_disk_payload_t) - sizeof(uint16_t))
 
@@ -74,40 +72,49 @@ struct __packed eeprom_disk_payload
 typedef struct eeprom_disk_payload eeprom_disk_payload_t;
 
 /**
+ *  @brief Структура для хранения информации о ждущих клиентах квитирования
+ */
+typedef struct {
+    struct k_sem *sync;
+    uint8_t      *response;
+} pending_sync_t;
+
+/**
  *  @brief Дескриптор EEPROM
  */
 typedef struct eeprom_entry
 {
-    /* Неизменяемые параметры конфигурации */
     const struct device *const dev;
     const struct zbus_channel *chan;
+    struct k_msgq             *rx_queue;
     const char                *name;
     uint32_t                   error_bit;
+    uint32_t                   set_ok_bit;
+    uint32_t                   set_error_bit;
     uint32_t                   set_crc_error_bit;
 
-    /* Задачи очередей (управление потокобезопасно через API Zephyr) */
-    struct k_work_delayable    debounce_task; // Отвечает за дебаунс ZBUS (10 мс)
-    struct k_work_delayable    write_task;    // Отвечает за постраничную запись (15 мс)
+    struct k_work_delayable    debounce_task; 
+    struct k_work_delayable    write_task;    
 
-
-    /* ========================================================================= */
-    /* ПРИВАТНОЕ СОСТОЯНИЕ АВТОМАТА (ДОСТУПНО ТОЛЬКО ИЗ ПОТОКА COMMON_WORKER!)   */
-    /* ========================================================================= */
     off_t                      offset;
     size_t                     remaining;
     eeprom_disk_payload_t      disk_cache;
-    bool                       is_busy;       // Идет ли сейчас физическая запись
-    bool                       is_dirty;      // Пришли ли новые данные, пока шла запись
+    eeprom_disk_payload_t      staging_cache; 
+    bool                       is_busy;       
+
+    pending_sync_t             pending_syncs[MAX_PENDING_SYNCS];
+    uint8_t                    sync_count;
 } eeprom_entry_t;
 
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
-static void     _eeprom_zbus_listener_callback(const struct zbus_channel *_chan);
-static void     _eeprom_debounce_work_handler(struct k_work *_work);
+static void     _eeprom_work_poll_handler(struct k_work *_work);
+static void     _eeprom_debounce_handler(struct k_work *_work);
 static void     _eeprom_write_step_handler(struct k_work *_work);
 static void     _start_write_transaction(eeprom_entry_t *_entry);
 static void     _write_page_step(eeprom_entry_t *_entry);
+static void     _notify_all_pending(eeprom_entry_t *_entry, int err);
 static uint16_t _calc_disk_crc(const eeprom_disk_payload_t *_disk_data);
 static void     _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid_out);
 static int      _eeprom_mgr_init(void);
@@ -116,23 +123,22 @@ static int      _eeprom_mgr_init(void);
  *                                           PRIVATE DATA
  **************************************************************************************************/
 
-K_MSGQ_DEFINE(eeprom1_rx_queue, sizeof(server_request), 3, 4);
-K_MSGQ_DEFINE(eeprom2_rx_queue, sizeof(server_request), 3, 4);
-
-
-ZBUS_LISTENER_DEFINE(eeprom_lis, _eeprom_zbus_listener_callback);
+K_MSGQ_DEFINE(eeprom1_rx_queue, sizeof(server_request), 5, 4);
+K_MSGQ_DEFINE(eeprom2_rx_queue, sizeof(server_request), 5, 4);
 
 ZBUS_CHAN_DEFINE(eeprom1_chan,
                  eeprom_device_msg_t,
-                 NULL, NULL,
-                 ZBUS_OBSERVERS(eeprom_lis),
+                 NULL, 
+                 &eeprom1_rx_queue,      /* <--- ВОТ ЗДЕСЬ БЫЛ ПРОПУСК! */
+                 ZBUS_OBSERVERS_EMPTY,
                  {0}
 );
 
 ZBUS_CHAN_DEFINE(eeprom2_chan,
                  eeprom_device_msg_t,
-                 NULL, NULL,
-                 ZBUS_OBSERVERS(eeprom_lis),
+                 NULL, 
+                 &eeprom2_rx_queue,      /* <--- И ЗДЕСЬ ТОЖЕ! */
+                 ZBUS_OBSERVERS_EMPTY,
                  {0}
 );
 
@@ -140,22 +146,31 @@ static eeprom_entry_t eeprom_entries[] = {
     {
         .dev                = DEVICE_DT_GET(DT_NODELABEL(eeprom_1)),
         .chan               = &eeprom1_chan,
+        .rx_queue           = &eeprom1_rx_queue,
         .name               = "IU",
         .error_bit          = EEPORM_IU_ERROR,
+        .set_ok_bit         = EVENT_EEPROM_IU_WRITE_OK,
+        .set_error_bit      = EVENT_EEPROM_IU_WRITE_ERROR,
         .set_crc_error_bit  = EVENT_EEPROM_IU_CRC_ERROR,
         .is_busy            = false,
-        .is_dirty           = false,
+        .sync_count         = 0,
     },
     {
         .dev                = DEVICE_DT_GET(DT_NODELABEL(eeprom_2)),
         .chan               = &eeprom2_chan,
+        .rx_queue           = &eeprom2_rx_queue,
         .name               = "CU",
         .error_bit          = EEPORM_CU_ERROR,
+        .set_ok_bit         = EVENT_EEPROM_CU_WRITE_OK,
+        .set_error_bit      = EVENT_EEPROM_CU_WRITE_ERROR,
         .set_crc_error_bit  = EVENT_EEPROM_CU_CRC_ERROR,
         .is_busy            = false,
-        .is_dirty           = false,
+        .sync_count         = 0,
     }
 };
+
+static struct k_work_poll  eeprom_task;
+static struct k_poll_event eeprom_poll_events[2];
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
@@ -166,80 +181,93 @@ static inline uint16_t _calc_disk_crc(const eeprom_disk_payload_t *_disk_data)
     return crc16_itu_t(0xFFFF, (const uint8_t *)_disk_data, EEPROM_PAYLOAD_DATA_SIZE);
 }
 
-/**
- *  @brief      Листенер ZBUS (Выполняется в контексте ПОТОКА ИЗДАТЕЛЯ)
- *  @note       НЕ читает и НЕ изменяет переменные состояния! Полная изоляция.
- */
-static void _eeprom_zbus_listener_callback(const struct zbus_channel *_chan)
+static void _notify_all_pending(eeprom_entry_t *_entry, int err)
 {
-    for (size_t i = 0; i < ARRAY_SIZE(eeprom_entries); i++) 
-    {
-        eeprom_entry_t *entry = &eeprom_entries[i];
-
-        if (entry->chan == _chan) 
-        {
-            // Перезапуск дебаунс-таймера. Функция ядра Zephyr потокобезопасна из коробки.
-            app_worker_reschedule_submit(&entry->debounce_task, 
-                                         K_MSEC(EEPROM_DEBOUNCE_DELAY_MS), 
-                                         COMMON_WORKER);
-            break;
+    for (int i = 0; i < _entry->sync_count; i++) {
+        if (_entry->pending_syncs[i].response != NULL) {
+            *_entry->pending_syncs[i].response = err;
+        }
+        if (_entry->pending_syncs[i].sync != NULL) {
+            k_sem_give(_entry->pending_syncs[i].sync);
         }
     }
+    _entry->sync_count = 0;
 }
 
 /**
- *  @brief      Обработчик окончания дебаунса (Контекст: ТОЛЬКО COMMON_WORKER)
+ *  @brief      Обработчик опроса очередей (Контекст: COMMON_WORKER)
  */
-static void _eeprom_debounce_work_handler(struct k_work *_work)
+static void _eeprom_work_poll_handler(struct k_work *_work)
+{
+    ARG_UNUSED(_work);
+
+    for (size_t i = 0; i < ARRAY_SIZE(eeprom_entries); i++) 
+    {
+        eeprom_entry_t *entry = &eeprom_entries[i];
+        server_request req;
+
+        while (k_msgq_get(entry->rx_queue, &req, K_NO_WAIT) == 0) 
+        {
+            if (req.sync != NULL && entry->sync_count < MAX_PENDING_SYNCS) 
+            {
+                
+                entry->pending_syncs[entry->sync_count].sync = req.sync;
+                entry->pending_syncs[entry->sync_count].response = req.response;
+                entry->sync_count++;
+            }
+
+            if (req.id == SETTING_IU_SN || req.id == SETTING_CU_SN) {
+                entry->staging_cache.serial_number = req.value.sd_uint;
+            } else if (req.id == SETTING_IU_HW_ID || req.id == SETTING_CU_HW_ID) {
+                entry->staging_cache.device_major_ver = req.value.sd_uint;
+            } else if (req.id == SETTING_IU_HW_VER || req.id == SETTING_CU_HW_VER) {
+                entry->staging_cache.device_minor_ver = req.value.sd_uint;
+            } else if (req.id == SETTING_IU_USER_DATA || req.id == SETTING_CU_USER_DATA) {
+                entry->staging_cache.usage_counter = req.value.sd_uint;
+            }
+        }
+
+        if (memcmp(&entry->staging_cache, &entry->disk_cache, sizeof(eeprom_disk_payload_t)) != 0) 
+        {
+            app_worker_reschedule_submit(&entry->debounce_task, 
+                                         K_MSEC(EEPROM_DEBOUNCE_DELAY_MS), 
+                                         COMMON_WORKER);
+        }
+    }
+
+    eeprom_poll_events[0].state = K_POLL_STATE_NOT_READY;
+    eeprom_poll_events[1].state = K_POLL_STATE_NOT_READY;
+    app_worker_poll_submit(&eeprom_task, eeprom_poll_events, COMMON_WORKER);
+}
+
+/**
+ *  @brief      Таймер дебаунса истёк
+ */
+static void _eeprom_debounce_handler(struct k_work *_work)
 {
     struct k_work_delayable *dwork = k_work_delayable_from_work(_work);
     eeprom_entry_t *entry = CONTAINER_OF(dwork, eeprom_entry_t, debounce_task);
 
-    // Если прямо сейчас идет постраничная запись — просто выставляем флаг
-    if (entry->is_busy) 
-    {
-        entry->is_dirty = true;
+    if (entry->is_busy) {
+        app_worker_reschedule_submit(&entry->debounce_task, K_MSEC(20), COMMON_WORKER);
         return;
     }
 
     _start_write_transaction(entry);
 }
 
-/**
- *  @brief      Старт новой транзакции записи (Контекст: ТОЛЬКО COMMON_WORKER)
- */
 static void _start_write_transaction(eeprom_entry_t *entry)
 {
-    eeprom_device_msg_t msg;
-    if (zbus_chan_read(entry->chan, &msg, K_MSEC(10)) != 0) 
-    {
-        return;
-    }
+    entry->staging_cache.crc16 = _calc_disk_crc(&entry->staging_cache);
+    entry->disk_cache = entry->staging_cache;
+    
+    entry->offset    = 0;
+    entry->remaining = sizeof(eeprom_disk_payload_t);
+    entry->is_busy   = true;
 
-    eeprom_disk_payload_t new_payload;
-    memcpy(&new_payload, &msg.serial_number, EEPROM_PAYLOAD_DATA_SIZE);
-    new_payload.crc16 = _calc_disk_crc(&new_payload);
-
-    // Если данные на диске идентичны новым — экономим ресурс EEPROM
-    if (memcmp(&new_payload, &entry->disk_cache, sizeof(eeprom_disk_payload_t)) == 0) 
-    {
-        entry->is_dirty = false;
-        return;
-    }
-
-    entry->disk_cache = new_payload;
-    entry->offset     = 0;
-    entry->remaining  = sizeof(eeprom_disk_payload_t);
-    entry->is_busy    = true;
-    entry->is_dirty   = false;
-
-    // Сразу пишем первую страницу
     _write_page_step(entry);
 }
 
-/**
- *  @brief      Один шаг постраничной записи (Контекст: ТОЛЬКО COMMON_WORKER)
- */
 static void _write_page_step(eeprom_entry_t *entry)
 {
     size_t bytes_to_page_end = EEPROM_PAGE_SIZE - (entry->offset % EEPROM_PAGE_SIZE);
@@ -252,9 +280,9 @@ static void _write_page_step(eeprom_entry_t *entry)
     {
         LOG_ERR("Failed to write %s at offset 0x%02X (err %d)", 
                 entry->name, (uint32_t)entry->offset, err);
-        entry->remaining = 0;
-        entry->is_busy   = false;
-        entry->is_dirty  = false;        
+        entry->is_busy = false;
+        SERVER_CH_SET_BIT_IF_NEEDED(EEPROM_EVENT_CH, entry->set_error_bit);
+        _notify_all_pending(entry, err);
         return;
     }
 
@@ -263,7 +291,6 @@ static void _write_page_step(eeprom_entry_t *entry)
 
     if (entry->remaining > 0) 
     {
-        // Планируем следующую страницу через 15 мс
         app_worker_reschedule_submit(&entry->write_task, 
                                      K_MSEC(EEPROM_PAGE_WRITE_TIME_MS), 
                                      COMMON_WORKER);
@@ -271,37 +298,28 @@ static void _write_page_step(eeprom_entry_t *entry)
     else 
     {
         LOG_INF("Data successfully persisted to %s", entry->name);
+        SERVER_CH_SET_BIT(EEPROM_EVENT_CH, entry->set_ok_bit);
         SERVER_CH_CLEAR_BIT(EEPROM_EVENT_CH, entry->set_crc_error_bit);
-        uint32_t flags = 0;
-        SYSTEM_BUS_GET(EEPROM_EVENT_CH,&flags);
-        LOG_INF("flalg stat %d", flags);
-        // Если пока шла запись, поступили новые данные — запускаем новый цикл
-        if (entry->is_dirty) 
+        entry->is_busy = false;
+
+        _notify_all_pending(entry, 0);
+
+        if (zbus_chan_claim(entry->chan, K_FOREVER) == 0)
         {
-            entry->is_dirty = false;
-            _start_write_transaction(entry);
-        } 
-        else 
-        {
-            entry->is_busy = false;
+            eeprom_device_msg_t *chan_msg = (eeprom_device_msg_t *)zbus_chan_msg(entry->chan);
+            chan_msg->serial_number = entry->disk_cache.serial_number;
+            zbus_chan_finish(entry->chan);
         }
     }
 }
 
-/**
- *  @brief      Хэндлер шага постраничной записи (Контекст: ТОЛЬКО COMMON_WORKER)
- */
 static void _eeprom_write_step_handler(struct k_work *_work)
 {
     struct k_work_delayable *dwork = k_work_delayable_from_work(_work);
     eeprom_entry_t *entry = CONTAINER_OF(dwork, eeprom_entry_t, write_task);
-
     _write_page_step(entry);
 }
 
-/**
- *  @brief      Чтение физического чипа EEPROM при инициализации
- */
 static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid_out)
 {
     eeprom_device_msg_t msg = {0};
@@ -322,25 +340,30 @@ static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid
         }
     
         eeprom_disk_payload_t disk_data;
-        err = eeprom_read(_entry->dev, 0x00, &disk_data, sizeof(disk_data));
-        if (err == 0) 
+        int read_err = eeprom_read(_entry->dev, 0x00, &disk_data, sizeof(disk_data));
+        if (read_err == 0) 
         {
             if (_calc_disk_crc(&disk_data) == disk_data.crc16) 
             {
-                memcpy(&msg.serial_number, &disk_data, EEPROM_PAYLOAD_DATA_SIZE);
+                msg.serial_number = disk_data.serial_number;
+                msg.product_code = disk_data.product_code;
+                msg.device_class = disk_data.device_class;
+                msg.device_num = disk_data.device_num;
+                msg.device_major_ver = disk_data.device_major_ver;
+                msg.device_minor_ver = disk_data.device_minor_ver;
+                msg.usage_counter = disk_data.usage_counter;
+
                 memcpy(&_entry->disk_cache, &disk_data, sizeof(disk_data));
+                _entry->staging_cache = _entry->disk_cache;
                 LOG_INF("%s EEPROM User Data CRC OK (0x%04X)", _entry->name, disk_data.crc16);
             } 
             else 
             {
                 LOG_WRN("CRC mismatch on %s user data!", _entry->name);
-                memset(&_entry->disk_cache, 0x00, sizeof(_entry->disk_cache));                
+                memset(&_entry->disk_cache, 0x00, sizeof(_entry->disk_cache));
+                _entry->staging_cache = _entry->disk_cache;
                 SERVER_CH_SET_BIT(EEPROM_EVENT_CH, _entry->set_crc_error_bit);
             }
-        }
-        else 
-        {
-            LOG_ERR("Failed to read user data from %s (err %d)", _entry->name, err);            
         }
     }
 
@@ -355,12 +378,8 @@ static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid
     {
         SERVER_CH_SET_BIT(EEPROM_ERROR_CH, _entry->error_bit);
     }
-     
 }
 
-/**
- *  @brief      Инициализация менеджера EEPROM
- */
 static int _eeprom_mgr_init(void)
 {
     uint32_t uids[ARRAY_SIZE(eeprom_entries)] = {0};
@@ -369,13 +388,26 @@ static int _eeprom_mgr_init(void)
     {
         eeprom_entry_t *entry = &eeprom_entries[i];
 
-        k_work_init_delayable(&entry->debounce_task, _eeprom_debounce_work_handler);
+        k_work_init_delayable(&entry->debounce_task, _eeprom_debounce_handler);
         k_work_init_delayable(&entry->write_task, _eeprom_write_step_handler);
-
+        
         _read_and_publish_eeprom_chip(entry, &uids[i]);
     }
 
-    LOG_INF("EEPROM Manager initialized: IU UID: 0x%08X, CU UID: 0x%08X", uids[0], uids[1]);
+    k_poll_event_init(&eeprom_poll_events[0],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE,
+                      K_POLL_MODE_NOTIFY_ONLY,
+                      eeprom_entries[0].rx_queue);
+
+    k_poll_event_init(&eeprom_poll_events[1],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE,
+                      K_POLL_MODE_NOTIFY_ONLY,
+                      eeprom_entries[1].rx_queue);
+
+    k_work_poll_init(&eeprom_task, _eeprom_work_poll_handler);
+    app_worker_poll_submit(&eeprom_task, eeprom_poll_events, COMMON_WORKER);
+
+    LOG_INF("EEPROM Manager initialized with k_work_poll & Sync support.");
     return 0;
 }
 
@@ -384,7 +416,7 @@ SYS_INIT(_eeprom_mgr_init, EEPROM_DEAMON_INIT_LEVEL, EEPROM_DEAMON_INIT_PRIOR);
 /***************************************************************************************************
  *                                     PARAMETER ROUTING TABLE
  **************************************************************************************************/
-SERVER_CHANNEL_DEFINE(SETTING_IU_ID,        &eeprom1_chan, 0, UINT_DATA, 0);
+SERVER_CHANNEL_DEFINE(SETTING_IU_ID,        &eeprom1_chan, 0, UINT_DATA, 100);
 SERVER_CHANNEL_DEFINE(SETTING_IU_SN,        &eeprom1_chan, 1, UINT_DATA, 100);
 SERVER_CHANNEL_DEFINE(SETTING_IU_HW_ID,     &eeprom1_chan, 2, UINT_DATA, 100);
 SERVER_CHANNEL_DEFINE(SETTING_IU_HW_VER,    &eeprom1_chan, 3, UINT_DATA, 100);

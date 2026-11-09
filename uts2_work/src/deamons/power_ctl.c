@@ -24,8 +24,7 @@
 #include <zephyr/drivers/spi.h>
 #include <zephyr/shell/shell.h>
 
-#include <hc595_chain.h>
-
+#include "system_define.h"
 #include "system_bus_model.h"
 #include "app_worker.h"
 
@@ -34,39 +33,35 @@
  **************************************************************************************************/
 LOG_MODULE_REGISTER(power_control_module, LOG_LEVEL_INF);
 
-
 typedef struct power_control_line_msg 
 {
     bool state[POWER_CONTROL_LINE_CNT]; // Наш тестовый буфер (8 шагов * 2 канала)
 } power_control_line_msg ;
 
-
-
 /***********************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
  **********************************************************************************/
 
-static void _power_control_listener_cb(const struct zbus_channel *_chan);
 static void _enable_port_init(void);
 static void _power_control_update_handler(struct k_work *_work);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-static struct k_work power_control_work; 
 
+static struct k_work_poll  pwr_ctl_task                         __attribute__((section("DTCM")));
+static struct k_poll_event pwr_ctl_poll_events[1]               __attribute__((section("DTCM")));
+static struct power_control_line_msg  cache_enable_state        __attribute__((section("DTCM"))) = {0};
 
-ZBUS_LISTENER_DEFINE(power_control_listener, _power_control_listener_cb);
+K_MSGQ_DEFINE(pwr_ctl_rx_queue, sizeof(server_request), 8, 4);
 
 ZBUS_CHAN_DEFINE(discrete_control_chan,
                  struct power_control_line_msg,
                  NULL,
-                 NULL,
-                 ZBUS_OBSERVERS(power_control_listener),
+                 &pwr_ctl_rx_queue,
+                 ZBUS_OBSERVERS_EMPTY,
                  {0}
 );
-
-  
 
 static const struct gpio_dt_spec power_switches[POWER_CONTROL_LINE_CNT] = 
 {
@@ -80,24 +75,9 @@ static const struct gpio_dt_spec power_switches[POWER_CONTROL_LINE_CNT] =
     GPIO_DT_SPEC_GET(DT_NODELABEL(en_usb_top), gpios)
 };
 
-static struct power_control_line_msg  cache_enable_state = {0};
-
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
  **************************************************************************************************/
-
-/**
- *  @brief      Коллбэк слушателя ZBUS для канала hc595_chan
- *  @details    Вызывается при публикации сообщений в канале hc595_chan,
- *              планируя выполнение задачи обновления регистров.
- *
- *  @param      _chan - Указатель на канал ZBUS
- */
-static void _power_control_listener_cb(const struct zbus_channel *_chan)
-{
-    ARG_UNUSED(_chan);
-    app_worker_submit(&power_control_work, REAL_TIME_WORKER);
-}
 
 
 /**
@@ -106,49 +86,53 @@ static void _power_control_listener_cb(const struct zbus_channel *_chan)
  *              их в активное логическое состояние по умолчанию (включено).
  */
 static void _enable_port_init(void)
-{
-    if (zbus_chan_claim(&discrete_control_chan, K_FOREVER) == 0)
-    {        
-        // Получение прямого указателя на сообщение в памяти Zbus
-        struct power_control_line_msg  *msg = 
-            (struct power_control_line_msg *)zbus_chan_msg(&discrete_control_chan);
-            
-        for (int i = 0; i < POWER_CONTROL_LINE_CNT; i++) 
+{                
+    for (int i = 0; i < POWER_CONTROL_LINE_CNT; i++) 
+    {
+        if (gpio_is_ready_dt(&power_switches[i])) 
         {
-            if (gpio_is_ready_dt(&power_switches[i])) 
-            {
-                gpio_pin_configure_dt(&power_switches[i], GPIO_OUTPUT_INACTIVE);                        
-                cache_enable_state.state[i] = false;
-                msg->state[i] = false;
-            }
+             gpio_pin_configure_dt(&power_switches[i], GPIO_OUTPUT_INACTIVE);                        
         }
-        zbus_chan_finish(&discrete_control_chan);
     }
+    zbus_chan_pub(&discrete_control_chan, &cache_enable_state, K_MSEC(10));
+    
 }
 
-/**
- *  @brief      Обработчик воркера обновления дискретных линий
- *  @details    Считывает состояние дискретных каналов из ZBUS, сравнивает
- *              с кэшем и обновляет физические уровни на пинах GPIO.
- *
- *  @param      _work - Указатель на структуру задачи
- */
-static void _power_control_update_handler(struct k_work *_work)
-{    
+static void  _pwr_ctl_update_handler(struct k_work *_work)
+{
     ARG_UNUSED(_work);
-    struct power_control_line_msg msg;
-    
-    if (zbus_chan_read(&discrete_control_chan, &msg, K_MSEC(50)) == 0)
+    int err = 0;
+    server_request req;
+    if (k_msgq_get(&pwr_ctl_rx_queue, &req, K_NO_WAIT) == 0)
     {
-        for (int i = 0; i < POWER_CONTROL_LINE_CNT; i++)
+        uint32_t _ch_id = (req.id - EN_DUT2_PSU);
+        if (true
+            && _ch_id >= 0 
+            && _ch_id < POWER_CONTROL_LINE_CNT            
+        )
         {
-            if (cache_enable_state.state[i] != msg.state[i])
+            if  (cache_enable_state.state[_ch_id] != req.value.sd_bool)
             {
-                cache_enable_state.state[i] = msg.state[i];
-                gpio_pin_set_dt(&power_switches[i], cache_enable_state.state[i] ? 1 : 0); 
+                cache_enable_state.state[_ch_id] = req.value.sd_bool;
+                gpio_pin_set_dt(&power_switches[_ch_id], cache_enable_state.state[_ch_id] ? 1 : 0); 
             }
+            zbus_chan_pub(&discrete_control_chan, &cache_enable_state, K_MSEC(2));            
+        }        
+        else 
+        {
+            err = -EINVAL;
         }
+    }    
+    if (req.sync != NULL)
+    {
+        if (req.response != NULL)
+        {
+            *req.response = 0;
+        }
+        k_sem_give(req.sync);
     }
+    pwr_ctl_poll_events[0].state = K_POLL_STATE_NOT_READY;
+    app_worker_poll_submit(&pwr_ctl_task, pwr_ctl_poll_events, COMMON_WORKER);
 }
 
 /**
@@ -161,21 +145,29 @@ static void _power_control_update_handler(struct k_work *_work)
 static int _power_control_init(void)
 {
 
-    k_work_init(&power_control_work, _power_control_update_handler);
+   k_poll_event_init(&pwr_ctl_poll_events[0],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
+                      K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
+                      &pwr_ctl_rx_queue); 
+
+    k_work_poll_init(&pwr_ctl_task, _pwr_ctl_update_handler); 
+    app_worker_poll_submit(&pwr_ctl_task, pwr_ctl_poll_events, COMMON_WORKER);
+
     _enable_port_init();
     return 0;
 }
 
-SYS_INIT(_power_control_init, APPLICATION, 40);
+SYS_INIT(_power_control_init, PWR_CTL_INIT_LEVEL,  PWR_CTL_INIT_PRIOR);
 
-PARAM_ROUTE_DEFINE(EN_DUT2_PSU, &discrete_control_chan, 0, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_DUT3_PSU, &discrete_control_chan, 1, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_P12V,     &discrete_control_chan, 2, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_P24V,     &discrete_control_chan, 3, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_VA,       &discrete_control_chan, 4, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_OUT,  &discrete_control_chan, 5, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_BOOT, &discrete_control_chan, 6, BOOL_DATA);
-PARAM_ROUTE_DEFINE(EN_USB_TOP,  &discrete_control_chan, 7, BOOL_DATA);
+
+SERVER_OUT_CHANNEL_DEFINE(EN_DUT2_PSU, &discrete_control_chan, 0, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(EN_DUT3_PSU, &discrete_control_chan, 1, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(EN_P12V,     &discrete_control_chan, 2, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(EN_P24V,     &discrete_control_chan, 3, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(EN_VA,       &discrete_control_chan, 4, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(EN_USB_OUT,  &discrete_control_chan, 5, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(EN_USB_BOOT, &discrete_control_chan, 6, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(EN_USB_TOP,  &discrete_control_chan, 7, BOOL_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE
