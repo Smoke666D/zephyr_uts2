@@ -77,7 +77,7 @@ static int _parse_float_range(const struct shell *_sh, const char *_str,
     char *endptr;
     float val = strtof(_str, &endptr);
 
-    if (*endptr != '\0' || val < _min || val > _max) 
+    if (*endptr != '\0' || val < 0 || val > 4095) 
     {
         shell_error(_sh, "%s ERROR: Invalid value: %s (Must be between %.1f and %.1f %s)", 
                     _prefix, _str, (double)_min, (double)_max, _unit);
@@ -115,13 +115,13 @@ static int _cmd_dac_set_action(const struct shell *_sh, size_t _argc, char **_ar
     }
 
     float voltage;
-    if (_parse_float_range(_sh, _argv[1], &voltage, 0.0f, 30.0f, "V", "DAC") != 0) 
+    if (_parse_float_range(_sh, _argv[1], &voltage, 0.0f, 40.0f, "V", "DAC") != 0) 
     {
         return -EINVAL;
     }
 
     SERVER_CH_SET_ASYC(DAC_VALUE, voltage);  
-    shell_print(_sh, "DAC OK: set request sent: %.2f V", (double)voltage);
+    shell_print(_sh, "DAC OK: set request sent: %.2f", (double)voltage);
     
     return 0;
 }
@@ -151,7 +151,7 @@ static int _cmd_dac_get_action(const struct shell *_sh, size_t _argc, char **_ar
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
     sub_dac_cmds,
-    SHELL_CMD(set, NULL, "Set DAC output: DAC set <0.0-30.0>", _cmd_dac_set_action),
+    SHELL_CMD(set, NULL, "Set DAC output: DAC set <0.0-4095.0>", _cmd_dac_set_action),
     SHELL_CMD(get, NULL, "Get DAC output: DAC get", _cmd_dac_get_action),
     SHELL_SUBCMD_SET_END
 );
