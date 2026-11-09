@@ -19,6 +19,9 @@
  **************************************************************************************************/
 #define NUM_PWR_CHANNELS POWER_CONTROL_LINE_CNT
 
+
+
+
 /* Список имен каналов для удобства индексации (с 1 по 8) */
 static const char *const pwr_channel_names[NUM_PWR_CHANNELS + 1] = {
     "NONE",

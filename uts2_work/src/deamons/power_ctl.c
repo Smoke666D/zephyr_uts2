@@ -145,7 +145,7 @@ static void  _pwr_ctl_update_handler(struct k_work *_work)
 static int _power_control_init(void)
 {
 
-   k_poll_event_init(&pwr_ctl_poll_events[0],
+    k_poll_event_init(&pwr_ctl_poll_events[0],
                       K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
                       K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
                       &pwr_ctl_rx_queue); 

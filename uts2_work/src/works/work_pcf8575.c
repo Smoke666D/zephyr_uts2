@@ -31,15 +31,23 @@ static struct i2c_dt_spec mcp_spec;
 
 ZBUS_LISTENER_DEFINE(pcf_listener, pcf_zbus_listener);
 
+
+
+
+
+
+
 ZBUS_CHAN_DEFINE(pcf_bool_channel,
                  struct pcf_bool_array_9_msg,
-                 NULL, NULL,
+                 NULL, 
+                 NULL,
                  ZBUS_OBSERVERS(pcf_listener),
                  ZBUS_MSG_INIT(0));
 
 ZBUS_CHAN_DEFINE(pcf_mux_channel,
                  struct pcf_mux_msgs,
-                 NULL, NULL,
+                 NULL, 
+                 NULL,
                  ZBUS_OBSERVERS(pcf_listener),
                  ZBUS_MSG_INIT(0));
 

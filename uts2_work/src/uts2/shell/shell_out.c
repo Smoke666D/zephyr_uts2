@@ -12,7 +12,8 @@
  *                                        COMMAND HANDLER
  **************************************************************************************************/
 
-
+static K_SEM_DEFINE(out_ctl_done, 0, 1);
+static uint8_t out_ctl_response = 0;
 
 
 #define NUM_LIN_PD_CHANNELS 4
@@ -114,7 +115,15 @@ static int _cmd_lin_pd(const struct shell *_sh, size_t _argc, char **_argv)
     }
 
     SYSTEM_BUS_ID id = _get_lin_pd_bus_id(ch_num);
-    int ret = bus_set_u32(id, val);
+    int ret = SERVER_CH_SET_SYC(id, val,&out_ctl_done,&out_ctl_response);
+    if (k_sem_take(&out_ctl_done, K_MSEC(100)) != 0) 
+    {
+        ret = -ETIMEDOUT;
+    }
+    else 
+    {
+        ret = out_ctl_response;
+    }
 
     if (ret == 0) {
         shell_print(_sh, "%s (%d) set to %s (%u)", lin_pd_channel_names[ch_num], ch_num, val ? "ON" : "OFF", val);
@@ -243,7 +252,16 @@ static int _cmd_dout(const struct shell *_sh, size_t _argc, char **_argv)
         shell_print(_sh, "Applying state %s (%u) to ALL DOUT channels (1-18):", state_str[val], val);
         for (int i = 1; i <= NUM_DOUT_CHANNELS; i++) {
             SYSTEM_BUS_ID id = _get_dout_bus_id(i);
-            int ret = bus_set_u32(id, val);
+            int ret = SERVER_CH_SET_SYC(id, val,&out_ctl_done,&out_ctl_response);
+            if (k_sem_take(&out_ctl_done, K_MSEC(100)) != 0) 
+            {
+                ret = -ETIMEDOUT;
+            }
+            else 
+            {
+                ret = out_ctl_response;
+            }
+
             if (ret == 0) {
                 shell_print(_sh, "  %s -> %s", dout_channel_names[i], state_str[val]);
             } else {
@@ -285,7 +303,15 @@ static int _cmd_dout(const struct shell *_sh, size_t _argc, char **_argv)
     }
 
     SYSTEM_BUS_ID id = _get_dout_bus_id(ch_num);
-    int ret = bus_set_u32(id, val);
+     int ret = SERVER_CH_SET_SYC(id, val,&out_ctl_done,&out_ctl_response);
+    if (k_sem_take(&out_ctl_done, K_MSEC(100)) != 0) 
+        {
+                ret = -ETIMEDOUT;
+            }
+            else 
+            {
+                ret = out_ctl_response;
+            }
 
     if (ret == 0) {
         shell_print(_sh, "%s (%d) set to %s (%u)", dout_channel_names[ch_num], ch_num, state_str[val], val);
