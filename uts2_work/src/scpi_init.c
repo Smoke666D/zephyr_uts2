@@ -128,8 +128,8 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "*IDN?", .callback = scpi_cmd_idn_q, },
     { .pattern = "*RST",  .callback = scpi_cmd_rst, },
     { .pattern = "*CLS",  .callback = scpi_cmd_cls, },
-    { .pattern = "*OPC",        .callback = scpi_cmd_opc, },     // <--- ДОБАВИТЬ
-    { .pattern = "*OPC?",       .callback = scpi_cmd_opc_q, },   // <--- ДОБАВИТЬ
+    { .pattern = "*OPC",        .callback = scpi_cmd_opc, },     
+    { .pattern = "*OPC?",       .callback = scpi_cmd_opc_q, },   
 
     /* Подсистема DISPlay в параметрическом стиле */
     { .pattern = "DISPlay:LED[:STATe]",  .callback = cmd_disp_led_state, },
@@ -147,6 +147,9 @@ static const scpi_command_t scpi_commands[] = {
     /* Коммутатор интерфейсов USB/JTAG/UART и оптопар */
     { .pattern = "OUTPut:MUX[:STATe]",  .callback = cmd_output_mux, },
     { .pattern = "OUTPut:MUX[:STATe]?", .callback = cmd_output_mux_q, },
+
+    { .pattern = "OUTPut:DOUT[:STATe]",  .callback = cmd_output_dout, },
+    { .pattern = "OUTPut:DOUT[:STATe]?", .callback = cmd_output_dout_q, },
 
     SCPI_CMD_LIST_END
 };

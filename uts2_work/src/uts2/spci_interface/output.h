@@ -15,3 +15,6 @@ scpi_result_t cmd_output_lin_gnd_q(scpi_t *context);
 
 scpi_result_t cmd_output_mux(scpi_t *context);
 scpi_result_t cmd_output_mux_q(scpi_t *context);
+
+scpi_result_t cmd_output_dout(scpi_t *context);
+scpi_result_t cmd_output_dout_q(scpi_t *context);

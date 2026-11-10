@@ -334,26 +334,21 @@ def build_dashboard(ports_refs, ui_labels):
                     ).classes('text-white text-xs')
 
         # ==========================================
-        # 4. ЛИНИИ IO (1-18)
+        # 4. ДИСКРЕТНЫЕ ДРАЙВЕРЫ (SCPI OUTPut:DOUT 1–18)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            ui.label('Управление линиями ввода/вывода (IO 1-18)').classes(
+            ui.label('Управление дискретными драйверами (OUTPut:DOUT 1–18)').classes(
                 'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
             )
 
-            def on_io_change(ch_num, select_element):
-                val_map = {
-                    'INPUT': 'IN',
-                    'HIGH': 'HIGH',
-                    'LOW': 'LOW',
-                    'SHORT_CUT': 'SHORT',
-                }
-                short_state = val_map.get(select_element.value, 'IN')
-                cmd = f'DOUT {ch_num} {short_state}\r\n'
+            def on_dout_change(ch_num, select_element):
+                state = select_element.value
+                # Каноническая SCPI команда: OUTP:DOUT <channel>, <state>
+                cmd = f'OUTP:DOUT {ch_num}, {state}\r\n'
                 curr_shell = shell_ref.get('ser')
                 if curr_shell and curr_shell.is_open:
                     curr_shell.write(cmd.encode('utf-8'))
-                    ui.notify(f'[IO {ch_num}] Отправлено: {cmd.strip()}', type='info')
+                    ui.notify(f'[DOUT {ch_num}] SCPI: {cmd.strip()}', type='info')
                 else:
                     ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -362,21 +357,22 @@ def build_dashboard(ports_refs, ui_labels):
                     with ui.card().classes(
                         'bg-slate-700 p-1 flex-row items-center justify-between rounded'
                     ):
-                        ui.label(f'IO {i}').classes('text-[11px] text-white font-bold')
+                        ui.label(f'DOUT {i}').classes('text-[11px] text-white font-bold')
 
+                        # Каналы 1-16 поддерживают SHORT, каналы 17-18 только IN/LOW/HIGH
                         if i <= 16:
-                            options_list = ['INPUT', 'HIGH', 'LOW', 'SHORT_CUT']
+                            options_list = ['IN', 'LOW', 'HIGH', 'SHORT']
                         else:
-                            options_list = ['INPUT', 'HIGH', 'LOW']
+                            options_list = ['IN', 'LOW', 'HIGH']
 
-                        io_select = ui.select(
-                            options=options_list, value='INPUT'
+                        dout_select = ui.select(
+                            options=options_list, value='IN'
                         ).props('dark outlined dense').classes(
-                            'w-32 bg-slate-800 text-[10px] text-white'
+                            'w-28 bg-slate-800 text-[10px] text-white'
                         )
-                        io_select.on(
+                        dout_select.on(
                             'update:model-value',
-                            lambda e, c=i, s=io_select: on_io_change(c, s),
+                            lambda e, c=i, s=dout_select: on_dout_change(c, s),
                         )
 
         # ==========================================
@@ -777,7 +773,7 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (SCPI OUTPut:MUX)
+        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Автоопределение и калибровка портов UART').classes(

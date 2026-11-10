@@ -215,6 +215,110 @@ scpi_result_t cmd_output_mux_q(scpi_t *context)
 }
 
 
+#define DOUT_CH_COUNT 18
+
+static K_SEM_DEFINE(dout_done, 0, 1);
+static uint8_t dout_response = 0;
+
+/* Словарь допустимых состояний */
+static const scpi_choice_def_t dout_state_choices[] = {
+    {"IN",    STATE_IN},
+    {"LOW",   STATE_LOW},
+    {"HIGH",  STATE_HIGH},
+    {"SHORt", STATE_SHORT},
+    SCPI_CHOICE_LIST_END
+};
+
+static uint8_t dout_states[DOUT_CH_COUNT] = {STATE_IN};
+
+static const char * const dout_state_names[] = {
+    [STATE_IN]    = "IN",
+    [STATE_LOW]   = "LOW",
+    [STATE_HIGH]  = "HIGH",
+    [STATE_SHORT] = "SHORT"
+};
+
+
+
+
+// OUTPut:DOUT[:STATe] <1..18>, <state>
+scpi_result_t cmd_output_dout(scpi_t *context)
+{
+    int32_t channel;
+    int32_t state;
+
+    // 1-й параметр: номер канала ЧИСЛОМ (1..18)
+    if (!SCPI_ParamInt32(context, &channel, TRUE)) {
+        return SCPI_RES_ERR;
+    }
+
+    // Проверка диапазона номеров каналов
+    if (channel < 1 || channel > DOUT_CH_COUNT) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE); // Ошибка -222
+        return SCPI_RES_ERR;
+    }
+
+    // 2-й параметр: режим (IN, LOW, HIGH, SHORT)
+    if (!SCPI_ParamChoice(context, dout_state_choices, &state, TRUE)) 
+    {
+        return SCPI_RES_ERR;
+    }
+
+    // Ограничение: каналы 17 и 18 не поддерживают SHORT
+    if (channel >= 17 && state == STATE_SHORT)
+     {
+        SCPI_ErrorPush(context, SCPI_ERROR_ILLEGAL_PARAMETER_VALUE); // Ошибка -224
+        return SCPI_RES_ERR;
+    }
+
+    k_sem_reset(&dout_done);
+
+    SERVER_CH_SET_SYC(DOUT1 + channel - 1, (uint32_t)state , &dout_done, &dout_response);
+
+    if (false 
+        || k_sem_take(&dout_done, K_MSEC(100)) != 0
+        || dout_response != 0
+    ) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+        return SCPI_RES_ERR; 
+    }
+    
+    return SCPI_RES_OK;
+}
+
+// OUTPut:DOUT[:STATe]? [<1..18>]
+scpi_result_t cmd_output_dout_q(scpi_t *context)
+{
+    int32_t channel;
+
+    // Проверяем, передан ли номер канала (опциональный параметр)
+    if (SCPI_ParamInt32(context, &channel, FALSE)) 
+    {
+        if (channel < 1 || channel > DOUT_CH_COUNT) 
+        {
+            SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE);
+            return SCPI_RES_ERR;
+        }
+        // Запрос одного канала: OUTP:DOUT? 1 -> "HIGH"
+        uint32_t _val;
+        SYSTEM_BUS_GET((DOUT1 + channel - 1),&_val);
+
+        SCPI_ResultMnemonic(context, dout_state_names[_val]);
+    } 
+    else 
+    {
+        // Если параметра не было, отдаем все 18 состояний через запятую
+        for (int i = 0; i < DOUT_CH_COUNT; i++) 
+        {
+            uint32_t _val;
+            SYSTEM_BUS_GET((DOUT1 + i),&_val);
+            SCPI_ResultMnemonic(context, dout_state_names[_val]);
+        }
+    }
+    return SCPI_RES_OK;
+}
 
 
 scpi_result_t cmd_out_reset(scpi_t *context)
@@ -230,6 +334,10 @@ scpi_result_t cmd_out_reset(scpi_t *context)
      for (int i = 0; i < ARRAY_SIZE(mux_channel_choices) - 1; i++) 
     {
         SERVER_CH_SET_ASYC(mux_channel_choices[i].tag,(bool)false);    
+    }
+    for (int i = 0; i < DOUT_CH_COUNT; i++) 
+    {    
+        SERVER_CH_SET_ASYC(DOUT1 + i,(uint32_t)STATE_IN);     
     }
     return SCPI_RES_OK;
 }
