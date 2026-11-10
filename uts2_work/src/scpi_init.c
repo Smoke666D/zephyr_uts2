@@ -147,6 +147,11 @@ static const scpi_command_t scpi_commands[] = {
     /* Коммутатор интерфейсов USB/JTAG/UART и оптопар */
     { .pattern = "OUTPut:MUX[:STATe]",  .callback = cmd_output_mux, },
     { .pattern = "OUTPut:MUX[:STATe]?", .callback = cmd_output_mux_q, },
+    
+    { .pattern = "OUTPut:MUX:JTAG[:CHANnel]",  .callback = cmd_mux_jtag, },
+    { .pattern = "OUTPut:MUX:JTAG[:CHANnel]?", .callback = cmd_mux_jtag_q, },
+    { .pattern = "OUTPut:MUX:UART[:CHANnel]",  .callback = cmd_mux_uart, },
+    { .pattern = "OUTPut:MUX:UART[:CHANnel]?", .callback = cmd_mux_uart_q, },
 
     { .pattern = "OUTPut:DOUT[:STATe]",  .callback = cmd_output_dout, },
     { .pattern = "OUTPut:DOUT[:STATe]?", .callback = cmd_output_dout_q, },

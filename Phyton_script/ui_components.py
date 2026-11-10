@@ -343,7 +343,6 @@ def build_dashboard(ports_refs, ui_labels):
 
             def on_dout_change(ch_num, select_element):
                 state = select_element.value
-                # Каноническая SCPI команда: OUTP:DOUT <channel>, <state>
                 cmd = f'OUTP:DOUT {ch_num}, {state}\r\n'
                 curr_shell = shell_ref.get('ser')
                 if curr_shell and curr_shell.is_open:
@@ -359,7 +358,6 @@ def build_dashboard(ports_refs, ui_labels):
                     ):
                         ui.label(f'DOUT {i}').classes('text-[11px] text-white font-bold')
 
-                        # Каналы 1-16 поддерживают SHORT, каналы 17-18 только IN/LOW/HIGH
                         if i <= 16:
                             options_list = ['IN', 'LOW', 'HIGH', 'SHORT']
                         else:
@@ -773,7 +771,7 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART
+        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (SCPI OUTPut:MUX)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Автоопределение и калибровка портов UART').classes(
@@ -832,11 +830,11 @@ def build_dashboard(ports_refs, ui_labels):
                     btn_start_detect.enable()
                     return
 
-                # Шаг 3: Переключение MUXFB на канал 1
-                ui.notify('Шаг 3: Переключение MUXFB на канал 1...', type='info')
-                ok, _ = await shell_cmd_wait(b'I2C_OUT2 MUXFB 1\r\n', 'USB_FB_MUX set to 1')
+                # Шаг 3: Переключение мультиплексора UART на канал 1 по SCPI
+                ui.notify('Шаг 3: Переключение UART MUX на канал 1...', type='info')
+                ok, _ = await shell_cmd_wait(b'OUTP:MUX:UART 1;*OPC?\r\n', '1')
                 if not ok:
-                    ui.notify('Ошибка/Таймаут I2C_OUT2 MUXFB 1', type='negative')
+                    ui.notify('Ошибка/Таймаут OUTP:MUX:UART 1', type='negative')
                     btn_start_detect.enable()
                     return
 
@@ -862,7 +860,7 @@ def build_dashboard(ports_refs, ui_labels):
                     btn_start_detect.enable()
                     return
 
-                # Шаг 6: Запуск UART_DETECT start
+                # Шаг 6: Запуск режима детекта
                 ui.notify('Шаг 6: Запуск UART_DETECT start...', type='info')
                 curr_shell.write(b'UART_DETECT start\r\n')
                 print('[SHELL TX]: UART_DETECT start')
@@ -912,12 +910,12 @@ def build_dashboard(ports_refs, ui_labels):
                 for channel_num in range(1, 5):
                     ui.notify(f'Поиск физического Порта {channel_num}...', type='info')
 
+                    # Переключение канала мультиплексора UART по SCPI (для каналов 2..4)
                     if channel_num > 1:
-                        cmd = f'I2C_OUT2 MUXFB {channel_num}\r\n'.encode()
-                        target = f'USB_FB_MUX set to {channel_num}'
-                        ok, _ = await shell_cmd_wait(cmd, target, timeout=4.0)
+                        cmd = f'OUTP:MUX:UART {channel_num};*OPC?\r\n'.encode()
+                        ok, _ = await shell_cmd_wait(cmd, '1', timeout=4.0)
                         if not ok:
-                            ui.notify(f'Ошибка переключения на MUXFB {channel_num}', type='warning')
+                            ui.notify(f'Ошибка переключения на OUTP:MUX:UART {channel_num}', type='warning')
                         await asyncio.sleep(0.15)
 
                     matched_port = None
@@ -964,7 +962,7 @@ def build_dashboard(ports_refs, ui_labels):
                             lbl_w.classes(remove='text-amber-400', add='text-emerald-400 font-bold')
                         ui.notify(f'Успех! {matched_port} определен как Порт {channel_num}', type='positive')
                     else:
-                        ui.notify(f'Не удалось определить порт для MUXFB {channel_num}', type='warning')
+                        ui.notify(f'Не удалось определить порт для UART MUX {channel_num}', type='warning')
 
                 for p, h in open_handles.items():
                     try:
@@ -983,7 +981,7 @@ def build_dashboard(ports_refs, ui_labels):
                     'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-6 rounded shadow'
                 )
 
-            # --- УПРАВЛЕНИЕ JTAG (SCPI OUTPut:MUX JTAG_MUX_EN) ---
+            # --- УПРАВЛЕНИЕ JTAG (SCPI OUTPut:MUX JTAG_MUX_EN + OUTPut:MUX:JTAG 1..5) ---
             with ui.row().classes('w-full justify-center gap-6 items-center mt-3 pt-2 border-t border-slate-700'):
                 def handle_jtag_enable(e):
                     state = 'ON' if e.value else 'OFF'
@@ -991,7 +989,7 @@ def build_dashboard(ports_refs, ui_labels):
                     curr_shell = shell_ref.get('ser')
                     if curr_shell and curr_shell.is_open:
                         curr_shell.write(cmd.encode('utf-8'))
-                        ui.notify(f'[JTAG MUX] SCPI: {cmd.strip()}', type='info')
+                        ui.notify(f'[JTAG MUX EN] SCPI: {cmd.strip()}', type='info')
                     else:
                         ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -999,13 +997,14 @@ def build_dashboard(ports_refs, ui_labels):
                     'text-white text-xs font-semibold'
                 )
 
+                # Выбор канала мультиплексора JTAG (SCPI OUTP:MUX:JTAG <1..5>)
                 def handle_jtag_mux(e):
                     mux_val = e.value
-                    cmd = f'I2C_OUT2 MUXJTAG {mux_val}\r\n'
+                    cmd = f'OUTP:MUX:JTAG {mux_val}\r\n'
                     curr_shell = shell_ref.get('ser')
                     if curr_shell and curr_shell.is_open:
                         curr_shell.write(cmd.encode('utf-8'))
-                        ui.notify(f'[JTAG MUX] Отправлено: {cmd.strip()}', type='info')
+                        ui.notify(f'[JTAG MUX] SCPI: {cmd.strip()}', type='info')
                     else:
                         ui.notify('SCPI порт закрыт!', type='warning')
 

@@ -18,3 +18,9 @@ scpi_result_t cmd_output_mux_q(scpi_t *context);
 
 scpi_result_t cmd_output_dout(scpi_t *context);
 scpi_result_t cmd_output_dout_q(scpi_t *context);
+
+
+scpi_result_t cmd_mux_jtag(scpi_t *context);
+scpi_result_t cmd_mux_jtag_q(scpi_t *context);
+scpi_result_t cmd_mux_uart(scpi_t *context);
+scpi_result_t cmd_mux_uart_q(scpi_t *context);

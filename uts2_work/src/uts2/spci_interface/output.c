@@ -321,6 +321,90 @@ scpi_result_t cmd_output_dout_q(scpi_t *context)
 }
 
 
+#define JTAG_MAX_CHANNELS  5
+#define UART_MAX_CHANNELS  4
+
+
+
+// OUTPut:MUX:JTAG[:CHANnel] <1..5>
+scpi_result_t cmd_mux_jtag(scpi_t *context)
+{
+    int32_t _ch;
+    if (!SCPI_ParamInt32(context, &_ch, TRUE)) 
+    {
+        return SCPI_RES_ERR;
+    }
+
+    if (_ch < 1 || _ch > JTAG_MAX_CHANNELS) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE); // Ошибка -222
+        return SCPI_RES_ERR;
+    }
+
+    k_sem_reset(&mux_done);
+
+    SERVER_CH_SET_SYC(JTAG_MUX0, (uint32_t)_ch , &mux_done, &mux_response);
+
+    if (false 
+        || k_sem_take(&mux_done, K_MSEC(100)) != 0
+        || mux_response != 0
+    ) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+        return SCPI_RES_ERR; 
+    }
+    return SCPI_RES_OK;
+}
+
+scpi_result_t cmd_mux_jtag_q(scpi_t *context)
+{
+    uint32_t _val;
+    SYSTEM_BUS_GET(JTAG_MUX0,&_val);
+    SCPI_ResultInt32(context, _val);
+    return SCPI_RES_OK;
+}
+
+// OUTPut:MUX:UART[:CHANnel] <1..4>
+scpi_result_t cmd_mux_uart(scpi_t *context)
+{
+    int32_t _ch;
+    if (!SCPI_ParamInt32(context, &_ch, TRUE)) 
+    {
+        return SCPI_RES_ERR;
+    }
+
+    if (_ch < 1 || _ch > UART_MAX_CHANNELS) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE); // Ошибка -222
+        return SCPI_RES_ERR;
+    }
+
+    k_sem_reset(&mux_done);
+
+    SERVER_CH_SET_SYC(USB_FB_MUX, (uint32_t)_ch , &mux_done, &mux_response);
+
+    if (false 
+        || k_sem_take(&mux_done, K_MSEC(100)) != 0
+        || mux_response != 0
+    ) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+        return SCPI_RES_ERR; 
+    }
+    
+    return SCPI_RES_OK;
+}
+
+scpi_result_t cmd_mux_uart_q(scpi_t *context)
+{
+    uint32_t _val;
+    SYSTEM_BUS_GET(USB_FB_MUX,&_val);
+    SCPI_ResultInt32(context, _val);
+    return SCPI_RES_OK;
+}
+
+
+
 scpi_result_t cmd_out_reset(scpi_t *context)
 {
     for (int i = 0; i < ARRAY_SIZE(power_channel_choices) - 1; i++) 
@@ -339,5 +423,7 @@ scpi_result_t cmd_out_reset(scpi_t *context)
     {    
         SERVER_CH_SET_ASYC(DOUT1 + i,(uint32_t)STATE_IN);     
     }
+    SERVER_CH_SET_ASYC(JTAG_MUX0,(uint32_t)1);     
+    SERVER_CH_SET_ASYC(USB_FB_MUX,(uint32_t)1);     
     return SCPI_RES_OK;
 }

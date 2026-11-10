@@ -23,7 +23,6 @@ struct pcf_mux_msgs {
     uint32_t group[2];       
 };
 
-static void pcf_zbus_listener(const struct zbus_channel *chan);
 
 static struct pcf_bool_array_9_msg current_bools = { {false} };
 static struct pcf_mux_msgs         current_mux   = {0};
@@ -31,10 +30,9 @@ static struct pcf_mux_msgs         current_mux   = {0};
 static struct k_work_poll  mcp_task        __attribute__((section("DTCM")));
 static struct k_poll_event mcp_poll_events[1] __attribute__((section("DTCM")));
 
-static struct k_work pcf_work;
 static struct i2c_dt_spec mcp_spec;
 
-ZBUS_LISTENER_DEFINE(pcf_listener, pcf_zbus_listener);
+
 
 
 
@@ -52,8 +50,8 @@ ZBUS_CHAN_DEFINE(pcf_bool_channel,
 ZBUS_CHAN_DEFINE(pcf_mux_channel,
                  struct pcf_mux_msgs,
                  NULL, 
-                 NULL,
-                 ZBUS_OBSERVERS(pcf_listener),
+                 &mcp_rx_queue,
+                 ZBUS_OBSERVERS_EMPTY,
                  ZBUS_MSG_INIT(0));
 
 static const uint8_t mcp_pin_mapping[9] = {
@@ -147,13 +145,13 @@ static void _mcp_update_handler(struct k_work *_work)
     server_request req;
 
     if (k_msgq_get(&mcp_rx_queue, &req, K_NO_WAIT) == 0)
-    {    
-        int _channel = (req.id - JTAG_MUX_EN);
+    {        
         if (true
-            && _channel >= 0
-            && _channel < MUX_EN_CHANNEL           
+            && req.id >= JTAG_MUX_EN
+            && req.id <= OK1           
         )
         {
+            int _channel = (req.id - JTAG_MUX_EN);
             if (current_bools.states[_channel] != req.value.sd_bool)
             {
                 pcf_bool_array_9_msg _temp = current_bools;
@@ -167,6 +165,41 @@ static void _mcp_update_handler(struct k_work *_work)
             if (err == 0)
             {
                 zbus_chan_pub(&pcf_bool_channel, &current_bools, K_MSEC(2));   
+            }
+
+        }
+        else if (req.id == JTAG_MUX0)
+        {
+            if (current_mux.group[0] != req.value.sd_uint)
+            {
+                uint32_t _temp = current_mux.group[0];
+                current_mux.group[0] = req.value.sd_uint;
+                err = _set_mcp_data();
+                if (err!=0)
+                {
+                    current_mux.group[0] = _temp;
+                }
+            }
+            if (err == 0)
+            {
+                zbus_chan_pub(&pcf_mux_channel, &current_mux, K_MSEC(2));   
+            }
+        }
+        else if (req.id == USB_FB_MUX)
+        {
+            if (current_mux.group[1] != req.value.sd_uint)
+            {
+                uint32_t _temp = current_mux.group[1];
+                current_mux.group[1] = req.value.sd_uint;
+                err = _set_mcp_data();
+                if (err!=0)
+                {
+                    current_mux.group[1] = _temp;
+                }
+            }
+            if (err == 0)
+            {
+                zbus_chan_pub(&pcf_mux_channel, &current_mux, K_MSEC(2));   
             }
         }
         else 
@@ -187,90 +220,6 @@ static void _mcp_update_handler(struct k_work *_work)
 }
 
 
-static void pcf_work_handler(struct k_work *work)
-{
-    uint8_t porta = 0x00; 
-    uint8_t portb = 0x00; 
-
-    /* 1. Обрабатываем булевы пины */
-    for (int i = 0; i < 9; i++) {
-        if (current_bools.states[i]) {
-            uint8_t pin = mcp_pin_mapping[i];
-            if (pin < 8) {
-                porta |= (1 << pin);
-            } else {
-                portb |= (1 << (pin - 8));
-            }
-        }
-    }        
-
-    /* 
-     * 2. Обрабатываем group[1] (1-е слово mux канала).
-     * Значение минус 1 пишется в первые 3 бита Порта А (биты 0, 1, 2).
-     */
-    uint32_t val_g1 = current_mux.group[1];
-    if (val_g1 > 0) {
-        uint8_t mapped_val = (uint8_t)(val_g1 - 1) & 0x07; // Берем (val - 1), маска на 3 бита
-        porta |= mapped_val; // Записываем в биты 0, 1, 2 Порта А
-    }
-
-    /* 
-     * 3. Обрабатываем group[0] (0-е слово mux канала).
-     * Значения от 1 до 5 маппятся в биты 9, 10, 11 Порта B (в байт portb это биты 1, 2, 3, так как pin - 8).
-     * Нам нужно управлять битами 9, 10, 11 -> в байтах portb (начиная с GPB0) это соответствует битам 1, 2, 3.
-     */
-    uint32_t val_g0 = current_mux.group[0];
-    
-    // Сначала очищаем биты 1, 2, 3 в portb перед записью новой комбинации
-    portb &= ~((1 << 1) | (1 << 2) | (1 << 3));
-
-    switch (val_g0) {
-        case 1:
-            // бит 9 ("1"), бит 10 ("0"), бит 11 ("0") -> в portb это бит 1 = 1
-            portb |= (1 << 1);
-            break;
-        case 2:
-            // бит 9 ("0"), бит 10 ("1"), бит 11 ("0") -> в portb это бит 2 = 1
-            portb |= (1 << 2);
-            break;
-        case 3:
-            // бит 9 ("0"), бит 10 ("0"), бит 11 ("1") -> в portb это бит 1 = 1
-            portb |= (1 << 3);
-            break;
-        case 4:
-            // бит 9 ("1"), бит 10 ("0"), бит 11 ("1") -> в portb биты 1 и 3 = 1
-            portb |= (1 << 3) | (1 << 1);
-            break;
-        case 5:
-            // бит 9 ("1"), бит 10 ("1"), бит 11 ("0") -> в portb биты 1 и 2 = 1
-            portb |= (1 << 3) | (1 << 2);
-            break;
-        default:
-            break;
-    }
-
-    LOG_INF("Target values to write -> porta=0x%02X, portb=0x%02X (g0=%d, g1=%d)", 
-             porta, portb, (int)val_g0, (int)val_g1);
-
-    // Записываем данные в GPIOA (0x12) и GPIOB (0x13)
-    uint8_t cmd_a[2] = { 0x12, porta }; 
-    uint8_t cmd_b[2] = { 0x13, portb }; 
-
-    i2c_write_dt(&mcp_spec, cmd_a, sizeof(cmd_a));
-    i2c_write_dt(&mcp_spec, cmd_b, sizeof(cmd_b));
-}
-
-static void pcf_zbus_listener(const struct zbus_channel *chan)
-{
-    if (chan == &pcf_mux_channel) 
-    {
-        struct pcf_mux_msgs *msg = zbus_chan_msg(&pcf_mux_channel);
-        current_mux = *msg; 
-    }
-
-    app_worker_submit(&pcf_work,COMMON_WORKER);
-}
-
 static int mcp23017_out_init(void)
 {
     const struct device *i2c_dev = DEVICE_DT_GET(I2C1_NODE);
@@ -281,8 +230,6 @@ static int mcp23017_out_init(void)
 
     mcp_spec.bus = i2c_dev;
     mcp_spec.addr = MCP23017_ADDR;
-
-    k_work_init(&pcf_work, pcf_work_handler);
 
 
     k_poll_event_init(&mcp_poll_events[0],
