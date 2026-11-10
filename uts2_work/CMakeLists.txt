@@ -10,6 +10,9 @@ project(uts2_work)
 
 include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 
+target_compile_definitions(app PRIVATE 
+    USE_FULL_ERROR_LIST=1
+)
 
 target_include_directories(app PRIVATE 
     src 

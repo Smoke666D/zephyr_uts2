@@ -8,12 +8,12 @@ from nicegui import ui
 from logger import start_logger, stop_logger
 from oscilloscope import build_oscilloscope_panel, refresh_logs_ui
 
-# Поддерживаемые каналы подсистемы OUTPut
+# Поддерживаемые каналы подсистемы OUTPut:POWer
 ENABLE_LINES = [
     'DUT2_PSU',
     'DUT3_PSU',
     'P12V',
-    'P24V',
+    'P40V',
     'VA',
     'USB_OUT',
     'USB_BOOT',
@@ -22,9 +22,9 @@ ENABLE_LINES = [
 
 # Светодиоды SCPI подсистемы DISPlay:LED
 SCPI_LEDS = [
-    {'id': 'RED', 'name': 'Красный', 'scpi_cmd': 'DISP:LED:RED'},
-    {'id': 'GRE', 'name': 'Зеленый', 'scpi_cmd': 'DISP:LED:GRE'},
-    {'id': 'BLU', 'name': 'Синий',   'scpi_cmd': 'DISP:LED:BLU'},
+    {'target': 'RED', 'name': 'Красный'},
+    {'target': 'GRE', 'name': 'Зеленый'},
+    {'target': 'BLU', 'name': 'Синий'},
 ]
 
 CURRENT_SENSOR_NAMES = [
@@ -178,11 +178,11 @@ def build_dashboard(ports_refs, ui_labels):
                             s.reset_output_buffer()
                             s.write(b'*IDN?\r\n')
                             await asyncio.sleep(0.15)
-                            
+
                             resp = ""
                             if s.in_waiting > 0:
                                 resp = s.read(s.in_waiting).decode('utf-8', errors='ignore')
-                            
+
                             if 'Author-ALARM,UST2' in resp:
                                 print(f'[SCPI DETECT]: Найден прибор на {p_name}! Ответ: {resp.strip()}')
                                 found_shell = p_name
@@ -200,12 +200,12 @@ def build_dashboard(ports_refs, ui_labels):
                     shell_select.value = found_shell
                     if not (shell_ref.get('ser') and shell_ref['ser'].is_open):
                         toggle_shell()
-                    
+
                     curr_scpi = shell_ref.get('ser')
                     if curr_scpi and curr_scpi.is_open:
                         curr_scpi.write(b'*RST\r\n')
                         print('[SCPI TX]: *RST отправлен')
-                    
+
                     ui.notify(f'SCPI найден на {found_shell} (Выполнен *RST)', type='positive')
                 else:
                     ui.notify('SCPI порт (Author-ALARM,UST2) не найден!', type='warning')
@@ -225,13 +225,13 @@ def build_dashboard(ports_refs, ui_labels):
                 )
 
         # ==========================================
-        # 2. УПРАВЛЕНИЕ ПИТАНИЕМ (SCPI OUTPut)
+        # 2. УПРАВЛЕНИЕ ПИТАНИЕМ (SCPI OUTPut:POWer)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             enable_checkboxes = []
             bulk_updating = False
 
-            ui.label('Управление питанием (OUTPut)').classes(
+            ui.label('Управление питанием (OUTPut:POWer)').classes(
                 'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
             )
 
@@ -239,8 +239,8 @@ def build_dashboard(ports_refs, ui_labels):
                 nonlocal bulk_updating
                 curr_shell = shell_ref.get('ser')
                 if curr_shell and curr_shell.is_open:
-                    curr_shell.write(b'OUTP:ALL ON\r\n')
-                    ui.notify('SCPI: OUTP:ALL ON', type='positive')
+                    curr_shell.write(b'OUTP:POW:ALL ON\r\n')
+                    ui.notify('SCPI: OUTP:POW:ALL ON', type='positive')
                 else:
                     ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -253,8 +253,8 @@ def build_dashboard(ports_refs, ui_labels):
                 nonlocal bulk_updating
                 curr_shell = shell_ref.get('ser')
                 if curr_shell and curr_shell.is_open:
-                    curr_shell.write(b'OUTP:ALL OFF\r\n')
-                    ui.notify('SCPI: OUTP:ALL OFF', type='info')
+                    curr_shell.write(b'OUTP:POW:ALL OFF\r\n')
+                    ui.notify('SCPI: OUTP:POW:ALL OFF', type='info')
                 else:
                     ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -263,12 +263,13 @@ def build_dashboard(ports_refs, ui_labels):
                     cb.value = False
                 bulk_updating = False
 
-            def make_en_handler(c_num, c_name):
+            def make_en_handler(c_name):
                 def handler(e):
                     if bulk_updating:
                         return
                     state = 'ON' if e.value else 'OFF'
-                    cmd = f'OUTP:POW:STAT {state}, {c_name}\r\n'
+                    # Синтаксис: OUTP:POW <channel>, <state>
+                    cmd = f'OUTP:POW {c_name}, {state}\r\n'
                     curr_shell = shell_ref.get('ser')
                     if curr_shell and curr_shell.is_open:
                         curr_shell.write(cmd.encode('utf-8'))
@@ -285,7 +286,7 @@ def build_dashboard(ports_refs, ui_labels):
                         cb = ui.checkbox(
                             f'{ch_num}. {name}',
                             value=False,
-                            on_change=make_en_handler(ch_num, name),
+                            on_change=make_en_handler(name),
                         ).classes('text-white text-xs')
                         enable_checkboxes.append(cb)
 
@@ -305,21 +306,21 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 3. СВЕТОДИОДЫ (SCPI DISPlay:LED ПОДСИСТЕМА)
+        # 3. СВЕТОДИОДЫ (SCPI DISPlay:LED:STATe)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Подсистема индикации (DISPlay:LED)').classes(
                 'text-xs font-semibold text-yellow-300 mb-1'
             )
 
-            def make_scpi_led_handler(cmd_prefix, led_name):
+            def make_scpi_led_handler(target_name, led_label):
                 def handler(e):
-                    state_val = '1' if e.value else '0'
-                    cmd = f'{cmd_prefix} {state_val}\r\n'
+                    state_val = 'ON' if e.value else 'OFF'
+                    cmd = f'DISP:LED:STAT {target_name}, {state_val}\r\n'
                     curr_shell = shell_ref.get('ser')
                     if curr_shell and curr_shell.is_open:
                         curr_shell.write(cmd.encode('utf-8'))
-                        ui.notify(f'[{led_name}] SCPI: {cmd.strip()}', type='info')
+                        ui.notify(f'[{led_label}] SCPI: {cmd.strip()}', type='info')
                     else:
                         ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -330,7 +331,7 @@ def build_dashboard(ports_refs, ui_labels):
                     ui.checkbox(
                         item['name'],
                         value=False,
-                        on_change=make_scpi_led_handler(item['scpi_cmd'], item['name']),
+                        on_change=make_scpi_led_handler(item['target'], item['name']),
                     ).classes('text-white text-xs')
 
         # ==========================================
@@ -615,13 +616,15 @@ def build_dashboard(ports_refs, ui_labels):
                         'text-xs font-semibold text-yellow-300'
                     )
 
+                    # SCPI команда: OUTP:LINP LIN<1-4>, ON/OFF
                     def handle_pull_down(e, idx=l_idx):
                         state = 'ON' if e.value else 'OFF'
-                        cmd = f'LIN_PD {idx} {state}\r\n'
+                        channel_name = f'LIN{idx}'
+                        cmd = f'OUTP:LINP {channel_name}, {state}\r\n'
                         curr_shell = shell_ref.get('ser')
                         if curr_shell and curr_shell.is_open:
                             curr_shell.write(cmd.encode('utf-8'))
-                            ui.notify(f'[LIN{idx} PULL_DOWN] {state}', type='info')
+                            ui.notify(f'[{channel_name} PULL_DOWN] SCPI: {cmd.strip()}', type='info')
                         else:
                             ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -676,7 +679,6 @@ def build_dashboard(ports_refs, ui_labels):
 
         for lin_idx in range(1, 5):
             make_lin_block(lin_idx)
-
         # ==========================================
         # 9. CAN ИНТЕРФЕЙСЫ (1-3)
         # ==========================================

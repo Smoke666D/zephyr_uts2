@@ -131,18 +131,18 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "*OPC",        .callback = scpi_cmd_opc, },     // <--- ДОБАВИТЬ
     { .pattern = "*OPC?",       .callback = scpi_cmd_opc_q, },   // <--- ДОБАВИТЬ
 
-        /* Управление светодиодами */
-    { .pattern = "DISPlay:LED:RED",     .callback = cmd_led_red, },
-    { .pattern = "DISPlay:LED:RED?",    .callback = cmd_led_red_q, },
-    { .pattern = "DISPlay:LED:GREen",   .callback = cmd_led_green, },
-    { .pattern = "DISPlay:LED:GREen?",  .callback = cmd_led_green_q, },
-    { .pattern = "DISPlay:LED:BLUe",    .callback = cmd_led_blue, },
-    { .pattern = "DISPlay:LED:BLUe?",   .callback = cmd_led_blue_q, },
+    /* Подсистема DISPlay в параметрическом стиле */
+    { .pattern = "DISPlay:LED[:STATe]",  .callback = cmd_disp_led_state, },
+    { .pattern = "DISPlay:LED[:STATe]?", .callback = cmd_disp_led_state_q, },
 
     /* Управление выходами питания */
     { .pattern = "OUTPut:POWer[:STATe]",        .callback = cmd_output_state, },
     { .pattern = "OUTPut:POWer[:STATe]?",       .callback = cmd_output_state_q, },
     { .pattern = "OUTPut:POWer:ALL",          .callback = cmd_output_all, },
+
+     /* Управление ключами подтяжки LIN к GND */
+    { .pattern = "OUTPut:LINPulldown[:STATe]",  .callback = cmd_output_lin_gnd, },
+    { .pattern = "OUTPut:LINPulldown[:STATe]?", .callback = cmd_output_lin_gnd_q, },
 
     SCPI_CMD_LIST_END
 };
@@ -188,7 +188,7 @@ void scpi_server_thread(void)
     // Цикл приема данных (например, через опрос UART или ring_buf)
     uart_irq_callback_user_data_set(uart_dev, uart_cb, NULL);
     uart_irq_rx_enable(uart_dev);
-    uint8_t buffer[64];
+    uint8_t buffer[128];
 
     while (1) 
     {

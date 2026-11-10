@@ -6,64 +6,61 @@
 #include "display.h"
 #include "system_bus_model.h"
 
-/* ==================== RED LED ==================== */
-scpi_result_t cmd_led_red(scpi_t *context) 
-{
-    scpi_bool_t val;
 
-    if (!SCPI_ParamBool(context, &val, TRUE)) {
+
+/* 2. Словарь доступных идентификаторов для SCPI */
+static const scpi_choice_def_t led_targets[] = {
+    {"RED",   LED1},
+    {"GREen", LED2},
+    {"BLUe",  LED3},
+    SCPI_CHOICE_LIST_END
+};
+
+
+/* ========================================================================= */
+/* SCPI-КОЛБЭКИ                                                              */
+/* ========================================================================= */
+
+/* Команда установки: DISPlay:LED:STATe <TARGET>, <STATE> */
+scpi_result_t cmd_disp_led_state(scpi_t *context)
+{
+    int32_t target;
+    scpi_bool_t state;
+
+    /* Читаем 1-й параметр: имя целевого индикатора */
+    if (!SCPI_ParamChoice(context, led_targets, &target, TRUE)) 
+    {
         return SCPI_RES_ERR;
-    }    
-    SERVER_CH_SET_ASYC(LED1, (bool)val);
+    }
+
+    /* Читаем 2-й параметр: булево состояние (0/1/OFF/ON) */
+    if (!SCPI_ParamBool(context, &state, TRUE)) 
+    {
+        return SCPI_RES_ERR;
+    }
+
+    SERVER_CH_SET_ASYC(target, (bool)state);
+
     
     return SCPI_RES_OK;
 }
 
-scpi_result_t cmd_led_red_q(scpi_t *context)
+/* Команда запроса: DISPlay:LED:STATe? <TARGET> */
+scpi_result_t cmd_disp_led_state_q(scpi_t *context)
 {
-    bool state_r;
-    SYSTEM_BUS_GET(LED1, &state_r);
-    SCPI_ResultBool(context, state_r);
-    return SCPI_RES_OK;
-}
-
-/* ==================== GREEN LED ==================== */
-scpi_result_t cmd_led_green(scpi_t *context) 
-{
-    scpi_bool_t val;
-    if (!SCPI_ParamBool(context, &val, TRUE)) {
+    int32_t target;
+    bool val;
+    /* Читаем параметр запроса: имя целевого индикатора */
+    if (!SCPI_ParamChoice(context, led_targets, &target, TRUE)) {
         return SCPI_RES_ERR;
     }
-    SERVER_CH_SET_ASYC(LED2, (bool)val);
+     SYSTEM_BUS_GET(target, &val);
+    /* Возвращаем текущее состояние (1 или 0) */
+
+    SCPI_ResultBool(context, val);
     return SCPI_RES_OK;
 }
 
-scpi_result_t cmd_led_green_q(scpi_t *context) 
-{
-    bool state_g;
-    SYSTEM_BUS_GET(LED2, &state_g);
-    SCPI_ResultBool(context, state_g);
-    return SCPI_RES_OK;
-}
-
-/* ==================== BLUE LED ==================== */
-scpi_result_t cmd_led_blue(scpi_t *context) 
-{
-    scpi_bool_t val;
-    if (!SCPI_ParamBool(context, &val, TRUE)) {
-        return SCPI_RES_ERR;
-    }
-    SERVER_CH_SET_ASYC(LED3, (bool)val);
-    return SCPI_RES_OK;
-}
-
-scpi_result_t cmd_led_blue_q(scpi_t *context) 
-{
-    bool state_b;
-    SYSTEM_BUS_GET(LED3, &state_b);
-    SCPI_ResultBool(context, state_b);
-    return SCPI_RES_OK;
-}
 
 scpi_result_t cmd_led_reset(scpi_t *context)
 {    
