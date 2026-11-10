@@ -149,6 +149,74 @@ scpi_result_t cmd_output_lin_gnd_q(scpi_t *context)
 }
 
 
+
+static const scpi_choice_def_t mux_channel_choices[] = {
+    {"JTAG_MUX_EN", JTAG_MUX_EN},
+    {"EN_USB_UART", EN_USB_UART},
+    {"EN_USB_OUT1", EN_USB_OUT1},
+    {"EN_USB_OUT2", EN_USB_OUT2},
+    {"EN_USB_OUT3", EN_USB_OUT3},
+    {"UART_FB_EN",  UART_FB_EN},
+    {"UART_RX_EN",  UART_RX_EN},
+    {"OK1",         OK1},
+    {"OK2",         OK2},
+    SCPI_CHOICE_LIST_END
+};
+
+static K_SEM_DEFINE(mux_done, 0, 1);
+static uint8_t mux_response = 0;
+
+/* 2. Колбэк установки: OUTPut:LIN:GND[:STATe] <channel>, <state> */
+scpi_result_t cmd_output_mux(scpi_t *context)
+{
+    int32_t channel;
+    scpi_bool_t state;
+
+    if (!SCPI_ParamChoice(context, mux_channel_choices, &channel, TRUE)) return SCPI_RES_ERR;
+    if (!SCPI_ParamBool(context, &state, TRUE)) return SCPI_RES_ERR;
+
+    k_sem_reset(&mux_done);
+
+    SERVER_CH_SET_SYC(channel, state , &mux_done, &mux_response);
+
+    if (false 
+        || k_sem_take(&mux_done, K_MSEC(100)) != 0
+        || mux_response != 0
+    ) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+        return SCPI_RES_ERR; 
+    }
+    
+    return SCPI_RES_OK;
+}
+
+/* 3. Колбэк запроса: OUTPut:LIN:GND[:STATe]? [<channel>] */
+scpi_result_t cmd_output_mux_q(scpi_t *context)
+{
+    int32_t channel;
+    bool val;
+    // Если указан конкретный канал (например: OUTP:LIN:GND? LIN1)
+    if (SCPI_ParamChoice(context, mux_channel_choices, &channel, FALSE))
+    {
+        SYSTEM_BUS_GET(channel, &val);
+        SCPI_ResultBool(context, val);
+    } 
+    else 
+    {
+        // Если без параметров (OUTP:LIN:GND?) -> отдаем все 4 канала через запятую
+        for (int i = 0; i < ARRAY_SIZE(mux_channel_choices) - 1; i++) 
+        {
+            SYSTEM_BUS_GET(mux_channel_choices[i].tag, &val);
+            SCPI_ResultBool(context, val);
+        }
+    }
+    return SCPI_RES_OK;
+}
+
+
+
+
 scpi_result_t cmd_out_reset(scpi_t *context)
 {
     for (int i = 0; i < ARRAY_SIZE(power_channel_choices) - 1; i++) 
@@ -158,6 +226,10 @@ scpi_result_t cmd_out_reset(scpi_t *context)
     for (int i = 0; i < ARRAY_SIZE(lin_pd_channel_choices) - 1; i++) 
     {
         SERVER_CH_SET_ASYC(lin_pd_channel_choices[i].tag,(uint32_t)0);    
+    }
+     for (int i = 0; i < ARRAY_SIZE(mux_channel_choices) - 1; i++) 
+    {
+        SERVER_CH_SET_ASYC(mux_channel_choices[i].tag,(bool)false);    
     }
     return SCPI_RES_OK;
 }

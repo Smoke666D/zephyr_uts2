@@ -144,6 +144,10 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "OUTPut:LINPulldown[:STATe]",  .callback = cmd_output_lin_gnd, },
     { .pattern = "OUTPut:LINPulldown[:STATe]?", .callback = cmd_output_lin_gnd_q, },
 
+    /* Коммутатор интерфейсов USB/JTAG/UART и оптопар */
+    { .pattern = "OUTPut:MUX[:STATe]",  .callback = cmd_output_mux, },
+    { .pattern = "OUTPut:MUX[:STATe]?", .callback = cmd_output_mux_q, },
+
     SCPI_CMD_LIST_END
 };
 

@@ -268,7 +268,6 @@ def build_dashboard(ports_refs, ui_labels):
                     if bulk_updating:
                         return
                     state = 'ON' if e.value else 'OFF'
-                    # Синтаксис: OUTP:POW <channel>, <state>
                     cmd = f'OUTP:POW {c_name}, {state}\r\n'
                     curr_shell = shell_ref.get('ser')
                     if curr_shell and curr_shell.is_open:
@@ -603,7 +602,7 @@ def build_dashboard(ports_refs, ui_labels):
                                 ui.label('Дж').classes('text-[10px] text-slate-400 leading-none')
 
         # ==========================================
-        # 8. ИНТЕРФЕЙСЫ LIN (1-4)
+        # 8. ИНТЕРФЕЙСЫ LIN (1-4) (SCPI OUTPut:LINPulldown)
         # ==========================================
         ui.label('Интерфейсы LIN (1-4)').classes(
             'text-sm font-bold text-sky-300 mt-3'
@@ -616,7 +615,6 @@ def build_dashboard(ports_refs, ui_labels):
                         'text-xs font-semibold text-yellow-300'
                     )
 
-                    # SCPI команда: OUTP:LINP LIN<1-4>, ON/OFF
                     def handle_pull_down(e, idx=l_idx):
                         state = 'ON' if e.value else 'OFF'
                         channel_name = f'LIN{idx}'
@@ -679,6 +677,7 @@ def build_dashboard(ports_refs, ui_labels):
 
         for lin_idx in range(1, 5):
             make_lin_block(lin_idx)
+
         # ==========================================
         # 9. CAN ИНТЕРФЕЙСЫ (1-3)
         # ==========================================
@@ -778,7 +777,7 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART
+        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (SCPI OUTPut:MUX)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Автоопределение и калибровка портов UART').classes(
@@ -821,19 +820,19 @@ def build_dashboard(ports_refs, ui_labels):
                 btn_start_detect.disable()
                 port_labels_box.clear()
 
-                # Шаг 1: Выключение EN_USB_UART
+                # Шаг 1: Выключение EN_USB_UART через SCPI
                 ui.notify('Шаг 1: Выключение EN_USB_UART...', type='info')
-                ok, _ = await shell_cmd_wait(b'I2C_OUT2 2 OFF\r\n', 'EN_USB_UART (2) set to OFF')
+                ok, _ = await shell_cmd_wait(b'OUTP:MUX EN_USB_UART, OFF;*OPC?\r\n', '1')
                 if not ok:
-                    ui.notify('Ошибка/Таймаут I2C_OUT2 2 OFF', type='negative')
+                    ui.notify('Ошибка/Таймаут OUTP:MUX EN_USB_UART, OFF', type='negative')
                     btn_start_detect.enable()
                     return
 
-                # Шаг 2: Выключение UART_FB_EN
+                # Шаг 2: Выключение UART_FB_EN через SCPI
                 ui.notify('Шаг 2: Выключение UART_FB_EN...', type='info')
-                ok, _ = await shell_cmd_wait(b'I2C_OUT2 6 OFF\r\n', 'UART_FB_EN (6) set to OFF')
+                ok, _ = await shell_cmd_wait(b'OUTP:MUX UART_FB_EN, OFF;*OPC?\r\n', '1')
                 if not ok:
-                    ui.notify('Ошибка/Таймаут I2C_OUT2 6 OFF', type='negative')
+                    ui.notify('Ошибка/Таймаут OUTP:MUX UART_FB_EN, OFF', type='negative')
                     btn_start_detect.enable()
                     return
 
@@ -851,22 +850,23 @@ def build_dashboard(ports_refs, ui_labels):
                 base_ports = set(get_available_ports())
                 print(f'[DETECT] Базовые порты системы (без хаба): {base_ports}')
 
-                # Шаг 4: Включение EN_USB_UART
+                # Шаг 4: Включение EN_USB_UART через SCPI
                 ui.notify('Шаг 4: Включение EN_USB_UART...', type='info')
-                ok, _ = await shell_cmd_wait(b'I2C_OUT2 2 ON\r\n', 'EN_USB_UART (2) set to ON')
+                ok, _ = await shell_cmd_wait(b'OUTP:MUX EN_USB_UART, ON;*OPC?\r\n', '1')
                 if not ok:
-                    ui.notify('Ошибка/Таймаут I2C_OUT2 2 ON', type='negative')
+                    ui.notify('Ошибка/Таймаут OUTP:MUX EN_USB_UART, ON', type='negative')
                     btn_start_detect.enable()
                     return
 
-                # Шаг 5: Включение UART_FB_EN
+                # Шаг 5: Включение UART_FB_EN через SCPI
                 ui.notify('Шаг 5: Включение UART_FB_EN...', type='info')
-                ok, _ = await shell_cmd_wait(b'I2C_OUT2 6 ON\r\n', 'UART_FB_EN (6) set to ON')
+                ok, _ = await shell_cmd_wait(b'OUTP:MUX UART_FB_EN, ON;*OPC?\r\n', '1')
                 if not ok:
-                    ui.notify('Ошибка/Таймаут I2C_OUT2 6 ON', type='negative')
+                    ui.notify('Ошибка/Таймаут OUTP:MUX UART_FB_EN, ON', type='negative')
                     btn_start_detect.enable()
                     return
 
+                # Шаг 6: Запуск UART_DETECT start
                 ui.notify('Шаг 6: Запуск UART_DETECT start...', type='info')
                 curr_shell.write(b'UART_DETECT start\r\n')
                 print('[SHELL TX]: UART_DETECT start')
@@ -987,15 +987,15 @@ def build_dashboard(ports_refs, ui_labels):
                     'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-6 rounded shadow'
                 )
 
-            # --- УПРАВЛЕНИЕ JTAG (CHECKBOX + MULTIPLEXER COMBOBOX) ---
+            # --- УПРАВЛЕНИЕ JTAG (SCPI OUTPut:MUX JTAG_MUX_EN) ---
             with ui.row().classes('w-full justify-center gap-6 items-center mt-3 pt-2 border-t border-slate-700'):
                 def handle_jtag_enable(e):
                     state = 'ON' if e.value else 'OFF'
-                    cmd = f'I2C_OUT2 1 {state}\r\n'
+                    cmd = f'OUTP:MUX JTAG_MUX_EN, {state}\r\n'
                     curr_shell = shell_ref.get('ser')
                     if curr_shell and curr_shell.is_open:
                         curr_shell.write(cmd.encode('utf-8'))
-                        ui.notify(f'[JTAG] Отправлено: {cmd.strip()}', type='info')
+                        ui.notify(f'[JTAG MUX] SCPI: {cmd.strip()}', type='info')
                     else:
                         ui.notify('SCPI порт закрыт!', type='warning')
 
