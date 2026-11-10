@@ -147,7 +147,7 @@ static const scpi_command_t scpi_commands[] = {
     /* Коммутатор интерфейсов USB/JTAG/UART и оптопар */
     { .pattern = "OUTPut:MUX[:STATe]",  .callback = cmd_output_mux, },
     { .pattern = "OUTPut:MUX[:STATe]?", .callback = cmd_output_mux_q, },
-    
+
     { .pattern = "OUTPut:MUX:JTAG[:CHANnel]",  .callback = cmd_mux_jtag, },
     { .pattern = "OUTPut:MUX:JTAG[:CHANnel]?", .callback = cmd_mux_jtag_q, },
     { .pattern = "OUTPut:MUX:UART[:CHANnel]",  .callback = cmd_mux_uart, },
@@ -155,6 +155,13 @@ static const scpi_command_t scpi_commands[] = {
 
     { .pattern = "OUTPut:DOUT[:STATe]",  .callback = cmd_output_dout, },
     { .pattern = "OUTPut:DOUT[:STATe]?", .callback = cmd_output_dout_q, },
+
+    /* Подсистема SENSe:UART (Служебный приемник телеметрии DUT) */
+    { .pattern = "SENSe:UART:DATA?",     .callback = cmd_sense_uart_data_q, },
+    { .pattern = "SENSe:UART:COUNt?",    .callback = cmd_sense_uart_count_q, },
+    { .pattern = "SENSe:UART:CLEar",     .callback = cmd_sense_uart_clear, },
+    { .pattern = "SENSe:UART:BAUDrate",  .callback = cmd_sense_uart_baud, },
+    { .pattern = "SENSe:UART:BAUDrate?", .callback = cmd_sense_uart_baud_q, },
 
     SCPI_CMD_LIST_END
 };
