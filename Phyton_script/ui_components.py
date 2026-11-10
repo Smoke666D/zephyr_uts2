@@ -771,7 +771,7 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (SCPI OUTPut:MUX)
+        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (SCPI SENS:UART)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Автоопределение и калибровка портов UART').classes(
@@ -804,6 +804,30 @@ def build_dashboard(ports_refs, ui_labels):
 
                 print(f'[SHELL ACK TIMEOUT]: Не дождались "{target_ack}". Буфер: {repr(accum)}')
                 return False, accum
+
+            async def scpi_query(query_bytes, timeout=0.6):
+                """Отправляет запрос SCPI и возвращает последнюю строку ответа без эха"""
+                curr_shell = shell_ref.get('ser')
+                if not curr_shell or not curr_shell.is_open:
+                    return ""
+                curr_shell.reset_input_buffer()
+                curr_shell.write(query_bytes)
+                query_str = query_bytes.strip().decode('utf-8', errors='ignore')
+
+                start_t = time.time()
+                accum = ""
+                while time.time() - start_t < timeout:
+                    if curr_shell.in_waiting > 0:
+                        accum += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
+                        lines = [line.strip() for line in accum.splitlines() if line.strip()]
+                        filtered = [l for l in lines if l.lower() != query_str.lower()]
+                        if filtered:
+                            return filtered[-1]
+                    await asyncio.sleep(0.02)
+
+                lines = [line.strip() for line in accum.splitlines() if line.strip()]
+                filtered = [l for l in lines if l.lower() != query_str.lower()]
+                return filtered[-1] if filtered else ""
 
             async def run_full_detect_procedure():
                 curr_shell = shell_ref.get('ser')
@@ -860,11 +884,10 @@ def build_dashboard(ports_refs, ui_labels):
                     btn_start_detect.enable()
                     return
 
-                # Шаг 6: Запуск режима детекта
-                ui.notify('Шаг 6: Запуск UART_DETECT start...', type='info')
-                curr_shell.write(b'UART_DETECT start\r\n')
-                print('[SHELL TX]: UART_DETECT start')
-                await asyncio.sleep(0.2)
+                # Настройка приемника стенда: 115200 бод и очистка буфера
+                curr_shell.write(b'SENS:UART:BAUD 115200\r\n')
+                curr_shell.write(b'SENS:UART:CLE\r\n')
+                await asyncio.sleep(0.1)
 
                 ui.notify('Ожидание подключения 4 новых COM-портов в Windows...', type='info')
                 scan_start = time.time()
@@ -907,49 +930,54 @@ def build_dashboard(ports_refs, ui_labels):
                 remaining_ports = list(new_ports)
                 identified_mapping = {}
 
+                # --- ЭТАП 4: Последовательное определение Портов 1..4 через SENSe:UART ---
                 for channel_num in range(1, 5):
                     ui.notify(f'Поиск физического Порта {channel_num}...', type='info')
 
-                    # Переключение канала мультиплексора UART по SCPI (для каналов 2..4)
-                    if channel_num > 1:
-                        cmd = f'OUTP:MUX:UART {channel_num};*OPC?\r\n'.encode()
-                        ok, _ = await shell_cmd_wait(cmd, '1', timeout=4.0)
-                        if not ok:
-                            ui.notify(f'Ошибка переключения на OUTP:MUX:UART {channel_num}', type='warning')
-                        await asyncio.sleep(0.15)
+                    # Переключаем мультиплексор UART стенда на целевой канал
+                    cmd = f'OUTP:MUX:UART {channel_num};*OPC?\r\n'.encode()
+                    ok, _ = await shell_cmd_wait(cmd, '1', timeout=3.0)
+                    if not ok:
+                        ui.notify(f'Предупреждение: OUTP:MUX:UART {channel_num} не подтвержден', type='warning')
+                    await asyncio.sleep(0.1)
 
                     matched_port = None
-                    test_payload = b'TEST'
+                    test_payload = b'TEST\r\n'
 
-                    for attempt in range(3):
-                        if matched_port:
-                            break
+                    for candidate_p in list(remaining_ports):
+                        handle = open_handles.get(candidate_p)
+                        if not handle or not handle.is_open:
+                            continue
 
-                        for candidate_p in list(remaining_ports):
-                            handle = open_handles.get(candidate_p)
-                            if not handle or not handle.is_open:
-                                continue
+                        # 1. Очищаем приемный буфер стенда
+                        curr_shell.write(b'SENS:UART:CLE\r\n')
+                        await asyncio.sleep(0.04)
 
-                            curr_shell.reset_input_buffer()
-                            handle.reset_input_buffer()
-                            handle.reset_output_buffer()
-                            handle.write(test_payload + b'\r\n')
-                            print(f'[DETECT PING] TEST -> {candidate_p} (для Порта {channel_num})...')
+                        # 2. Шлем тестовую посылку в проверяемый COM-порт
+                        handle.reset_input_buffer()
+                        handle.reset_output_buffer()
+                        handle.write(test_payload)
+                        print(f'[DETECT TEST]: Шлем в {candidate_p} -> MUX канал {channel_num}')
 
-                            t_listen = time.time()
-                            urc_buf = ""
-                            got_urc = False
+                        # 3. Цикл опроса счетчика принятых байт (SENS:UART:COUN?)
+                        got_bytes = False
+                        poll_start = time.time()
+                        while time.time() - poll_start < 0.5:
+                            count_str = await scpi_query(b'SENS:UART:COUN?\r\n', timeout=0.15)
+                            try:
+                                cnt = int(count_str)
+                                if cnt > 0:
+                                    got_bytes = True
+                                    break
+                            except ValueError:
+                                pass
+                            await asyncio.sleep(0.04)
 
-                            while time.time() - t_listen < 0.6:
-                                if curr_shell.in_waiting > 0:
-                                    urc_buf += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
-                                    if '+UART_DETECT' in urc_buf:
-                                        print(f'[DETECT URC MATCH] {candidate_p} -> Порт {channel_num}! URC: {urc_buf.strip()}')
-                                        got_urc = True
-                                        break
-                                await asyncio.sleep(0.04)
-
-                            if got_urc:
+                        # 4. Если байты пришли — вычитываем и проверяем содержание
+                        if got_bytes:
+                            data_str = await scpi_query(b'SENS:UART:DATA?\r\n', timeout=0.25)
+                            print(f'[DETECT CHECK]: Получены данные от {candidate_p}: {repr(data_str)}')
+                            if 'TEST' in data_str:
                                 matched_port = candidate_p
                                 break
 
@@ -960,18 +988,15 @@ def build_dashboard(ports_refs, ui_labels):
                         if lbl_w:
                             lbl_w.set_text(f'Порт {channel_num}')
                             lbl_w.classes(remove='text-amber-400', add='text-emerald-400 font-bold')
-                        ui.notify(f'Успех! {matched_port} определен как Порт {channel_num}', type='positive')
+                        ui.notify(f'Успех! {matched_port} -> Порт {channel_num}', type='positive')
                     else:
-                        ui.notify(f'Не удалось определить порт для UART MUX {channel_num}', type='warning')
+                        ui.notify(f'Не удалось определить порт для канала {channel_num}', type='warning')
 
                 for p, h in open_handles.items():
                     try:
                         h.close()
                     except Exception:
                         pass
-
-                curr_shell.write(b'UART_DETECT stop\r\n')
-                print('[SHELL TX]: UART_DETECT stop')
 
                 btn_start_detect.enable()
                 ui.notify('Процедура автоопределения завершена!', type='info')
@@ -997,7 +1022,6 @@ def build_dashboard(ports_refs, ui_labels):
                     'text-white text-xs font-semibold'
                 )
 
-                # Выбор канала мультиплексора JTAG (SCPI OUTP:MUX:JTAG <1..5>)
                 def handle_jtag_mux(e):
                     mux_val = e.value
                     cmd = f'OUTP:MUX:JTAG {mux_val}\r\n'

@@ -163,6 +163,9 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "SENSe:UART:BAUDrate",  .callback = cmd_sense_uart_baud, },
     { .pattern = "SENSe:UART:BAUDrate?", .callback = cmd_sense_uart_baud_q, },
 
+    /* Подсистема SYSTem */
+    { .pattern = "SYSTem:WAIT", .callback = cmd_system_wait, },
+    { .pattern = "SYSTem:UID:MU?", .callback = cmd_system_uid_q, },
     SCPI_CMD_LIST_END
 };
 
