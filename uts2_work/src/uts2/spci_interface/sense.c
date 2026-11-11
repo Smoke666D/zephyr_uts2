@@ -232,3 +232,87 @@ scpi_result_t cmd_sense_light_q(scpi_t *context)
 
     return SCPI_RES_OK;
 }
+
+static const scpi_choice_def_t adc_channel_choices[] = {
+    {"AIN_AO1",        AIN_AO1},
+    {"AIN_AO2",        AIN_AO2},
+    {"AIN_AO3",        AIN_AO3},
+    {"AIN_AO4",        AIN_AO4},
+    {"AIN_AO5",        AIN_AO5},
+    {"AIN_AO6",        AIN_AO6},
+    {"AIN_AO7",        AIN_AO7},
+    {"AIN_AO8",        AIN_AO8},
+    {"AIN_AO9",        AIN_AO9},
+    {"AIN_AO10",       AIN_AO10},
+    {"AIN_AO11",       AIN_AO11},
+    {"AIN_AO12",       AIN_AO12},
+    {"AIN_AO13",       AIN_AO13},
+    {"AIN_AO14",       AIN_AO14},
+    {"AIN_AO15",       AIN_AO15},
+    {"AIN_AO16",       AIN_AO16},
+    {"AIN_AO17",       AIN_AO17},
+    {"AIN_AO18",       AIN_AO18},
+
+    {"AIN_AVsense1",   AIN_AVsense1},
+    {"AIN_AVsense2",   AIN_AVsense2},
+    {"AIN_AVsense3",   AIN_AVsense3},
+    {"AIN_AVsense4",   AIN_AVsense4},
+    {"AIN_AVsense5",   AIN_AVsense5},
+    {"AIN_AVsense6",   AIN_AVsense6},
+
+    {"LIN_AO1",        LIN_AO1},
+    {"LIN_AO2",        LIN_AO2},
+    {"LIN_AO3",        LIN_AO3},
+    {"LIN_AO4",        LIN_AO4},
+
+    {"DA41_GND1",      DA41_GND1},
+    {"DA41_GND2",      DA41_GND2},
+
+    {"AIN_DA11_test1", AIN_DA11_test1},
+    {"AIN_DA20_test1", AIN_DA20_test1},
+    {"AIN_DA33_test1", AIN_DA33_test1},
+    {"AIN_DA44_test1", AIN_DA44_test1},
+    {"AIN_DA41_test1", AIN_DA41_test1},
+
+    {"AIN_DA11_test2", AIN_DA11_test2},
+    {"AIN_DA20_test2", AIN_DA20_test2},
+    {"AIN_DA33_test2", AIN_DA33_test2},
+    {"AIN_DA44_test2", AIN_DA44_test2},
+    {"AIN_DA41_test2", AIN_DA41_test2},
+
+    {"ENV_P3V3",       ENV_P3V3},
+    {"ENV_P5V0",       ENV_P5V0},
+    {"ENV_VIN",        ENV_VIN},
+    {"ENV_VDOUT1",     ENV_VDOUT1},
+    {"ENV_P40V",       ENV_P40V},
+    {"ENV_USB",        ENV_USB},
+    {"ENV_VDOUT2",     ENV_VDOUT2},
+    {"ENV_VDOUT3",     ENV_VDOUT3},
+
+    SCPI_CHOICE_LIST_END
+};
+
+scpi_result_t cmd_sense_voltage_q(scpi_t *context)
+{
+    int32_t channel;
+    float volt_val;
+    int count = 0;
+    
+     while (SCPI_ParamChoice(context, adc_channel_choices, &channel, FALSE)) 
+     {
+        SYSTEM_BUS_GET(channel, &volt_val);        
+        SCPI_ResultFloat(context, volt_val);
+        count++;
+    }
+    // 2. Запрос всех 48 каналов сразу: SENS:VOLT?
+    if (count == 0)
+    {
+        for (int ch = 0; ch < ARRAY_SIZE(adc_channel_choices) -1; ch++) 
+        {
+            SYSTEM_BUS_GET(adc_channel_choices[ch].tag, &volt_val);                    
+            SCPI_ResultFloat(context, volt_val);
+        }
+    }
+
+    return SCPI_RES_OK;
+}

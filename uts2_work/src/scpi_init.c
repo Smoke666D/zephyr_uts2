@@ -158,7 +158,6 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "OUTPut:DOUT[:STATe]?", .callback = cmd_output_dout_q, },
 
     /* Подсистема SOURce: */
-    /* Всторенный DAC STM32*/
     { .pattern = "SOURce:DAC[:VALue]",  .callback = cmd_source_dac, },
     { .pattern = "SOURce:DAC[:VALue]?", .callback = cmd_source_dac_q, },
     /* I2C переменное сопротивление*/
@@ -174,6 +173,9 @@ static const scpi_command_t scpi_commands[] = {
 
     { .pattern = "SENSe:TEMPerature[:DATA]?", .callback = cmd_sense_temp_q, },
     { .pattern = "SENSe:LIGht[:DATA]?", .callback = cmd_sense_light_q, },
+    { .pattern = "SENSe:VOLTage[:DC]?",   .callback = cmd_sense_voltage_q, },
+    /* Опциональный стандартный псевдоним (по стандарту VISA часто пишут MEAS:VOLT?) */
+    { .pattern = "MEASure:VOLTage[:DC]?", .callback = cmd_sense_voltage_q, },
 
     /* Подсистема SYSTem */
     { .pattern = "SYSTem:WAIT", .callback = cmd_system_wait, },
