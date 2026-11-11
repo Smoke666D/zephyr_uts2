@@ -33,6 +33,7 @@ static scpi_result_t SCPI_Reset(scpi_t *context) {
 
     cmd_led_reset(context);
     cmd_out_reset(context);
+    cmd_dac_reset(context);
 
     return SCPI_RES_OK;
 }
@@ -128,8 +129,8 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "*IDN?", .callback = scpi_cmd_idn_q, },
     { .pattern = "*RST",  .callback = scpi_cmd_rst, },
     { .pattern = "*CLS",  .callback = scpi_cmd_cls, },
-    { .pattern = "*OPC",        .callback = scpi_cmd_opc, },     
-    { .pattern = "*OPC?",       .callback = scpi_cmd_opc_q, },   
+    { .pattern = "*OPC",  .callback = scpi_cmd_opc, },     
+    { .pattern = "*OPC?", .callback = scpi_cmd_opc_q, },   
 
     /* Подсистема DISPlay в параметрическом стиле */
     { .pattern = "DISPlay:LED[:STATe]",  .callback = cmd_disp_led_state, },
@@ -155,6 +156,10 @@ static const scpi_command_t scpi_commands[] = {
 
     { .pattern = "OUTPut:DOUT[:STATe]",  .callback = cmd_output_dout, },
     { .pattern = "OUTPut:DOUT[:STATe]?", .callback = cmd_output_dout_q, },
+
+    /* Подсистема SOURce: */
+    { .pattern = "SOURce:DAC[:VALue]",  .callback = cmd_source_dac, },
+    { .pattern = "SOURce:DAC[:VALue]?", .callback = cmd_source_dac_q, },
 
     /* Подсистема SENSe:UART (Служебный приемник телеметрии DUT) */
     { .pattern = "SENSe:UART:DATA?",     .callback = cmd_sense_uart_data_q, },

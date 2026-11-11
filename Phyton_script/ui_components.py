@@ -374,38 +374,39 @@ def build_dashboard(ports_refs, ui_labels):
                         )
 
         # ==========================================
-        # 5. ЦАП И РЕЗИСТОРЫ
+        # 5. ЦАП (SCPI SOURce:DAC) И РЕЗИСТОРЫ
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            ui.label('Управление ЦАП и подстроечными резисторами').classes(
+            ui.label('Управление ЦАП (SOURce:DAC) и подстроечными резисторами').classes(
                 'text-xs font-semibold text-yellow-300 mb-1.5'
             )
             with ui.row().classes('w-full gap-4 items-center'):
-                # ЦАП
+                # ЦАП: 12-битный код от 0 до 4095 (по умолчанию 4095)
                 with ui.row().classes('items-center gap-1.5 flex-1'):
                     ui.label('ЦАП:').classes('text-xs text-white font-medium')
-                    dac_input = ui.input(placeholder='15.00 - 30.00', value='15.00').props(
-                        'dark outlined dense type=number input-class="text-right"'
+                    dac_input = ui.input(placeholder='0 - 4095', value='4095').props(
+                        'dark outlined dense type=number min=0 max=4095 step=1 input-class="text-right"'
                     ).classes('w-28 bg-slate-700 text-xs text-white rounded')
-                    ui.label('В').classes('text-xs text-slate-300 font-medium')
+                    ui.label('код (0..4095)').classes('text-xs text-slate-300 font-medium')
 
                     def send_dac():
                         try:
-                            val = float(dac_input.value)
-                            if 15.00 <= val <= 30.00:
-                                cmd = f'DAC set {val:.2f}\r\n'
+                            val = int(dac_input.value)
+                            if 0 <= val <= 4095:
+                                # Каноническая команда SCPI: SOUR:DAC <value>
+                                cmd = f'SOUR:DAC {val}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
                                     curr_shell.write(cmd.encode('utf-8'))
-                                    ui.notify(f'[ЦАП] Отправлено: {cmd.strip()}', type='positive')
+                                    ui.notify(f'[ЦАП] SCPI: {cmd.strip()}', type='positive')
                                 else:
                                     ui.notify('SCPI порт закрыт!', type='warning')
                             else:
                                 ui.notify(
-                                    'Значение ЦАП должно быть от 15.00 до 30.00', type='warning'
+                                    'Код ЦАП должен быть в диапазоне от 0 до 4095!', type='warning'
                                 )
                         except ValueError:
-                            ui.notify('Введите корректное число для ЦАП', type='negative')
+                            ui.notify('Введите целое число для кода ЦАП (0-4095)', type='negative')
 
                     dac_input.on('keydown.enter', send_dac)
                     ui.button('Set DAC', on_click=send_dac).classes(
@@ -806,7 +807,6 @@ def build_dashboard(ports_refs, ui_labels):
                 return False, accum
 
             async def scpi_query(query_bytes, timeout=0.6):
-                """Отправляет запрос SCPI и возвращает последнюю строку ответа без эха"""
                 curr_shell = shell_ref.get('ser')
                 if not curr_shell or not curr_shell.is_open:
                     return ""
@@ -934,7 +934,6 @@ def build_dashboard(ports_refs, ui_labels):
                 for channel_num in range(1, 5):
                     ui.notify(f'Поиск физического Порта {channel_num}...', type='info')
 
-                    # Переключаем мультиплексор UART стенда на целевой канал
                     cmd = f'OUTP:MUX:UART {channel_num};*OPC?\r\n'.encode()
                     ok, _ = await shell_cmd_wait(cmd, '1', timeout=3.0)
                     if not ok:
@@ -949,17 +948,14 @@ def build_dashboard(ports_refs, ui_labels):
                         if not handle or not handle.is_open:
                             continue
 
-                        # 1. Очищаем приемный буфер стенда
                         curr_shell.write(b'SENS:UART:CLE\r\n')
                         await asyncio.sleep(0.04)
 
-                        # 2. Шлем тестовую посылку в проверяемый COM-порт
                         handle.reset_input_buffer()
                         handle.reset_output_buffer()
                         handle.write(test_payload)
                         print(f'[DETECT TEST]: Шлем в {candidate_p} -> MUX канал {channel_num}')
 
-                        # 3. Цикл опроса счетчика принятых байт (SENS:UART:COUN?)
                         got_bytes = False
                         poll_start = time.time()
                         while time.time() - poll_start < 0.5:
@@ -973,7 +969,6 @@ def build_dashboard(ports_refs, ui_labels):
                                 pass
                             await asyncio.sleep(0.04)
 
-                        # 4. Если байты пришли — вычитываем и проверяем содержание
                         if got_bytes:
                             data_str = await scpi_query(b'SENS:UART:DATA?\r\n', timeout=0.25)
                             print(f'[DETECT CHECK]: Получены данные от {candidate_p}: {repr(data_str)}')

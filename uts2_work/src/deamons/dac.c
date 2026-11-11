@@ -61,7 +61,7 @@ typedef enum ad5243_channel
  */
 typedef struct dac_data_msg 
 {
-    float value[TOTAL_DAC_COUNT]; // Буфер значений (8 шагов * 2 канала)
+    uint32_t value[TOTAL_DAC_COUNT]; // Буфер значений (8 шагов * 2 канала)
 } dac_data_msg_t;
 
 /***************************************************************************************************
@@ -192,19 +192,8 @@ static void _dac_update_handler(struct k_work *_work)
             && cache_dac_data.value[0] != req.value.sd_float
            )
         {
-            cache_dac_data.value[0] = req.value.sd_float;
-            float low_v = 0.0f;
-            SYSTEM_BUS_GET(ENV_VIN, &low_v);                    
-            float temp = 0.0f;
-
-            if (cache_dac_data.value[0] > low_v)
-            {
-                temp = req.value.sd_float - low_v;
-            }
-
-            float step = (MAX_P40V_OUT - low_v) / 4095.0f;
-            cur_dac_value = 4095 - (uint32_t)(temp / step);
-            dac_write_value(dac_dev, 2, (uint32_t)cur_dac_value);
+            cache_dac_data.value[0] = req.value.sd_uint;                            
+            dac_write_value(dac_dev, 2, cache_dac_data.value[0]);
         }
         else if (true
                  && req.id == ADJ_RES1
@@ -307,7 +296,7 @@ static int _dac_control_init(void)
 
 SYS_INIT(_dac_control_init, DAC_DEAMON_INIT_LEVEL, DAC_DEAMON_INIT_PRIOR);
 
-SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, 0, FLOAT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, 0, UINT_DATA);
 SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, 1, FLOAT_DATA);
 SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, 2, FLOAT_DATA);
 
