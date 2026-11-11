@@ -1,0 +1,478 @@
+#pragma once
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "stdint.h"
+#include <zephyr/kernel.h>
+#include <zephyr/zbus/zbus.h>
+#include <zephyr/drivers/uart.h>
+
+#define LED_CNT 3
+
+
+#define LOW_CUR_DRIVER_COUNT 18
+#define LIN_CONTROL_CNT  4
+#define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
+
+#define TOTAL_DAC_COUNT 3
+
+
+
+
+
+typedef enum
+{   AIN_AO1,
+    AIN_AO7,
+    AIN_AO13,
+    AIN_AVsense1,
+    LIN_AO1,
+    AIN_AO2,
+    AIN_AO8,
+    AIN_AO14,
+    AIN_AVsense2,    
+    LIN_AO2,
+    AIN_AO3,
+    AIN_AO9,
+    AIN_AO15,
+    AIN_AVsense3,        
+    LIN_AO3,
+    AIN_AO4,
+    AIN_AO10,
+    AIN_AO16,
+    AIN_AVsense4,
+    LIN_AO4,
+    AIN_AO5,
+    AIN_AO11,
+    AIN_AO17,
+    AIN_AVsense5,
+    DA41_GND1,
+    AIN_AO6,                    
+    AIN_AO12,                
+    AIN_AO18,
+    AIN_AVsense6,
+    DA41_GND2,
+    AIN_DA11_test1,
+    AIN_DA20_test1,
+    AIN_DA33_test1,
+    AIN_DA44_test1,
+    AIN_DA41_test1,
+    AIN_DA11_test2,
+    AIN_DA20_test2,
+    AIN_DA33_test2,
+    AIN_DA44_test2, 
+    AIN_DA41_test2,
+    ENV_P3V3,
+    ENV_P5V0,
+    ENV_VIN,
+    ENV_VDOUT1,
+    ENV_P40V,
+    ENV_USB, 
+    ENV_VDOUT2,
+    ENV_VDOUT3,
+    LED1,
+    LED2,
+    LED3,
+    I2C1_TEMP1,
+    I2C1_TEMP2,
+    I2C1_LUX1,
+    I2C1_LUX2,
+    RF_POWER,
+    NTC,
+    EXT_VSENSE,
+    BRD_DETECT,
+    DOUT1,
+    DOUT2,
+    DOUT3,
+    DOUT4,
+    DOUT5,
+    DOUT6,
+    DOUT7,
+    DOUT8,
+    DOUT9,
+    DOUT10,
+    DOUT11,
+    DOUT12,
+    DOUT13,
+    DOUT14,
+    DOUT15,
+    DOUT16,
+    DOUT17,
+    DOUT18,
+    LIN_PD1,
+    LIN_PD2,
+    LIN_PD3,
+    LIN_PD4,
+    EN_DUT2_PSU,
+    EN_DUT3_PSU,  
+    EN_P12V,
+    EN_P24V,
+    EN_VA,
+    EN_USB_OUT,
+    EN_USB_BOOT,
+    EN_USB_TOP,
+    DAC_VALUE,
+    ADJ_RES1,
+    ADJ_RES2,
+    SENS_BRD_LOW_CURRENT, 
+    SENS_BRD_LOW_VOLTAGE,  
+    SENS_BRD_HIGH_CURRENT, 
+    SENS_BRD_HIGH_VOLTAGE, 
+    SENS_VDUT2_CURRENT,   
+    SENS_VDUT2_VOLTAGE,  
+    SENS_VDUT3_CURRENT,  
+    SENS_VDUT3_VOLTAGE,  
+    SENS_VIN_CURRENT,    
+    SENS_VIN_VOLTAGE,    
+    SENS_DCDC_3_3_CURRENT,
+    SENS_DCDC_3_3_VOLTAGE,
+    SENS_VDOUT_PWR_CURRENT,
+    SENS_VDOUT_PWR_VOLTAGE,
+    SENS_VD5_CURRENT,      
+    SENS_VD5_VOLTAGE,      
+    SENS_I2C_POWER_BRD_LOW,
+    SENS_I2C_POWER_BRD_HIGH,
+    SENS_I2C_POWER_VDUT2,
+    SENS_I2C_POWER_VDUT3,
+    SENS_I2C_POWER_VIN,
+    SENS_I2C_POWER_DCDC_3_3,
+    SENS_I2C_POWER_VDOUT_PWR,
+    SENS_I2C_POWER_VD5,
+    HARDWARE_ERROR_REGISTER1,
+    HARDWARE_ERROR_REGISTER2,
+    HARDWARE_ERROR_REGISTER3,
+    EVENT_1_REG,
+    CAN1_TX,
+    CAN2_TX,
+    CAN3_TX,
+    CAN1_RX,
+    CAN2_RX,
+    CAN3_RX,
+    LIN1_TX,
+    LIN1_RX,
+    LIN2_TX,
+    LIN2_RX,
+    LIN3_TX,
+    LIN3_RX,
+    LIN4_TX,
+    LIN4_RX,
+    USB_FB_MUX,    
+    UART_DETECT_DATA,
+    UART_DETECT_CONFIG,
+    JTAG_MUX0,    
+    JTAG_MUX_EN,    
+    EN_USB_UART,
+    EN_USB_OUT1,
+    EN_USB_OUT2,
+    EN_USB_OUT3,    
+    UART_FB_EN,
+    UART_RX_EN,
+    OK2,
+    OK1,
+    SETTING_MU_ID_1,
+    SETTING_MU_ID_2,
+    SETTING_MU_ID_3,
+    SETTING_MU_SN,
+    SETTING_MU_HW_ID,
+    SETTING_MU_HW_VER,
+    SETTING_IU_ID,
+    SETTING_IU_SN,
+    SETTING_IU_HW_ID,
+    SETTING_IU_HW_VER,
+    SETTING_IU_USER_DATA,
+    SETTING_CU_ID,    
+    SETTING_CU_SN,    
+    SETTING_CU_HW_ID,
+    SETTING_CU_HW_VER,
+    SETTING_CU_USER_DATA,
+    SETTING_OUT_TEST_CUR,
+    SETTING_3_3_CUR_HIGH,
+    SETTING_3_3_CUR_LOW,
+    SETTING_5_CUR_HIGH,
+    SETTING_5_CUR_LOW,
+    UART_DETECT_RX,
+    /* Сюда в будущем можно добавлять любые другие параметры других модулей */
+    SYSTEM_BUS_COUNT
+} SYSTEM_BUS_ID;
+
+
+#define EEPROM_EVENT_CH EVENT_1_REG
+
+typedef enum
+{
+    EEPORM_IU_ERROR         = 0x0001 << 0,
+    EEPORM_CU_ERROR         = 0x0001 << 1,
+    FRAM_MU_ERROR           = 0x0001 << 3,
+    ADS1115_IU_ERROR        = 0x0001 << 4,
+    AD5243_IU_ERROR         = 0x0001 << 5,
+    TMP112_MU_ERROR         = 0x0001 << 6,
+    TMP112_IU_ERROR         = 0x0001 << 7,
+    BH1750_1_IU_ERROR       = 0x0001 << 8,
+    BH1750_2_IU_ERROR       = 0x0001 << 9,
+ 
+} hw_error_channel_1_t;
+
+
+#define AD5243_ERROR_CH   HARDWARE_ERROR_REGISTER1
+#define EEPROM_ERROR_CH   HARDWARE_ERROR_REGISTER1
+#define I2C_SENS_ERROR_CH HARDWARE_ERROR_REGISTER1
+
+typedef enum
+{    
+    EVENT_EEPROM_IU_WRITE_OK    = 0x0001 << 0,
+    EVENT_EEPROM_IU_WRITE_ERROR = 0x0001 << 1,
+    EVENT_EEPROM_IU_CRC_ERROR   = 0x0001 << 2,
+    EVENT_EEPROM_CU_WRITE_OK    = 0x0001 << 3,
+    EVENT_EEPROM_CU_WRITE_ERROR = 0x0001 << 4,
+    EVENT_EEPROM_CU_CRC_ERROR   = 0x0001 << 5,    
+
+    ADS1115_IU_WARNNIG      = 0x0001 << 3,
+    BRD_LOW_CUR_SEN_WARNING = 0x0001 << 4,
+    
+} HARDWARE_WARNING_REGISTER1_t;
+
+
+typedef enum
+{
+   LIN_PULL_DOWN_OFF,
+   LIN_PULL_DOWN_ON,
+} lin_pull_down_state_t;
+
+typedef enum
+{
+    STATE_IN = 0,
+    STATE_LOW = 1,
+    STATE_HIGH = 2,
+    STATE_SHORT = 3,
+} LOW_CUR_OUT_STATE_t;
+
+
+
+#define POWER_CONTROL_LINE_CNT 8
+
+typedef enum
+{  
+  QUEUE_DATA,
+  BOOL_DATA,
+  UINT_DATA,
+  FLOAT_DATA,
+  CAN_MSG_DATA,
+} SYSTEM_BUS_DATA_TYPE;
+
+
+
+typedef struct {
+    uint32_t id;          // CAN Identifier (Standard / Extended)
+    uint8_t  dlc;         // Data Length Code / или реальная длина в байтах (0-64)
+    uint8_t  flags;       // Флаговая маска (CAN_FD_FRAME, CAN_IDE и т.д.)
+    uint8_t  data[64];    // Полезная нагрузка CAN-FD
+} system_can_message_t;
+
+
+
+
+typedef struct 
+{
+    float  value[4];    
+} FLOAT_ARRAY_CHANNEL_4_t;
+
+struct system_bus_handler
+{
+    SYSTEM_BUS_ID         bus_id;  //ID параметра
+    const struct zbus_channel   *channel; // Ссылка на канал
+    SYSTEM_BUS_DATA_TYPE  channel_type;    
+    uint32_t              system_index;
+};
+
+typedef union erver_data
+{
+    bool sd_bool;
+    uint32_t sd_uint;
+    float sd_float;
+} server_data_t;
+
+typedef struct server_request
+{
+    server_data_t value;
+    SYSTEM_BUS_ID id;
+    struct k_sem * sync;
+    uint8_t * response;
+} server_request;
+
+
+/* 
+ * Макрос для регистрации параметра. 
+ * Сразу принимает имя Zbus-канала (например, chan_ain_ao1).
+ */
+#define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = chan_ptr, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+    }
+
+#define SERVER_IN_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = chan_ptr, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+    }
+
+    
+ int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
+ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
+ int bus_set_real(SYSTEM_BUS_ID id, float _val);
+ int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
+
+
+#define SYSTEM_BUS_SET(id, val) _Generic((val), \
+        bool:       bus_set_bool(id, val), \
+        int:        bus_set_u32(id, val),  \
+        unsigned:   bus_set_u32(id, val),  \
+        float:      bus_set_real(id, val) \
+    )
+
+
+#define SERVER_OUT_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = chan_ptr, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+    }
+
+ int serever_set_bool(SYSTEM_BUS_ID id, bool _val,     struct k_sem * sync, uint8_t * ret);
+ int serever_set_u32( SYSTEM_BUS_ID id, uint32_t _val, struct k_sem * sync, uint8_t * ret);
+ int serever_set_real(SYSTEM_BUS_ID id, float _val,    struct k_sem * sync, uint8_t * ret);
+ 
+
+
+#define SERVER_CH_SET_ASYC(id, val) _Generic((val), \
+        bool:       serever_set_bool(id, val, NULL, NULL), \
+        uint32_t:        serever_set_u32(id, val, NULL, NULL),  \
+        float:      serever_set_real(id, val, NULL, NULL) \
+    )
+
+#define SERVER_CH_SET_SYC(id, val, sync, ret) _Generic((val), \
+        bool:       serever_set_bool(id, val, sync, ret), \
+        uint32_t:        serever_set_u32(id, val, sync, ret),  \
+        float:   serever_set_real(id, val,  sync, ret) \
+    )
+
+
+#define SYSTEM_BUS_SET_P(id, val) _Generic(*(val), \
+    system_can_message_t: bus_set_can              \
+)((id), (val))
+
+
+int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
+int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
+int bus_get_real(SYSTEM_BUS_ID id, float * _val);
+
+// 2. Пишем макрос, который смотрит на тип указателя `val`
+#define SYSTEM_BUS_GET(id, val) _Generic(*(val), \
+    bool:     bus_get_bool, \
+    int:      bus_get_u32,  \
+    unsigned: bus_get_u32,  \
+    float:    bus_get_real  \
+)((id), (val))
+
+
+int bus_get_bool_ch(SYSTEM_BUS_ID id, bool * _val,uint8_t size);
+int bus_get_u32_ch(SYSTEM_BUS_ID id,  uint32_t * _val,uint8_t size);
+int bus_get_real_ch(SYSTEM_BUS_ID id, float * _val,uint8_t size);
+
+// 2. Пишем макрос, который смотрит на тип указателя `val`
+#define SYSTEM_BUS_GET_CHANNEL(id, val, size) _Generic(*(val), \
+    bool:     bus_get_bool_ch, \
+    int:      bus_get_u32_ch,  \
+    unsigned: bus_get_u32_ch,  \
+    float:    bus_get_real_ch  \
+)((id), (val), (size))
+
+int bus_set_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
+int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val);
+int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask);
+int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask);
+
+
+#define SERVER_CH_SET_BIT( id, mask) bus_set_bit(id, mask)
+#define SERVER_CH_CLEAR_MASK( id, mask) bus_clear_mask(id, mask)
+#define SERVER_CH_SET_MASK( id, mask) bus_set_mask(id, mask)
+#define SERVER_CH_CLEAR_BIT( id, mask) bus_clear_bit(id, mask)
+#define SERVER_CH_SET_BIT_IF_NEEDED( id, mask) bus_set_bit_if_needed(id, mask)
+#define SERVER_CH_CLEAR_BIT_IF_NEEDED( id, mask) bus_clear_bit_if_needed(id, mask)
+#define SERVER_CH_GET_BIT(id, mask, val) bus_get_bit(id, mask, val)
+
+
+
+
+
+int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
+
+#define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
+    system_can_message_t: bus_get_can     \
+)((id), (val))
+
+/* Базовые функции установки массива параметров */
+int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count);
+int bus_set_u32_arr(uint32_t val, const SYSTEM_BUS_ID *ids, size_t count);
+int bus_set_real_arr(float val, const SYSTEM_BUS_ID *ids, size_t count);
+
+/* Вспомогательный макрос генерации массива "на лету" */
+#define _BUS_CALL_MULTI(fn, val, ...) \
+    fn((val), (const SYSTEM_BUS_ID[]){__VA_ARGS__}, sizeof((const SYSTEM_BUS_ID[]){__VA_ARGS__}) / sizeof(SYSTEM_BUS_ID))
+
+/* Универсальный макрос с автоопределением типа значения */
+#define SYSTEM_BUS_SET_MULTI(val, ...) _Generic((val), \
+    bool:          bus_set_bool_arr, \
+    int:           bus_set_u32_arr,  \
+    unsigned int:  bus_set_u32_arr,  \
+    uint32_t:      bus_set_u32_arr,  \
+    float:         bus_set_real_arr  \
+)((val), (const SYSTEM_BUS_ID[]){__VA_ARGS__}, sizeof((const SYSTEM_BUS_ID[]){__VA_ARGS__}) / sizeof(SYSTEM_BUS_ID))
+    
+
+int bus_listener_attach(const struct zbus_observer *listener, SYSTEM_BUS_ID id);
+
+
+static inline uint32_t uart_detect_pack_cfg(uint32_t baudrate, 
+                                            enum uart_config_parity parity,
+                                            enum uart_config_stop_bits stop,
+                                            enum uart_config_data_bits data)
+{
+    return (baudrate & 0x00FFFFFF) |
+           (((uint32_t)parity & 0x07) << 24) |
+           (((uint32_t)stop & 0x03) << 27) |
+           (((uint32_t)data & 0x07) << 29);
+}
+
+static inline uint32_t uart_detect_unpack_baud(uint32_t cfg)
+{
+    return cfg & 0x00FFFFFF;
+}
+
+static inline enum uart_config_parity uart_detect_unpack_parity(uint32_t cfg)
+{
+    return (enum uart_config_parity)((cfg >> 24) & 0x07);
+}
+
+static inline enum uart_config_stop_bits uart_detect_unpack_stop(uint32_t cfg)
+{
+    return (enum uart_config_stop_bits)((cfg >> 27) & 0x03);
+}
+
+static inline enum uart_config_data_bits uart_detect_unpack_data(uint32_t cfg)
+{
+    return (enum uart_config_data_bits)((cfg >> 29) & 0x07);
+}
+
+
+#ifdef __cplusplus
+}
+#endif

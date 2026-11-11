@@ -10,32 +10,37 @@ project(uts2_work)
 
 include(${ZEPHYR_BASE}/samples/subsys/usb/common/common.cmake)
 
+target_compile_definitions(app PRIVATE 
+    USE_FULL_ERROR_LIST=1
+)
+
 target_include_directories(app PRIVATE 
     src 
     src/drivers
     src/logic_signal
- #   src/lua
+  #  src/uts2/shell
+    src/midelware
+    src/lib/scpi/libscpi/inc
+    src/uts2/spci_interface
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"  
-    "src/logic_signal/*.c"  
-#"src/lua/*.c"    
+    "src/works/*.c"  
+    #"src/uts2/shell/*.c" 
+    "src/midelware/*c"  
+    "src/deamons/*c" 
+    "src/lib/scpi/libscpi/src/*.c"
+    "src/uts2/spci_interface/*.c"
 )
 
 target_sources(app PRIVATE 
-     src/adc_thread.c
-       #src/ina228_stream_thread.c
-       src/app_worker.c
-       #src/param_server.c 
-       src/system_bus_model.c
-       src/out_and_power_control.c
-        src/main.c
-        src/settings.c
-   
-      ${APP_SOURCES} 
+              
+    src/main.c
+    src/settings.c 
+    src/scpi_init.c    
+     ${APP_SOURCES} 
 )
-
 
 
 add_subdirectory(drivers/seq_mux_adc)

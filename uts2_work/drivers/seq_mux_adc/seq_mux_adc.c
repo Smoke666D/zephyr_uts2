@@ -42,7 +42,7 @@ static void        _dma_callback(const struct device *_dev, void *_user_data,
                                  uint32_t _channel, int _status);
 static int         _seq_mux_adc_get_channel_value_impl(const struct device *_dev, 
                                                        uint8_t _channel_idx, 
-                                                       uint32_t *_val);
+                                                       uint16_t *_val);
 static int         _seq_mux_adc_wait_for_data_impl(const struct device *_dev, 
                                                    k_timeout_t _timeout);
 static void        _fill_gpio_buffer(uint32_t *_buf);
@@ -58,10 +58,10 @@ static int         _seq_mux_adc_init(const struct device *_dev);
  *                                           PRIVATE DATA
  **************************************************************************************************/
 static uint32_t gpio_raw_buf[COMBINATIONS_CNT] __attribute__((section("SRAM4")));
-static uint32_t adc_buf_a[TOTAL_CHANNELS_CNT] __nocache;
-static uint32_t adc_buf_b[TOTAL_CHANNELS_CNT] __nocache;
-static uint32_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
-
+static uint16_t adc_buf_a[TOTAL_CHANNELS_CNT] __nocache;
+static uint16_t adc_buf_b[TOTAL_CHANNELS_CNT] __nocache;
+static uint16_t adc_shadow_buf[TOTAL_CHANNELS_CNT];
+static volatile uint16_t *active_adc_buf;
 
 static struct k_mutex mutex_lock;
 static struct k_sem   sem_data_ready;
@@ -92,14 +92,24 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
         // Копирование данных из заполненного буфера в теневой
         if (LL_DMA_GetCurrentTargetMem(DMA1, LL_DMA_STREAM_1) == 1)
         {
+            active_adc_buf = adc_buf_a;
             memcpy(adc_shadow_buf, adc_buf_a, sizeof(adc_shadow_buf));
         } 
         else 
         {
+            active_adc_buf = adc_buf_b;
             memcpy(adc_shadow_buf, adc_buf_b, sizeof(adc_shadow_buf));
         }
         k_sem_give(&sem_data_ready);
     }
+}
+
+static int _seq_mux_adc_get_buf_p(const struct device *_dev,  uint16_t *_user_buf)
+{
+    ARG_UNUSED(_dev);
+    memcpy(_user_buf, (const void *)active_adc_buf, TOTAL_CHANNELS_CNT*sizeof(uint16_t));
+    return 0;
+
 }
 
 /**
@@ -115,7 +125,7 @@ static void _dma_callback(const struct device *_dev, void *_user_data,
  */
 static int _seq_mux_adc_get_channel_value_impl(const struct device *_dev, 
                                                uint8_t _channel_idx, 
-                                               uint32_t *_val)
+                                               uint16_t *_val)
 {
     int ret;
 
@@ -154,6 +164,15 @@ static int _seq_mux_adc_wait_for_data_impl(const struct device *_dev,
 {
     ARG_UNUSED(_dev);
     return k_sem_take(&sem_data_ready, _timeout);
+}
+
+
+static struct k_sem * _seq_mux_adc_get_sem_impl(const struct device *_dev)
+{
+    ARG_UNUSED(_dev);
+
+    /* Возвращаем адрес нашего системного семафора, который выдается в dma_callback */
+    return &sem_data_ready;
 }
 
 /**
@@ -246,7 +265,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
     {
         .source_address   = (uint32_t)&(_adc_inst->DR),
         .dest_address     = (uint32_t)adc_buf_a,
-        .block_size       = TOTAL_CHANNELS_CNT * sizeof(uint32_t),
+        .block_size       = TOTAL_CHANNELS_CNT * sizeof(uint16_t),
         .source_addr_adj  = DMA_ADDR_ADJ_NO_CHANGE,
         .dest_addr_adj    = DMA_ADDR_ADJ_INCREMENT,
         .source_reload_en = 1,
@@ -257,10 +276,10 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
     {
         .dma_slot             = _config->adc_dma_slot,
         .channel_direction    = PERIPHERAL_TO_MEMORY,
-        .source_data_size     = 4,
-        .dest_data_size       = 4,
-        .source_burst_length  = 4,
-        .dest_burst_length    = 4,
+        .source_data_size     = 2,
+        .dest_data_size       = 2,
+        .source_burst_length  = 2,
+        .dest_burst_length    = 2,
         .channel_priority     = 3, // Очень высокий приоритет DMA
         .block_count          = 1,
         .head_block           = &adc_block_cfg,
@@ -277,7 +296,7 @@ static inline int _dma_init(const struct seq_mux_adc_config *_config,
 
     LL_DMA_SetMemory1Address(DMA1, LL_DMA_STREAM_1, (uint32_t)adc_buf_b);
     LL_DMA_EnableDoubleBufferMode(DMA1, LL_DMA_STREAM_1);
-
+    LL_DMA_DisableIT_HT(DMA1, LL_DMA_STREAM_1);
     return 0;
 }
 
@@ -467,6 +486,13 @@ static inline void _adc_init(ADC_TypeDef *_adc_inst)
         while (LL_ADC_IsEnabled(_adc_inst) == 1);
     }
 
+   // --- НАСТРОЙКА АППАРАТНОГО ОВЕРСЭМПЛИНГА (x4 для укладки в 60 мкс) ---
+    LL_ADC_SetOverSamplingDiscont(_adc_inst, LL_ADC_OVS_REG_CONT);
+    // Коэффициент x4 и сдвиг вправо на 2 бита (2^2 = 4)
+    LL_ADC_ConfigOverSamplingRatioShift(_adc_inst, 2, LL_ADC_OVS_SHIFT_RIGHT_1);
+    // Включаем оверсэмплинг для регулярной группы
+    LL_ADC_SetOverSamplingScope(_adc_inst, LL_ADC_OVS_GRP_REGULAR_CONTINUED);
+
     LL_ADC_StartCalibration(_adc_inst, LL_ADC_CALIB_OFFSET, 
                             LL_ADC_SINGLE_ENDED);
     while (LL_ADC_IsCalibrationOnGoing(_adc_inst)) 
@@ -550,6 +576,8 @@ static const struct seq_mux_adc_api driver_api =
 {
     .get_channel_value = _seq_mux_adc_get_channel_value_impl,
     .wait_for_data     = _seq_mux_adc_wait_for_data_impl,
+    .get_sem           = _seq_mux_adc_get_sem_impl,
+    .get_buf_pointer   = _seq_mux_adc_get_buf_p,
 };
 
 static const struct seq_mux_adc_config seq_config = 

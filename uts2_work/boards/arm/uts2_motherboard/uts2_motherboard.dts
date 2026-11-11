@@ -19,7 +19,7 @@
 
 	chosen {
 		zephyr,console = &usart1;
-		zephyr,shell-uart = &cdc_acm_uart0;
+		/*zephyr,shell-uart = &usart1;*/
 		zephyr,dtcm = &dtcm;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;	
@@ -34,7 +34,7 @@
          * Это избавляет наш Си-код драйвера от хардкода.
          */
         adc-dev = <&adc2>;
-        timer-dev = <&timers3>;
+        timer-dev = <&timers4>;
 
         channel-count = <8>;
         dmas = 
@@ -44,7 +44,7 @@
         /* Ссылка на аппаратный pinctrl управляющих пинов */
 
         adc-duration-us = <1000>;     /* T1: время АЦП */
-        switch-duration-us = <1000>;  /* T2: время переключения */ 
+
 
         status = "okay";
     };   
@@ -73,8 +73,8 @@
                     <&gpioe 13 GPIO_ACTIVE_HIGH>,
                     <&gpioe 14 GPIO_ACTIVE_HIGH>;
 
-        adc-duration-us = <1000>;     /* T1: время АЦП */
-        switch-duration-us = <1000>;  /* T2: время переключения */ 
+        adc-duration-us = <60>;     /* T1: время АЦП */
+        switch-duration-us = <60>;  /* T2: время переключения */ 
 
         status = "okay";
     };
@@ -103,8 +103,17 @@
 	aliases {
 		led0 = &green_led;
 		led1 = &yellow_led;
-		led2 = &red_led;		
+		led2 = &red_led;	
+        uart-detect = &usart2;	
 	};
+};
+
+&timers4 {
+    status = "okay";
+    st,prescaler = <10000>;    
+    counter {
+        status = "okay";
+    };
 };
 
 &backup_sram {
@@ -139,6 +148,8 @@
     };
 };
 
+
+
 &gpioa {
     status = "okay";
 };
@@ -151,9 +162,6 @@
     status = "okay";
 };
 /* Включаем АЦП3 в дереве устройств */
-
-
-
 
 
 &dma1 {
@@ -191,8 +199,6 @@
 &clk_hsi48 {
 	status = "okay";
 };
-
-
 
 &clk_hsi {
     hsi-div = <1>;
@@ -283,33 +289,57 @@
 
 /* Включаем и настраиваем SPI4 */
 &spi4 {
-    pinctrl-0 = <&spi4_sck_pe2 &spi4_miso_pe5 &spi4_mosi_pe6>;
-	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>; // Назначаем PE4 как софтовый CS*/
-    pinctrl-names = "default";
     status = "okay";
+    pinctrl-0 = <&spi4_sck_pe2 &spi4_miso_pe5 &spi4_mosi_pe6>;
+    pinctrl-names = "default";
+    cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
 
-    /* Опционально: если используете аппаратный CS на PE4 (AF5) */
-    /* pinctrl-0 также должна включать пин CS, либо задаем его через cs-gpios */
-    
     fram_chip: mb85rs64@0 {
-        compatible = "fujitsu,mb85rsxx";
-        reg = <0>;             
-        spi-max-frequency = <8000000>; 
-        size = <8192>;        
+        compatible = "atmel,at25"; /* <-- СТРОГО atmel,at25 */
+        reg = <0>;
+        spi-max-frequency = <8000000>;
+        size = <8192>;
+        pagesize = <1>;
+        address-width = <16>;
+        timeout = <5>;
     };
 };
 
+
+/* 1. Переопределяем настройки пинов PB10 (SCL) и PB11 (SDA) для I2C2 */
+&i2c2_scl_pb10 {
+    drive-open-drain;
+    bias-pull-up;
+};
+
+&i2c2_sda_pb11 {
+    drive-open-drain;
+    bias-pull-up;
+};
+
 &i2c2 {
-    status = "okay";
-	pinctrl-0 = <&i2c2_scl_pb10 &i2c2_sda_pb11>;
-	pinctrl-names = "default";
-    clock-frequency = <400000>; /* 400 kHz (Fast Mode) */
+     status = "okay";
+    pinctrl-0 = <&i2c2_scl_pb10 &i2c2_sda_pb11>;
+    pinctrl-names = "default";
+
+    /* Включаем аппаратное восстановление шины Zephyr (Bus Recovery) */
+    scl-gpios = <&gpiob 10 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+    sda-gpios = <&gpiob 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+    clock-frequency = <I2C_BITRATE_FAST_PLUS>; /* 1 MHz  */
+/* Точные тайминги для реально измеренной частоты шины 96 МГц */
+    timings = <96000000 I2C_BITRATE_STANDARD  0x20D09BEE>,
+              <96000000 I2C_BITRATE_FAST      0x00A0329E>,
+              <96000000 I2C_BITRATE_FAST_PLUS 0x00501043>;
 
     CUR_SENS_BRD_LOW: ina228@40 {
         compatible = "ti,ina228";
         reg = <0x40>;
         current-lsb-microamps = <10>;
         rshunt-micro-ohms = <50000>;      /* Закрыто корректно: <50000> */
+        adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         status = "okay";
     };
 
@@ -318,6 +348,10 @@
         reg = <0x41>;
         current-lsb-microamps = <10>;
         rshunt-micro-ohms = <50000>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         status = "okay";
     };
 
@@ -325,6 +359,10 @@
         compatible = "ti,ina228";
         reg = <0x42>;
         rshunt-micro-ohms = <500000>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         current-lsb-microamps = <1>;
         status = "okay";
     };
@@ -333,6 +371,10 @@
         compatible = "ti,ina228";
         reg = <0x43>;
         rshunt-micro-ohms = <500000>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         current-lsb-microamps = <1>;
         status = "okay";
     };
@@ -341,6 +383,10 @@
         compatible = "ti,ina228";
         reg = <0x44>;
         current-lsb-microamps = <10>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };
@@ -348,7 +394,11 @@
     CUR_SENS_3_3_DCDC: ina228@45 {
         compatible = "ti,ina228";
         reg = <0x45>;
-        current-lsb-microamps = <10>;
+        current-lsb-microamps = <1>;
+        adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };
@@ -357,6 +407,10 @@
         compatible = "ti,ina228";
         reg = <0x46>;                     /* Исправлено совпадение адресов (было 0x45) */
         current-lsb-microamps = <10>;
+        adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };
@@ -365,6 +419,10 @@
         compatible = "ti,ina228";
         reg = <0x47>;
         current-lsb-microamps = <10>;
+                adc-mode = "Bus and shunt voltage continuous";
+        vbus-conversion-time-us = <280>;   /* 280 мкс */
+        vshunt-conversion-time-us = <280>; /* 280 мкс */
+        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
         rshunt-micro-ohms = <50000>;
         status = "okay";
     };
@@ -401,20 +459,34 @@ zephyr_udc0: &usbotg_hs {
     };
 };
 
+
+/* 1. Переопределяем настройки пинов PB10 (SCL) и PB11 (SDA) для I2C2 */
+&i2c1_scl_pb8 {
+    drive-open-drain;
+    bias-pull-up;
+};
+
+&i2c1_sda_pb7 {
+    drive-open-drain;
+    bias-pull-up;
+};
+
 &i2c1 {
     status = "okay";
     pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb7>; /* Проверь точные имена pinctrl для твоей платы, но логика такая */
+    scl-gpios = <&gpiob 8 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+    sda-gpios = <&gpiob 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
     pinctrl-names = "default";
-    clock-frequency = <I2C_BITRATE_FAST>; /* 400 kHz */
+    clock-frequency = <I2C_BITRATE_STANDARD>; /* 400 kHz */
 
 
- 	eeprom_1: eeprom@50 {
+ 	eeprom_1: eeprom@51 {
         compatible = "atmel,at24";
         reg = <0x51>;
         size = <256>;          /* 2 Кбит = 256 байт */
         pagesize = <16>;       /* Размер страницы записи 16 байт */
         address-width = <8>;   /* 8-битная адресация внутри чипа */
-        timeout = <5>;
+        timeout = <10>;
         status = "okay";
     };
 
@@ -425,23 +497,13 @@ zephyr_udc0: &usbotg_hs {
         size = <256>;
         pagesize = <16>;
         address-width = <8>;
-        timeout = <5>;
+        timeout = <10>;
         status = "okay";
     };
 
-    /* 6-я микросхема PCF8575RGER (A0=VDD, A1=GND, A2=GND) -> адрес 0x21 */
-    pcf8575_6: pcf857x@21 {
-        compatible = "nxp,pcf857x";
-        status = "okay";
-        reg = <0x21>;
-        gpio-controller;
-        #gpio-cells = <2>;
-        ngpios = <16>;
-    };
-    
-    /* Если 7-я микросхема (все адреса на GND, адрес 0x20) тоже там, можешь сразу прописать и её: */
-    pcf8575_7: pcf857x@20 {
-        compatible = "nxp,pcf857x";
+
+    mcp23017: mcp23017@20 {
+        compatible = "microchip,mcp23017";
         status = "okay";
         reg = <0x20>;
         gpio-controller;
@@ -499,4 +561,126 @@ zephyr_udc0: &usbotg_hs {
         chain-length = <5>;
         oe-gpios = <&gpiob 14 GPIO_ACTIVE_LOW>;  // Пин разрешения выходов OE (активный 0)
     };
+};
+
+/ {
+    /* Создаем логическую группу выходов */
+    enbale_control_switch {
+        compatible = "gpio-leds";
+
+        /* Пин включения питания метки №1 */
+        en_dut2: en_1 {
+            gpios = <&gpioe 3 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин включения питания метки №2 */
+        en_dut3: en_2 {
+            gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин включения питания +12В */
+        en_p12v: en_3 {
+            gpios = <&gpiod 3 GPIO_ACTIVE_HIGH>;            
+        };
+         /* Пин включения питания +12В */
+        en_p24v: en_4 {
+            gpios = <&gpiod 7 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания аналоговых буфферов */
+        en_va: en_5 {
+            gpios = <&gpiod 4 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания usb интрефенйсной платы */
+        en_usb_out: en_6 {
+            gpios = <&gpiod 10 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания usb верхней части двойнгого разъема  */
+        en_usb_boot: en_7 {
+            gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;            
+        };
+        /* Пин  питания usb нижней части двойного платы */
+        en_usb_top: en_8 {
+            gpios = <&gpioc 6 GPIO_ACTIVE_HIGH>;            
+        };
+    };
+};
+
+&dac1 {
+    status = "okay";
+    pinctrl-0 = <&dac1_out2_pa5>; /* Переводит PA5 в режим аналогового выхода ЦАП */
+    pinctrl-names = "default";
+};
+
+&fdcan1 {
+    status = "okay";
+    /* Настраиваем RX на PD0 и TX на PD1 */
+    pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
+    pinctrl-names = "default";
+    bitrate = <500000>;
+
+};
+
+&fdcan2 {
+    status = "okay";
+    /* Настраиваем RX на PB12 и TX на PB13 */
+    pinctrl-0 = <&fdcan2_rx_pb5 &fdcan2_tx_pb6>;
+    pinctrl-names = "default";
+    bitrate = <500000>;
+   
+
+};
+
+&fdcan3 {
+    status = "okay";
+    /* Настраиваем RX на PB12 и TX на PB13 */
+    pinctrl-0 = <&fdcan3_rx_pd12 &fdcan3_tx_pd13>;
+    pinctrl-names = "default";
+    bitrate = <500000>;
+
+};
+
+
+
+/ {
+    lin_slp_control {
+        compatible = "zephyr,user";
+        slp-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+    };
+};
+&gpioc { status = "okay"; };
+/* Настраиваем пины и включаем нужные UART-контроллеры */
+/* Примечание: имена узлов (&usart1, &uart4 и т.д.) зависят от твоего камня STM32. 
+   Здесь показан пример для четырех независимых портов. */
+
+&uart8 {
+    current-speed = <19200>;
+    pinctrl-0 = <&uart8_tx_pe1 &uart8_rx_pe0>; // Пример для PE0/PE1
+    pinctrl-names = "default";
+    status = "okay";
+};
+
+&uart9 {
+    current-speed = <19200>;
+    pinctrl-0 = <&uart9_tx_pd15 &uart9_rx_pd14>; // Пример для PD14/PD15
+    pinctrl-names = "default";
+    status = "okay";
+};
+
+&uart7 {
+    current-speed = <19200>;
+    pinctrl-0 = <&uart7_tx_pe8 &uart7_rx_pe7>; // Пример для PE7/PE8
+    pinctrl-names = "default";
+    status = "okay";
+};
+
+&uart5 {
+    current-speed = <19200>;
+    pinctrl-0 = <&uart5_tx_pc12 &uart5_rx_pd2>; // Пример для PD2/PC12
+    pinctrl-names = "default";
+    status = "okay";
+};
+
+uart_detect: &usart2 {
+    pinctrl-0 = <&usart2_tx_pd5 &usart2_rx_pd6>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
+    status = "okay";
 };

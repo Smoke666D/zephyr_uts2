@@ -11,539 +11,344 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/drivers/sensor.h>
-#include <zephyr/drivers/spi.h>
-#include <zephyr/drivers/eeprom.h>
-#include <zephyr/drivers/i2c.h>
-#include "ad5243.h"
-#include "settings.h"
-#include "out_and_power_control.h"
+
+
 #include "system_bus_model.h"
-#
+#include "telemetry.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
-//#include "usb_thread.h"
-
-//#include "ina228_stream_thread.h"
 
 /* 1000 msec = 1 sec */
-#define SLEEP_TIME_MS   1000
+#define SLEEP_TIME_MS   1
 
 
+static const struct device *const telemetry_uart = DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0));
 
-#define SPI4_NODE DT_NODELABEL(spi4)
-
-
-const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(usart1));
-
-
-// Объявляем буферы глобально (в статической памяти), чтобы они не лежали на стеке
-static uint8_t wr_cmd[] = { 0x02, 0x00, 0x00, 0x55 }; // WEN/Write массив
-static uint8_t rd_cmd[] = { 0x03, 0x00, 0x00, 0x00 }; // Read массив
-static uint8_t rd_resp[4] = { 0 };
-static uint8_t wren_cmd = 0x06;
-
-static void FRAM_Test(void)
-{
-    LOG_INF("Starting safe SPI test for FRAM (Static buffers)...");
-
-    const struct device *spi_dev = DEVICE_DT_GET(SPI4_NODE);
-    if (!device_is_ready(spi_dev)) {
-        LOG_ERR("SPI4 bus not ready!");
+void send_can_message_binary(const struct device *uart_dev, uint8_t can_num, const system_can_message_t *msg) {
+    if (!uart_dev || !device_is_ready(uart_dev) || !msg) {
         return;
     }
 
-    const struct device *gpioe_dev = DEVICE_DT_GET(DT_NODELABEL(gpioe));
-    if (!device_is_ready(gpioe_dev)) {
-        LOG_ERR("GPIOE device not ready!");
+    struct can_rx_bin_packet pkt;
+    pkt.magic = CAN_MAGIC_BYTE;
+    pkt.can_num = can_num;
+    pkt.id = msg->id;
+    pkt.dlc = msg->dlc;
+
+    // Определяем реальную длину данных в байтах (если dlc хранит код длины CAN-FD или байты)
+    // Если у тебя в dlc уже лежит реальное количество байт (0-64), то просто:
+    size_t bytes_len = msg->dlc;
+    
+    // Ели же это стандартный CAN DLC (где 9-15 это кодированные длины для CAN-FD), 
+    // то лучше использовать функцию Zephyr: can_dlc_to_bytes(msg->dlc)
+    // size_t bytes_len = can_dlc_to_bytes(msg->dlc);
+
+    if (bytes_len > 64) {
+        bytes_len = 64;
+    }
+
+    memset(pkt.data, 0, sizeof(pkt.data));
+    memcpy(pkt.data, msg->data, bytes_len);
+
+    // Размер пакета: заголовок (7 байт) + полезная нагрузка
+    size_t total_size = 7 + bytes_len;
+
+    // Отправляем байты в UART
+    const uint8_t *ptr = (const uint8_t *)&pkt;
+    for (size_t i = 0; i < total_size; i++) {
+        uart_poll_out(uart_dev, ptr[i]);
+    }
+}
+
+  struct telemetry_packet pkt;
+
+K_MSGQ_DEFINE(telemetry_queue, sizeof(struct telemetry_packet), 4, 4);
+
+void send_binary_telemetry(const struct device *uart_dev) {
+  
+    pkt.magic = TELEMETRY_MAGIC_BYTE;
+
+    pkt.timestamp_ms = k_uptime_get_32();
+
+    float _temp;
+    // Заполняем данными из твоего системного буфера
+    SYSTEM_BUS_GET(RF_POWER, &_temp);   pkt.rf_power = _temp;
+    SYSTEM_BUS_GET(NTC, &_temp);        pkt.ntc = _temp;
+    SYSTEM_BUS_GET(EXT_VSENSE, &_temp); pkt.ext_vsense = _temp;
+    SYSTEM_BUS_GET(BRD_DETECT, &_temp); pkt.brd_detect =  _temp;
+
+    SYSTEM_BUS_GET(I2C1_TEMP1, &_temp); pkt.temp_gnd = _temp;
+    SYSTEM_BUS_GET(I2C1_TEMP2, &_temp); pkt.temp_vdd = _temp;
+    SYSTEM_BUS_GET(I2C1_LUX1, &_temp); pkt.light_gnd = _temp;
+    SYSTEM_BUS_GET(I2C1_LUX2, &_temp); pkt.light_vdd = _temp;
+
+   // AO 1-18
+    SYSTEM_BUS_GET(AIN_AO1, &_temp);   pkt.ao[0] = _temp;    
+    SYSTEM_BUS_GET(AIN_AO2, &_temp);   pkt.ao[1] = _temp;    
+    SYSTEM_BUS_GET(AIN_AO3, &_temp);   pkt.ao[2] = _temp;
+    SYSTEM_BUS_GET(AIN_AO4, &_temp);   pkt.ao[3] = _temp;
+    SYSTEM_BUS_GET(AIN_AO5, &_temp);   pkt.ao[4] = _temp;
+    SYSTEM_BUS_GET(AIN_AO6, &_temp);   pkt.ao[5] = _temp;
+    
+    SYSTEM_BUS_GET(AIN_AO7, &_temp);   pkt.ao[6] = _temp;
+    SYSTEM_BUS_GET(AIN_AO8, &_temp);   pkt.ao[7] = _temp;
+    SYSTEM_BUS_GET(AIN_AO9, &_temp);   pkt.ao[8] = _temp;
+    SYSTEM_BUS_GET(AIN_AO10, &_temp);  pkt.ao[9] = _temp;
+    SYSTEM_BUS_GET(AIN_AO11, &_temp);  pkt.ao[10] = _temp;
+    SYSTEM_BUS_GET(AIN_AO12, &_temp);  pkt.ao[11] = _temp;
+    
+    SYSTEM_BUS_GET(AIN_AO13, &_temp);  pkt.ao[12] = _temp;
+    SYSTEM_BUS_GET(AIN_AO14, &_temp);  pkt.ao[13] = _temp;
+    SYSTEM_BUS_GET(AIN_AO15, &_temp);  pkt.ao[14] = _temp;
+    SYSTEM_BUS_GET(AIN_AO16, &_temp);  pkt.ao[15] = _temp;
+    SYSTEM_BUS_GET(AIN_AO17, &_temp);  pkt.ao[16] = _temp;
+    SYSTEM_BUS_GET(AIN_AO18, &_temp);  pkt.ao[17] = _temp;
+
+    // AIN_VSense 1-6
+    SYSTEM_BUS_GET(AIN_AVsense1, &_temp); pkt.vsense[0] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense2, &_temp); pkt.vsense[1] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense3, &_temp); pkt.vsense[2] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense4, &_temp); pkt.vsense[3] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense5, &_temp); pkt.vsense[4] = _temp;
+    SYSTEM_BUS_GET(AIN_AVsense6, &_temp); pkt.vsense[5] = _temp;
+
+    // Env (8 шт)
+    SYSTEM_BUS_GET(ENV_P3V3,  &_temp);    pkt.env[0] = _temp;
+    SYSTEM_BUS_GET(ENV_P5V0,  &_temp);    pkt.env[1] = _temp;
+    SYSTEM_BUS_GET(ENV_VIN,   &_temp);    pkt.env[2] = _temp;
+    SYSTEM_BUS_GET(ENV_VDOUT1, &_temp);   pkt.env[3] = _temp;
+    SYSTEM_BUS_GET(ENV_P40V,  &_temp);    pkt.env[4] = _temp;
+    SYSTEM_BUS_GET(ENV_USB,   &_temp);    pkt.env[5] = _temp;
+    SYSTEM_BUS_GET(ENV_VDOUT2, &_temp);   pkt.env[6] = _temp;
+    SYSTEM_BUS_GET(ENV_VDOUT3, &_temp);   pkt.env[7] = _temp;
+
+    // Current sensors (24 шт)
+    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,     &_temp); pkt.current_sensors[0] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,    &_temp);  pkt.current_sensors[1] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_LOW,   &_temp); pkt.current_sensors[2] = _temp;
+
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT,   &_temp);  pkt.current_sensors[3] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE,   &_temp);  pkt.current_sensors[4] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_HIGH, &_temp);  pkt.current_sensors[5] = _temp;
+
+    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,      &_temp);  pkt.current_sensors[6] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,     &_temp);   pkt.current_sensors[7] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT2,   &_temp);   pkt.current_sensors[8] = _temp;
+
+    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,     &_temp);   pkt.current_sensors[9] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,     &_temp);   pkt.current_sensors[10] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT3,   &_temp);   pkt.current_sensors[11] = _temp;
+
+    SYSTEM_BUS_GET(SENS_VIN_CURRENT,       &_temp);   pkt.current_sensors[12] = _temp;
+    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,       &_temp);   pkt.current_sensors[13] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VIN,     &_temp);   pkt.current_sensors[14] = _temp;
+
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT,   &_temp);  pkt.current_sensors[15] = _temp;
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE,  &_temp);  pkt.current_sensors[16] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_DCDC_3_3, &_temp);  pkt.current_sensors[17] = _temp;
+
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &_temp);   pkt.current_sensors[18] = _temp;
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &_temp);   pkt.current_sensors[19] = _temp;
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR, &_temp); pkt.current_sensors[20] = _temp;
+
+    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &_temp);   pkt.current_sensors[21] = _temp;
+    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &_temp);   pkt.current_sensors[22] = _temp;                    
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,     &_temp);   pkt.current_sensors[23] = _temp;
+
+    // LIN voltages (4 шт)
+    SYSTEM_BUS_GET(LIN_AO1, &_temp); pkt.lin_voltages[0] = _temp;
+    SYSTEM_BUS_GET(LIN_AO2, &_temp); pkt.lin_voltages[1] = _temp;
+    SYSTEM_BUS_GET(LIN_AO3, &_temp); pkt.lin_voltages[2] = _temp;
+    SYSTEM_BUS_GET(LIN_AO4, &_temp); pkt.lin_voltages[3] = _temp;
+
+     k_msgq_put(&telemetry_queue,&pkt,K_NO_WAIT);
+
+}
+
+
+void send_uart_stream_to_dashboard(uint8_t channel, const uint8_t *data, size_t size) {
+    if (!telemetry_uart || !device_is_ready(telemetry_uart) || !data || size == 0) {
+        return;
+    }
+    
+    // Проверяем диапазон каналов (1-4)
+    if (channel < 1 || channel > 4) {
         return;
     }
 
-    // Настраиваем PE4 как выход для CS (изначально высокий уровень - неактивен)
-    gpio_pin_configure(gpioe_dev, 4, GPIO_OUTPUT_ACTIVE);
-    gpio_pin_set(gpioe_dev, 4, 1);
-
-    struct spi_config spi_cfg = {
-        .frequency = 1000000, // 1 МГц
-        .operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB,
-        .slave = 0,
-    };
-
-    // 1. Команда WREN (Write Enable = 0x06)
-    {
-        struct spi_buf tx_buf = { .buf = &wren_cmd, .len = 1 };
-        struct spi_buf_set tx = { .buffers = &tx_buf, .count = 1 };
-        
-        gpio_pin_set(gpioe_dev, 4, 0);
-        spi_transceive(spi_dev, &spi_cfg, &tx, NULL);
-        gpio_pin_set(gpioe_dev, 4, 1);
+    // Ограничиваем размер одной порции до 255 байт (так как длина передается в 1 байт uint8_t)
+    if (size > 255) {
+        size = 255;
     }
 
-    k_busy_wait(10);
+    // Формируем байт маркера канала: 0xC1 для канала 1, 0xC2 для 2, 0xC3 для 3, 0xC4 для 4
+    uint8_t magic_channel = 0xC0 | (channel & 0x0F);
 
-    // 2. Запись байта 0x55 по адресу 0x0000
-    {
-        struct spi_buf tx_buf = { .buf = wr_cmd, .len = sizeof(wr_cmd) };
-        struct spi_buf_set tx = { .buffers = &tx_buf, .count = 1 };
-
-        gpio_pin_set(gpioe_dev, 4, 0);
-        spi_transceive(spi_dev, &spi_cfg, &tx, NULL);
-        gpio_pin_set(gpioe_dev, 4, 1);
-    }
-
-    k_busy_wait(100);
-
-    // 3. Чтение байта по адресу 0x0000
-    {
-        struct spi_buf tx_buf = { .buf = rd_cmd, .len = sizeof(rd_cmd) };
-        struct spi_buf_set tx = { .buffers = &tx_buf, .count = 1 };
-
-        struct spi_buf rx_buf = { .buf = rd_resp, .len = sizeof(rd_resp) };
-        struct spi_buf_set rx = { .buffers = &rx_buf, .count = 1 };
-
-        gpio_pin_set(gpioe_dev, 4, 0);
-        spi_transceive(spi_dev, &spi_cfg, &tx, &rx);
-        gpio_pin_set(gpioe_dev, 4, 1);
-
-        LOG_INF("FRAM Read result -> Opcode resp: 0x%02X, AddrHi: 0x%02X, AddrLo: 0x%02X, DATA: 0x%02X", 
-                rd_resp[0], rd_resp[1], rd_resp[2], rd_resp[3]);
-    }
-}
-
-/* Структура для хранения информации о датчике */
-struct ina_sensor_desc {
-    const char *name;
-    const struct device *dev;
-};
-
-
-
-/* Массив всех ваших 8 датчиков по нодлейблам из DTS */
-static const struct ina_sensor_desc ina_sensors[] = {
-    { "BRD_LOW",   DEVICE_DT_GET(DT_NODELABEL(cur_sens_brd_low)) },
-    { "BRD_HIGH",  DEVICE_DT_GET(DT_NODELABEL(cur_sens_brd_high)) },
-    { "VDUT2",     DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdut2)) },
-    { "VDUT3",     DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdut3)) },
-    { "VIN",       DEVICE_DT_GET(DT_NODELABEL(cur_sens_vin)) },
-    { "3_3_DCDC",  DEVICE_DT_GET(DT_NODELABEL(cur_sens_3_3_dcdc)) },
-    { "VDOUT_PWR", DEVICE_DT_GET(DT_NODELABEL(cur_sens_vdout_pwr)) },
-    { "5VD",       DEVICE_DT_GET(DT_NODELABEL(cur_sens_5vd)) },
-};
-
-#define SENSORS_COUNT ARRAY_SIZE(ina_sensors)
-
-static int init_all_sensors(void)
-{
-    int ready_count = 0;
-
-    printk("\n=== Проверка инициализации датчиков INA228 ===\n");
-    for (size_t i = 0; i < SENSORS_COUNT; i++) {
-        if (!device_is_ready(ina_sensors[i].dev)) {
-            printk("[ERR] Датчик '%s' НЕ готов (нет связи по I2C)!\n", ina_sensors[i].name);
-        } else {
-            printk("[ OK] Датчик '%s' готов.\n", ina_sensors[i].name);
-            ready_count++;
-        }
-    }
-    printk("Готово: %d из %d датчиков\n\n", ready_count, SENSORS_COUNT);
-
-    return ready_count;
-}
-
-/* Функция опроса и вывода данных со всех датчиков */
-void poll_all_sensors(void)
-{
-    struct sensor_value v_bus;
-    struct sensor_value current;
-    struct sensor_value power;
-    int ret;
-
-    printk("----------------------------------------------------------------------\n");
-    printk("| %-12s | %-12s | %-14s | %-14s |\n", "Sensor", "Vbus (V)", "Current (mA)", "Power (mW)");
-    printk("----------------------------------------------------------------------\n");
-
-    for (size_t i = 0; i < SENSORS_COUNT; i++) {
-        const struct device *dev = ina_sensors[i].dev;
-
-        if (!device_is_ready(dev)) {
-            printk("| %-12s |   [ДАТЧИК НЕ ДОСТУПЕН]                            |\n", 
-                   ina_sensors[i].name);
-            continue;
-        }
-
-        /* 1. Запрашиваем новую выборку данных у микросхемы */
-        ret = sensor_sample_fetch(dev);
-        if (ret != 0) {
-            printk("| %-12s |   [ОШИБКА I2C: %d]                                 |\n", 
-                   ina_sensors[i].name, ret);
-            continue;
-        }
-
-        /* 2. Извлекаем значения каналов */
-        sensor_channel_get(dev, SENSOR_CHAN_VOLTAGE, &v_bus);
-        sensor_channel_get(dev, SENSOR_CHAN_CURRENT, &current);
-        sensor_channel_get(dev, SENSOR_CHAN_POWER, &power);
-
-        /* Переводим в double (требуется CONFIG_CBPRINTF_FP_SUPPORT=y) */
-        double v = sensor_value_to_double(&v_bus);
-        double i_ma = sensor_value_to_double(&current) * 1000.0; /* переводим А в мА */
-        double p_mw = sensor_value_to_double(&power) * 1000.0;   /* переводим Вт в мВт */
-
-        printk("| %-12s | %10.3f V | %11.3f mA | %11.3f mW |\n",
-               ina_sensors[i].name, v, i_ma, p_mw);
-    }
-    printk("----------------------------------------------------------------------\n\n");
-}
-
-
-#define EEPROM_1_NODE DT_NODELABEL(eeprom_1)
-#define EEPROM_2_NODE DT_NODELABEL(eeprom_2)
-
- const struct device *dev1 = DEVICE_DT_GET(EEPROM_1_NODE);
-const struct device *dev2 = DEVICE_DT_GET(EEPROM_2_NODE);
-
-#define TMP112_GND_NODE DT_NODELABEL(tmp112_gnd)
-#define TMP112_VDD_NODE DT_NODELABEL(tmp112_vdd)
-
-const struct device *dev_gnd = DEVICE_DT_GET(TMP112_GND_NODE);
-const struct device *dev_vdd = DEVICE_DT_GET(TMP112_VDD_NODE);
-
-#define BH1750_GND_NODE DT_NODELABEL(bh1750_gnd)
-#define BH1750_VDD_NODE DT_NODELABEL(bh1750_vdd)
-
-const struct device *dev_gnd1 = DEVICE_DT_GET(BH1750_GND_NODE);
-const struct device *dev_vdd1 = DEVICE_DT_GET(BH1750_VDD_NODE);
-
-void EEPROM_Test()
-{
-/* Проверяем доступность первой */
-    if (!device_is_ready(dev1)) {
-        LOG_ERR("EEPROM 1 (0x50) device is not ready!");
-        
-    }
-    LOG_INF("EEPROM 1 (0x50) is ready.");
-
-    /* Проверяем доступность второй */
-    if (!device_is_ready(dev2)) {
-        LOG_ERR("EEPROM 2 (0x52) device is not ready!");
-        
-    }
-    LOG_INF("EEPROM 2 (0x52) is ready.");
-
-    char msg1[] = "Chip #1: EEPROM 0x50 OK";
-    char msg2[] = "Chip #2: EEPROM 0x52 OK";
+    // 1. Отправляем маркер канала
+    uart_poll_out(telemetry_uart, magic_channel);
     
-    char buf1[35] = {0};
-    char buf2[35] = {0};
-    off_t offset = 0;
+    // 2. Отправляем размер данных
+    uart_poll_out(telemetry_uart, (uint8_t)size);
 
-    /* --- Тестируем первую микросхему (0x50) --- */
-    if (eeprom_write(dev1, offset, msg1, sizeof(msg1)) < 0) {
-        LOG_ERR("Failed to write to EEPROM 1");
-    } else {
-        LOG_INF("EEPROM 1 write: '%s'", msg1);
+    // 3. Отправляем сами данные байт за байтом
+    for (size_t i = 0; i < size; i++) {
+        uart_poll_out(telemetry_uart, data[i]);
     }
-
-    k_msleep(10); // Время на внутреннюю запись цикла EEPROM
-
-    if (eeprom_read(dev1, offset, buf1, sizeof(msg1)) < 0) {
-        LOG_ERR("Failed to read from EEPROM 1");
-    } else {
-        LOG_INF("EEPROM 1 read:  '%s'", buf1);
-    }
-
-    /* --- Тестируем вторую микросхему (0x52) --- */
-    if (eeprom_write(dev2, offset, msg2, sizeof(msg2)) < 0) {
-        LOG_ERR("Failed to write to EEPROM 2");
-    } else {
-        LOG_INF("EEPROM 2 write: '%s'", msg2);
-    }
-
-    k_msleep(10);
-
-    if (eeprom_read(dev2, offset, buf2, sizeof(msg2)) < 0) {
-        LOG_ERR("Failed to read from EEPROM 2");
-    } else {
-        LOG_INF("EEPROM 2 read:  '%s'", buf2);
-    }
-
-    
 }
-#define I2C1_NODE DT_NODELABEL(i2c1)
-/*
 
-#define AD5243_DEFAULT_ADDR 0x2F 
-
-typedef enum {
-    AD5243_CHANNEL_1 = 0,
-    AD5243_CHANNEL_2 = 1
-} ad5243_channel_t;
-
-
-int ad5243_set_wiper(ad5243_channel_t channel, uint8_t value)
+typedef struct 
 {
-    const struct device *i2c_dev = DEVICE_DT_GET(I2C1_NODE);
-    if (!device_is_ready(i2c_dev)) {
-        LOG_ERR("I2C1 bus not ready for AD5243!");
-        return -ENODEV;
-    }
+    system_can_message_t  msg;
+    uint8_t               iface_id;
+} can_queue_message_t;
 
-    struct i2c_dt_spec spec = {
-        .bus = i2c_dev,
-        .addr = AD5243_DEFAULT_ADDR
-    };
+typedef struct 
+{
+    uint8_t               msg;
+    uint8_t               iface_id;
+} lin_queue_message_t;
 
-    uint8_t tx_data[2];
 
-    if (channel == AD5243_CHANNEL_1) {
-        tx_data[0] = 0x00; // Выбор канала 1 (W1)
-    } else {
-        tx_data[0] = 0x80; // Выбор канала 2 (W2)
-    }
 
-    tx_data[1] = value; // Значение положения движка (0..255)
 
-    int ret = i2c_write_dt(&spec, tx_data, sizeof(tx_data));
-    if (ret < 0) {
-        LOG_ERR("Failed to set AD5243 wiper: %d", ret);
-        return ret;
-    }
 
-    LOG_DBG("AD5243 Ch %d set to wiper pos: %d", channel + 1, value);
-    return 0;
+
+K_MSGQ_DEFINE(all_lin_rx_queue, sizeof(lin_queue_message_t), 10, 4);
+
+K_MSGQ_DEFINE(all_can_rx_queue, sizeof(can_queue_message_t), 10, 4);
+
+static void _lin1_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN1_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg = (uint8_t) _temp;
+    _msg.iface_id = 1;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
 }
 
-*/
+static void _lin2_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN2_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg = (uint8_t) _temp;
+    _msg.iface_id = 2;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _lin3_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN3_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg = (uint8_t) _temp;
+    _msg.iface_id = 3;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _lin4_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    uint32_t _temp;
+    SYSTEM_BUS_GET(LIN4_RX,&_temp);
+    lin_queue_message_t _msg;
+    _msg.msg =  (uint8_t)_temp;
+    _msg.iface_id = 4;
+    k_msgq_put(&all_lin_rx_queue,&_msg,K_NO_WAIT);
+}
+
+
+
+
+static void _can1_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    system_can_message_t _temp;
+    SYSTEM_BUS_GET_P(CAN1_RX,&_temp);
+    can_queue_message_t _msg;
+    _msg.msg =  _temp;
+    _msg.iface_id = 1;
+    k_msgq_put(&all_can_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _can2_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    system_can_message_t _temp;
+    SYSTEM_BUS_GET_P(CAN2_RX,&_temp);
+    can_queue_message_t _msg;
+    _msg.msg =  _temp;
+    _msg.iface_id = 2;
+    k_msgq_put(&all_can_rx_queue,&_msg,K_NO_WAIT);
+}
+
+static void _can3_rx_listener_cb(const struct zbus_channel *_chan)
+{
+    system_can_message_t _temp;
+    SYSTEM_BUS_GET_P(CAN3_RX,&_temp);
+    can_queue_message_t _msg;
+    _msg.msg =  _temp;
+    _msg.iface_id = 3;
+    k_msgq_put(&all_can_rx_queue,&_msg,K_NO_WAIT);
+}
+
+
+
+static void telemetry_timer_expiry(struct k_timer *timer)
+{
+
+    send_binary_telemetry(telemetry_uart);  
+}
+
+// Инициализация периодического таймера на 1 кГц (1 мс)
+static K_TIMER_DEFINE(telemetry_timer, telemetry_timer_expiry, NULL);
+
+ZBUS_LISTENER_DEFINE(can1_rx_listener, _can1_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(can2_rx_listener, _can2_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(can3_rx_listener, _can3_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin1_rx_listener, _lin1_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin2_rx_listener, _lin2_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin3_rx_listener, _lin3_rx_listener_cb);
+ZBUS_LISTENER_DEFINE(lin4_rx_listener, _lin4_rx_listener_cb);
+
+#define PCF_NODE DT_NODELABEL(pcf_test)
 
 int main(void)
 {
-	LOG_INF("SYSTETM START 3");	
-    ad5243_init(DEVICE_DT_GET(I2C1_NODE), 0, 0);
-/*	int ret;
-    EEPROM_Test();
-	FRAM_Test();
-	init_all_sensors();
-    //settings_fram_init();
+	LOG_INF("SYSTETM START");	
+    struct telemetry_packet _packet_to_send;
 
-    */
-    int out_step  = 0;
-    int i = 0;
+    bus_listener_attach(&can1_rx_listener,CAN1_RX);
+    bus_listener_attach(&can2_rx_listener,CAN2_RX);
+    bus_listener_attach(&can3_rx_listener,CAN3_RX);
+    bus_listener_attach(&lin1_rx_listener,LIN1_RX);
+    bus_listener_attach(&lin2_rx_listener,LIN2_RX);
+    bus_listener_attach(&lin3_rx_listener,LIN3_RX);
+    bus_listener_attach(&lin4_rx_listener,LIN4_RX);
+
+    k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
     while (1) 
-	{
-    
-        float d,d1,d2,d3;
-        if (true 
-            && SYSTEM_BUS_GET(RF_POWER,&d) == 0
-            && SYSTEM_BUS_GET(NTC,&d1) == 0
-            && SYSTEM_BUS_GET(EXT_VSENSE,&d2) == 0
-            && SYSTEM_BUS_GET(BRD_DETECT,&d3) == 0
-        )
+	{          
+        can_queue_message_t rx_msg;       
+        while (k_msgq_get(&all_can_rx_queue, &rx_msg, K_NO_WAIT) == 0) 
         {
-            LOG_INF("=== ADS1115 SNAPSHOT ===");
-            LOG_INF("AIN0: %.2f mV", d);
-            LOG_INF("AIN1: %.2f mV", d1);
-            LOG_INF("AIN2: %.2f mV", d2);
-            LOG_INF("AIN3: %.2f mV", d3);
+            send_can_message_binary(telemetry_uart, rx_msg.iface_id, &rx_msg.msg);        
         }
-        else 
+  
+        lin_queue_message_t lin_msg;
+        while (k_msgq_get(&all_lin_rx_queue, &lin_msg, K_NO_WAIT) == 0) 
         {
-            LOG_WRN("No data in Zbus channel yet.");
+            uint8_t data;
+            data = lin_msg.msg;
+            send_uart_stream_to_dashboard(lin_msg.iface_id,&data,1);            
         }
-
-
-        if (!ad5243_set_wiper(AD5243_CHANNEL_2, i))
-        {
-            LOG_INF("AD5243 Ch1 -> %d",i);
-            i=i+10;
-            if (i >=255)  i = 0;
-        }
-        else 
-        {
-            LOG_INF("AD5243 Ch1 error");
-        }
-       // SYSTEM_BUS_SET(LED1, (bool)false);            
-        SYSTEM_BUS_SET(LED3, (bool)true);                
-     SYSTEM_BUS_SET(LED2, (bool)false);                
-        //param_set(LED3, &val, false);                
-        k_msleep(SLEEP_TIME_MS);
-        SYSTEM_BUS_SET(LED3, (bool)false);                
-        SYSTEM_BUS_SET(LED2, (bool)true);                
-        k_msleep(SLEEP_TIME_MS);
-
-         float temp_gnd = 0.0f, temp_vdd = 0.0f;
-        float light_gnd = 0.0f, light_vdd = 0.0f;
-
-        LOG_INF("--- Текущие значения датчиков (из кэша) ---");
-
-        SYSTEM_BUS_GET(I2C1_TEMP1, &temp_gnd);
-        if isnan(temp_gnd)
-            LOG_WRN("TMP112 (GND): нет данных");
-        else
-            LOG_INF("TMP112 (GND): %.2f °C", (double)temp_gnd);
-
-        SYSTEM_BUS_GET(I2C1_TEMP2, &temp_vdd);
-        if isnan(temp_vdd) 
-            LOG_WRN("TMP112 (VDD): нет данных");
-        else
-            LOG_INF("TMP112 (VDD): %.2f °C", (double)temp_vdd);
-         
-        
-        SYSTEM_BUS_GET(I2C1_LUX1, &light_gnd);
-        if isnan(light_gnd)
-           LOG_WRN("BH1750 (GND): нет данных");
-        else
-           LOG_INF("BH1750 (GND): %.2f lx", (double)light_gnd);
-        
-         
-
-        SYSTEM_BUS_GET(I2C1_LUX2,  &light_vdd);
-        if isnan(light_vdd) 
-            LOG_WRN("BH1750 (VDD): нет данных");
-        else
-            LOG_INF("BH1750 (VDD): %.2f lx", (double)light_vdd);
-                 
-        float ain1,ain2,ain3,ain4,ain5,ain6,ain7,ain8;
-        LOG_INF("OUT STEP1: %d", out_step);
-
-        SYSTEM_BUS_GET( AIN_AO1,  &ain1);
-        SYSTEM_BUS_GET(AIN_AO7,  &ain2);
-        SYSTEM_BUS_GET(AIN_AO13,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense1, &ain4);
-        SYSTEM_BUS_GET(LIN_AO1, &ain5);
-        LOG_INF("STEP1: %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-        SYSTEM_BUS_GET( AIN_AO2,  &ain1);
-        SYSTEM_BUS_GET(AIN_AO8,  &ain2);
-        SYSTEM_BUS_GET(AIN_AO14,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense2,  &ain4);
-        SYSTEM_BUS_GET(LIN_AO2, &ain5);
-        LOG_INF("STEP2: %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-        SYSTEM_BUS_GET( AIN_AO3,  &ain1);
-        SYSTEM_BUS_GET(AIN_AO9,  &ain2);
-        SYSTEM_BUS_GET(AIN_AO15,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense3,  &ain4);
-        SYSTEM_BUS_GET(LIN_AO3, &ain5);
-        LOG_INF("STEP3:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-        SYSTEM_BUS_GET(AIN_AO4,  &ain1);
-        SYSTEM_BUS_GET(AIN_AO10,  &ain2);
-        SYSTEM_BUS_GET(AIN_AO16,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense4,  &ain4);
-        SYSTEM_BUS_GET(LIN_AO4, &ain5);
-        LOG_INF("STEP4: %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-         SYSTEM_BUS_GET(AIN_AO5,  &ain1);
-        SYSTEM_BUS_GET(AIN_AO11,  &ain2);
-        SYSTEM_BUS_GET(AIN_AO17,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense5,  &ain4);
-        SYSTEM_BUS_GET(DA41_GND1, &ain5);
-        LOG_INF("STEP5:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-        SYSTEM_BUS_GET(AIN_AO6,  &ain1);
-        SYSTEM_BUS_GET(AIN_AO12,  &ain2);
-        SYSTEM_BUS_GET(AIN_AO18,  &ain3);
-        SYSTEM_BUS_GET(AIN_AVsense6,  &ain4);
-        SYSTEM_BUS_GET(DA41_GND2, &ain5);
-        LOG_INF("STEP6:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-        SYSTEM_BUS_GET(AIN_DA11_test1,  &ain1);
-        SYSTEM_BUS_GET(AIN_DA20_test1,  &ain2);
-        SYSTEM_BUS_GET(AIN_DA33_test1,  &ain3);
-        SYSTEM_BUS_GET(AIN_DA44_test1,  &ain4);
-        SYSTEM_BUS_GET(AIN_DA41_test1,  &ain5);
-        LOG_INF("STEP7:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-        SYSTEM_BUS_GET(AIN_DA11_test2,  &ain1);
-        SYSTEM_BUS_GET(AIN_DA20_test2,  &ain2);
-        SYSTEM_BUS_GET(AIN_DA33_test2,  &ain3);
-        SYSTEM_BUS_GET(AIN_DA44_test2,  &ain4);
-        SYSTEM_BUS_GET(AIN_DA41_test2,  &ain5);
-        LOG_INF("STEP8:  %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5);
-         SYSTEM_BUS_GET(ENV_P3V3,  &ain1);
-        SYSTEM_BUS_GET(ENV_P5V0,  &ain2);
-        SYSTEM_BUS_GET(ENV_VIN,  &ain3);
-        SYSTEM_BUS_GET(ENV_VDOUT1,  &ain4);
-        SYSTEM_BUS_GET(ENV_P40V,  &ain5);
-        SYSTEM_BUS_GET(ENV_USB,  &ain6);
-        SYSTEM_BUS_GET(ENV_VDOUT2,  &ain7);
-        SYSTEM_BUS_GET(ENV_VDOUT3,  &ain8);
-        LOG_INF("adc2  %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f", (double)ain1,(double)ain2,(double)ain3,(double)ain4,(double)ain5,(double)ain6,(double)ain7,(double)ain8);
- 
-    /*   switch (out_step)
-        {
-            case 0:
-                SYSTEM_BUS_SET(DOUT18, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT1, STATE_HIGH);  
-                break;
-            case 1:
-                SYSTEM_BUS_SET(DOUT1, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT2, STATE_HIGH);  
-                break;
-            case 2:
-                SYSTEM_BUS_SET(DOUT2, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT3, STATE_HIGH);  
-                break;
-            case 3:
-                SYSTEM_BUS_SET(DOUT3, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT4, STATE_HIGH);  
-                break;
-            case 4:
-                SYSTEM_BUS_SET(DOUT4, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT5, STATE_HIGH);  
-                break;
-            case 5:
-                SYSTEM_BUS_SET(DOUT5, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT6, STATE_HIGH);  
-                break;
-            case 6:
-                SYSTEM_BUS_SET(DOUT6, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT7, STATE_HIGH);  
-                break;
-            case 7:
-                SYSTEM_BUS_SET(DOUT7, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT8, STATE_HIGH);  
-                break;
-            case 8:
-                SYSTEM_BUS_SET(DOUT8, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT9, STATE_HIGH);  
-                break;
-            case 9:
-                SYSTEM_BUS_SET(DOUT9, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT10, STATE_HIGH);  
-                break;
-            case 10:
-                SYSTEM_BUS_SET(DOUT10, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT11, STATE_HIGH);  
-                break;
-            case 11:
-                SYSTEM_BUS_SET(DOUT11, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT12, STATE_HIGH);  
-                break;
-            case 12:
-                SYSTEM_BUS_SET(DOUT12, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT13, STATE_HIGH);  
-                break;
-            case 13:
-                SYSTEM_BUS_SET(DOUT13, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT14, STATE_HIGH);  
-                break;
-            case 14:
-                SYSTEM_BUS_SET(DOUT14, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT15, STATE_HIGH);  
-                break;
-            case 15:
-                SYSTEM_BUS_SET(DOUT15, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT16, STATE_HIGH);  
-                break;
-           case 16:
-                SYSTEM_BUS_SET(DOUT16, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT17, STATE_HIGH);  
-                break;
-            case 17:
-                SYSTEM_BUS_SET(DOUT17, STATE_LOW);  
-                SYSTEM_BUS_SET(DOUT18, STATE_HIGH);  
-                break;
-
-
-        }
-*/
-           // if (++out_step == 18) out_step = 0;
- 
-   }
-	
+        if (k_msgq_get(&telemetry_queue,&_packet_to_send, K_FOREVER)==0)
+        {            
+            uint8_t *ptr = (uint8_t *)&_packet_to_send;
+            for (size_t i = 0; i < sizeof(_packet_to_send); i++) 
+            {
+                uart_poll_out(telemetry_uart , ptr[i]);
+            }
+        }      
+    }
 	return 0;
 }
+
