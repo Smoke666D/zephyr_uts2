@@ -282,7 +282,6 @@ struct system_bus_handler
     const struct zbus_channel   *channel; // Ссылка на канал
     SYSTEM_BUS_DATA_TYPE  channel_type;    
     uint32_t              system_index;
-    uint32_t              set_timeout;
 };
 
 typedef union erver_data
@@ -305,13 +304,12 @@ typedef struct server_request
  * Макрос для регистрации параметра. 
  * Сразу принимает имя Zbus-канала (например, chan_ain_ao1).
  */
-#define PARAM_ROUTE_DEFINE(id, chan_ptr, index, chan_type) \
+#define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
     const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
         .bus_id = id, \
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
-        .set_timeout = 0, \
     }
 
 #define SERVER_IN_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
@@ -320,18 +318,8 @@ typedef struct server_request
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
-        .set_timeout = 0, \
     }
 
-
-#define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type, time_out) \
-    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
-        .bus_id = id, \
-        .channel = chan_ptr, \
-        .channel_type = chan_type, \
-        .system_index = index, \
-        .set_timeout = time_out, \
-    }
     
  int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
  int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
@@ -353,7 +341,6 @@ typedef struct server_request
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
-        .set_timeout = 0, \
     }
 
  int serever_set_bool(SYSTEM_BUS_ID id, bool _val,     struct k_sem * sync, uint8_t * ret);

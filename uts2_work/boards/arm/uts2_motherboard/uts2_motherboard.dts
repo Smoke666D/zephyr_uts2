@@ -501,6 +501,7 @@ zephyr_udc0: &usbotg_hs {
         status = "okay";
     };
 
+
     mcp23017: mcp23017@20 {
         compatible = "microchip,mcp23017";
         status = "okay";

@@ -35,7 +35,7 @@ LOG_MODULE_REGISTER(eeprom_mgr, LOG_LEVEL_INF);
 
 #define EEPROM_UID_OFFSET         0xFC
 #define EEPROM_PAGE_SIZE          16U    // Размер страницы 24AA025UID
-#define EEPROM_DEBOUNCE_DELAY_MS  100U   // Окно агрегации изменений
+#define EEPROM_DEBOUNCE_DELAY_MS  50U   // Окно агрегации изменений
 #define EEPROM_PAGE_WRITE_TIME_MS 15U    // Пауза между страницами для t_WC EEPROM
 #define MAX_PENDING_SYNCS         4      // Максимум одновременно ждущих потоков квитирования
 
@@ -89,13 +89,9 @@ typedef struct eeprom_entry
     struct k_msgq             *rx_queue;
     const char                *name;
     uint32_t                   error_bit;
-    uint32_t                   set_ok_bit;
-    uint32_t                   set_error_bit;
     uint32_t                   set_crc_error_bit;
-
     struct k_work_delayable    debounce_task; 
     struct k_work_delayable    write_task;    
-
     off_t                      offset;
     size_t                     remaining;
     eeprom_disk_payload_t      disk_cache;
@@ -126,6 +122,7 @@ static int      _eeprom_mgr_init(void);
 K_MSGQ_DEFINE(eeprom1_rx_queue, sizeof(server_request), 5, 4);
 K_MSGQ_DEFINE(eeprom2_rx_queue, sizeof(server_request), 5, 4);
 
+
 ZBUS_CHAN_DEFINE(eeprom1_chan,
                  eeprom_device_msg_t,
                  NULL, 
@@ -142,6 +139,8 @@ ZBUS_CHAN_DEFINE(eeprom2_chan,
                  {0}
 );
 
+
+
 static eeprom_entry_t eeprom_entries[] = {
     {
         .dev                = DEVICE_DT_GET(DT_NODELABEL(eeprom_1)),
@@ -149,8 +148,6 @@ static eeprom_entry_t eeprom_entries[] = {
         .rx_queue           = &eeprom1_rx_queue,
         .name               = "IU",
         .error_bit          = EEPORM_IU_ERROR,
-        .set_ok_bit         = EVENT_EEPROM_IU_WRITE_OK,
-        .set_error_bit      = EVENT_EEPROM_IU_WRITE_ERROR,
         .set_crc_error_bit  = EVENT_EEPROM_IU_CRC_ERROR,
         .is_busy            = false,
         .sync_count         = 0,
@@ -161,8 +158,6 @@ static eeprom_entry_t eeprom_entries[] = {
         .rx_queue           = &eeprom2_rx_queue,
         .name               = "CU",
         .error_bit          = EEPORM_CU_ERROR,
-        .set_ok_bit         = EVENT_EEPROM_CU_WRITE_OK,
-        .set_error_bit      = EVENT_EEPROM_CU_WRITE_ERROR,
         .set_crc_error_bit  = EVENT_EEPROM_CU_CRC_ERROR,
         .is_busy            = false,
         .sync_count         = 0,
@@ -183,11 +178,14 @@ static inline uint16_t _calc_disk_crc(const eeprom_disk_payload_t *_disk_data)
 
 static void _notify_all_pending(eeprom_entry_t *_entry, int err)
 {
-    for (int i = 0; i < _entry->sync_count; i++) {
-        if (_entry->pending_syncs[i].response != NULL) {
+    for (int i = 0; i < _entry->sync_count; i++) 
+    {
+        if (_entry->pending_syncs[i].response != NULL) 
+        {
             *_entry->pending_syncs[i].response = err;
         }
-        if (_entry->pending_syncs[i].sync != NULL) {
+        if (_entry->pending_syncs[i].sync != NULL) 
+        {
             k_sem_give(_entry->pending_syncs[i].sync);
         }
     }
@@ -209,22 +207,31 @@ static void _eeprom_work_poll_handler(struct k_work *_work)
         while (k_msgq_get(entry->rx_queue, &req, K_NO_WAIT) == 0) 
         {
             if (req.sync != NULL && entry->sync_count < MAX_PENDING_SYNCS) 
-            {
-                
+            {                
                 entry->pending_syncs[entry->sync_count].sync = req.sync;
                 entry->pending_syncs[entry->sync_count].response = req.response;
                 entry->sync_count++;
             }
-
-            if (req.id == SETTING_IU_SN || req.id == SETTING_CU_SN) {
-                entry->staging_cache.serial_number = req.value.sd_uint;
-            } else if (req.id == SETTING_IU_HW_ID || req.id == SETTING_CU_HW_ID) {
-                entry->staging_cache.device_major_ver = req.value.sd_uint;
-            } else if (req.id == SETTING_IU_HW_VER || req.id == SETTING_CU_HW_VER) {
-                entry->staging_cache.device_minor_ver = req.value.sd_uint;
-            } else if (req.id == SETTING_IU_USER_DATA || req.id == SETTING_CU_USER_DATA) {
-                entry->staging_cache.usage_counter = req.value.sd_uint;
-            }
+            switch(req.id)
+            {
+                case SETTING_IU_SN:
+                case SETTING_CU_SN:            
+                    entry->staging_cache.serial_number = req.value.sd_uint;
+                    break;
+                case SETTING_IU_HW_ID:
+                case SETTING_CU_HW_ID:             
+                    entry->staging_cache.device_major_ver = req.value.sd_uint;
+                    break;
+                case SETTING_IU_HW_VER:
+                case SETTING_CU_HW_VER:            
+                    entry->staging_cache.device_minor_ver = req.value.sd_uint;
+                    break;
+                case SETTING_IU_USER_DATA:
+                case SETTING_CU_USER_DATA:            
+                    entry->staging_cache.usage_counter = req.value.sd_uint;
+                default:
+                    break;
+            }                
         }
 
         if (memcmp(&entry->staging_cache, &entry->disk_cache, sizeof(eeprom_disk_payload_t)) != 0) 
@@ -233,10 +240,15 @@ static void _eeprom_work_poll_handler(struct k_work *_work)
                                          K_MSEC(EEPROM_DEBOUNCE_DELAY_MS), 
                                          COMMON_WORKER);
         }
+        else 
+        {
+            _notify_all_pending(entry, 0);
+        }
     }
 
     eeprom_poll_events[0].state = K_POLL_STATE_NOT_READY;
     eeprom_poll_events[1].state = K_POLL_STATE_NOT_READY;
+  
     app_worker_poll_submit(&eeprom_task, eeprom_poll_events, COMMON_WORKER);
 }
 
@@ -248,7 +260,8 @@ static void _eeprom_debounce_handler(struct k_work *_work)
     struct k_work_delayable *dwork = k_work_delayable_from_work(_work);
     eeprom_entry_t *entry = CONTAINER_OF(dwork, eeprom_entry_t, debounce_task);
 
-    if (entry->is_busy) {
+    if (entry->is_busy) 
+    {
         app_worker_reschedule_submit(&entry->debounce_task, K_MSEC(20), COMMON_WORKER);
         return;
     }
@@ -281,7 +294,6 @@ static void _write_page_step(eeprom_entry_t *entry)
         LOG_ERR("Failed to write %s at offset 0x%02X (err %d)", 
                 entry->name, (uint32_t)entry->offset, err);
         entry->is_busy = false;
-        SERVER_CH_SET_BIT_IF_NEEDED(EEPROM_EVENT_CH, entry->set_error_bit);
         _notify_all_pending(entry, err);
         return;
     }
@@ -298,12 +310,13 @@ static void _write_page_step(eeprom_entry_t *entry)
     else 
     {
         LOG_INF("Data successfully persisted to %s", entry->name);
-        SERVER_CH_SET_BIT(EEPROM_EVENT_CH, entry->set_ok_bit);
+       
         SERVER_CH_CLEAR_BIT(EEPROM_EVENT_CH, entry->set_crc_error_bit);
         entry->is_busy = false;
 
         _notify_all_pending(entry, 0);
 
+        
         if (zbus_chan_claim(entry->chan, K_FOREVER) == 0)
         {
             eeprom_device_msg_t *chan_msg = (eeprom_device_msg_t *)zbus_chan_msg(entry->chan);
@@ -366,14 +379,9 @@ static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid
             }
         }
     }
-
-    if (zbus_chan_claim(_entry->chan, K_FOREVER) == 0)
-    {
-        eeprom_device_msg_t *chan_msg = (eeprom_device_msg_t *)zbus_chan_msg(_entry->chan);
-        memcpy(chan_msg, &msg, sizeof(msg));
-        zbus_chan_finish(_entry->chan);
-    }
-    
+              
+    zbus_chan_pub(_entry->chan, &msg, K_MSEC(2));    
+               
     if (err != 0) 
     {
         SERVER_CH_SET_BIT(EEPROM_ERROR_CH, _entry->error_bit);
@@ -403,6 +411,7 @@ static int _eeprom_mgr_init(void)
                       K_POLL_TYPE_MSGQ_DATA_AVAILABLE,
                       K_POLL_MODE_NOTIFY_ONLY,
                       eeprom_entries[1].rx_queue);
+   
 
     k_work_poll_init(&eeprom_task, _eeprom_work_poll_handler);
     app_worker_poll_submit(&eeprom_task, eeprom_poll_events, COMMON_WORKER);
@@ -416,14 +425,15 @@ SYS_INIT(_eeprom_mgr_init, EEPROM_DEAMON_INIT_LEVEL, EEPROM_DEAMON_INIT_PRIOR);
 /***************************************************************************************************
  *                                     PARAMETER ROUTING TABLE
  **************************************************************************************************/
-SERVER_CHANNEL_DEFINE(SETTING_IU_ID,        &eeprom1_chan, 0, UINT_DATA, 100);
-SERVER_CHANNEL_DEFINE(SETTING_IU_SN,        &eeprom1_chan, 1, UINT_DATA, 100);
-SERVER_CHANNEL_DEFINE(SETTING_IU_HW_ID,     &eeprom1_chan, 2, UINT_DATA, 100);
-SERVER_CHANNEL_DEFINE(SETTING_IU_HW_VER,    &eeprom1_chan, 3, UINT_DATA, 100);
-SERVER_CHANNEL_DEFINE(SETTING_IU_USER_DATA, &eeprom1_chan, 4, UINT_DATA, 100);
+SERVER_CHANNEL_DEFINE(SETTING_IU_ID,        &eeprom1_chan, 0, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_IU_SN,        &eeprom1_chan, 1, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_IU_HW_ID,     &eeprom1_chan, 2, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_IU_HW_VER,    &eeprom1_chan, 3, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_IU_USER_DATA, &eeprom1_chan, 4, UINT_DATA);
 
-SERVER_CHANNEL_DEFINE(SETTING_CU_ID,        &eeprom2_chan, 0, UINT_DATA, 0);
-SERVER_CHANNEL_DEFINE(SETTING_CU_SN,        &eeprom2_chan, 1, UINT_DATA, 100);
-SERVER_CHANNEL_DEFINE(SETTING_CU_HW_ID,     &eeprom2_chan, 2, UINT_DATA, 100);
-SERVER_CHANNEL_DEFINE(SETTING_CU_HW_VER,    &eeprom2_chan, 3, UINT_DATA, 100);
-SERVER_CHANNEL_DEFINE(SETTING_CU_USER_DATA, &eeprom2_chan, 4, UINT_DATA, 100);
+SERVER_CHANNEL_DEFINE(SETTING_CU_ID,        &eeprom2_chan, 0, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_CU_SN,        &eeprom2_chan, 1, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_CU_HW_ID,     &eeprom2_chan, 2, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_CU_HW_VER,    &eeprom2_chan, 3, UINT_DATA);
+SERVER_CHANNEL_DEFINE(SETTING_CU_USER_DATA, &eeprom2_chan, 4, UINT_DATA);
+

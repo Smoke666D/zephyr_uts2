@@ -387,19 +387,6 @@ int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask)
     return bus_set_u32(id, val);
 }
 
-uint32_t get_channel_write_timeout(SYSTEM_BUS_ID id)
-{
-    uint32_t time_out = 0;
-    if (id < SYSTEM_BUS_COUNT) 
-    {
-        const struct system_bus_handler *handler = cache[id];    
-        if (handler != NULL)
-        {
-            time_out = handler->set_timeout;
-        }
-    }
-    return (time_out);
-}
 
 
 /**

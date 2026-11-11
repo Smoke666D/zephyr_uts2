@@ -145,4 +145,4 @@ static int uart_detect_init(void)
 
 SYS_INIT(uart_detect_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
 
-PARAM_ROUTE_DEFINE(UART_DETECT_RX, &uart_detect_rx_chan, 0, UINT_DATA);
+SERVER_IN_CHANNEL_DEFINE(UART_DETECT_RX, &uart_detect_rx_chan, 0, UINT_DATA);

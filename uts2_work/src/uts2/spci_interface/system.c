@@ -35,25 +35,121 @@ scpi_result_t cmd_system_wait(scpi_t *context)
     return SCPI_RES_OK;
 }
 
+
+
+
+static const scpi_choice_def_t uid_targets[] = {
+    {"MU", SETTING_MU_ID_1},
+    {"IU", SETTING_IU_ID},
+    {"CU", SETTING_CU_ID},
+    SCPI_CHOICE_LIST_END
+};
+
+static const scpi_choice_def_t sn_targets[] = {
+    {"MU", SETTING_MU_SN},
+    {"IU", SETTING_IU_SN},
+    {"CU", SETTING_CU_SN},
+    SCPI_CHOICE_LIST_END
+};
+
+/* Вспомогательная функция получения UID любой из трех микросхем */
+static int get_uid_string(int target, char *out_buf, size_t max_len)
+{
+    if (target == SETTING_MU_ID_1) 
+    {
+        // Чтение 96-bit UID процессора STM32H7
+        uint32_t id1 = 0, id2 = 0, id3 = 0;
+        if (SYSTEM_BUS_GET(SETTING_MU_ID_1, &id1) != 0 ||
+            SYSTEM_BUS_GET(SETTING_MU_ID_2, &id2) != 0 ||
+            SYSTEM_BUS_GET(SETTING_MU_ID_3, &id3) != 0) {
+            return -EIO;
+        }
+        snprintf(out_buf, max_len, "0x%08X-0x%08X-0x%08X", id1, id2, id3);
+        return 0;
+    } else 
+    {
+        uint32_t val;
+        SYSTEM_BUS_GET(target,&val);
+        snprintf(out_buf, max_len, "0x%08X", val);
+        return 0;
+    }
+}
+
 scpi_result_t cmd_system_uid_q(scpi_t *context)
 {
-    uint32_t id1 = 0, id2 = 0, id3 = 0;
-    char uid_str[36]; // Буфер под "0xXXXXXXXX-0xXXXXXXXX-0xXXXXXXXX"
+    int32_t target;
+    char uid_buf[48];
 
-    int ret1 = SYSTEM_BUS_GET(SETTING_MU_ID_1, &id1);
-    int ret2 = SYSTEM_BUS_GET(SETTING_MU_ID_2, &id2);
-    int ret3 = SYSTEM_BUS_GET(SETTING_MU_ID_3, &id3);
-
-    // Если шина настроек вернула ошибку хотя бы по одному слову
-    if (ret1 != 0 || ret2 != 0 || ret3 != 0) {
-        SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR); // -200
-        return SCPI_RES_ERR;
+    // Запрос конкретного чипа: SYST:UID? MU
+    if (SCPI_ParamChoice(context, uid_targets, &target, FALSE))
+    {
+        if (get_uid_string(target, uid_buf, sizeof(uid_buf)) != 0) {
+            SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
+            return SCPI_RES_ERR;
+        }
+        SCPI_ResultText(context, uid_buf);
+    } 
+    // Запрос всех трех UID разом: SYST:UID? -> "MU_UID","IU_UID","CU_UID"
+    else {
+        for (int i = 0; i < ARRAY_SIZE(uid_targets) -1; i++) 
+        {
+            if (get_uid_string(uid_targets[i].tag, uid_buf, sizeof(uid_buf)) != 0) 
+            {
+                SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
+                return SCPI_RES_ERR;
+            }
+            SCPI_ResultText(context, uid_buf);
+        }
     }
+    return SCPI_RES_OK;
+}
 
-    // Форматируем 96-битный UID
-    snprintf(uid_str, sizeof(uid_str), "0x%08X-0x%08X-0x%08X", id1, id2, id3);
 
-    // Возвращаем строку хосту
-    SCPI_ResultText(context, uid_str);
+K_SEM_DEFINE(eeprom_done_sem, 0, 1);
+static uint8_t eeprom_resp_code = 0;
+
+scpi_result_t cmd_system_serial(scpi_t *context)
+{
+    int32_t _target;
+    uint32_t sn;
+
+    if (!SCPI_ParamChoice(context, sn_targets, &_target, TRUE)) return SCPI_RES_ERR;
+    if (!SCPI_ParamUInt32(context, &sn, TRUE)) return SCPI_RES_ERR;
+
+    k_sem_reset(&eeprom_done_sem);
+
+    SERVER_CH_SET_SYC(_target, (uint32_t)sn, &eeprom_done_sem, &eeprom_resp_code);
+    
+   if (false 
+        || k_sem_take(&eeprom_done_sem, K_MSEC(300)) != 0
+        || eeprom_resp_code != 0
+       ) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+        return SCPI_RES_ERR; 
+    }
+    
+    return SCPI_RES_OK;
+}
+
+scpi_result_t cmd_system_serial_q(scpi_t *context)
+{
+    int32_t _target;
+    uint32_t sn;
+
+    if (SCPI_ParamChoice(context, sn_targets, &_target, FALSE))
+    {
+        SYSTEM_BUS_GET(_target,&sn);            
+        SCPI_ResultUInt32(context, sn);        
+    } 
+    else 
+    {
+        // Отдаем оба серийника через запятую: "SN_IU,SN_CU"
+        for (int i = 0; i < ARRAY_SIZE(sn_targets) -1; i++) 
+        {
+            SYSTEM_BUS_GET(sn_targets[i].tag,&sn);            
+            SCPI_ResultUInt32(context, sn);
+        }
+    }
     return SCPI_RES_OK;
 }
