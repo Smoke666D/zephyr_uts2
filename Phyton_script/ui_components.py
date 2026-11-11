@@ -2,11 +2,11 @@ import asyncio
 import os
 import time
 import serial
-from serial.tools import list_ports
 from nicegui import ui
 
 from logger import start_logger, stop_logger
 from oscilloscope import build_oscilloscope_panel, refresh_logs_ui
+from ports_panel import build_ports_panel, get_available_ports
 
 # Поддерживаемые каналы подсистемы OUTPut:POWer
 ENABLE_LINES = [
@@ -43,189 +43,77 @@ lin_logs_dict = {}
 raw_logs_dict = {}
 
 
-def get_available_ports():
-    ports = [p.device for p in list_ports.comports()]
-    return ports if ports else ['Нет портов']
-
-
 def build_dashboard(ports_refs, ui_labels):
     tel_ref = ports_refs['tel']
     shell_ref = ports_refs['shell']
+    system_callbacks = {}
 
     with ui.column().classes('w-full gap-2') as container:
 
         # ==========================================
-        # 1. БЛОК УПРАВЛЕНИЯ ПОРТАМИ (С SCPI АВТОПОИСКОМ)
+        # 1. БЛОК УПРАВЛЕНИЯ ПОРТАМИ (ВЫНЕСЕН В ports_panel.py)
         # ==========================================
+        async def on_scpi_ready():
+            if 'read_mu_uid' in system_callbacks:
+                await system_callbacks['read_mu_uid']()
+
+        build_ports_panel(ports_refs, on_device_connected=on_scpi_ready)
+
+        # ==========================================
+        # 2. КАРТОЧКА: СИСТЕМА (SYSTem:UID:MU?)
+        # ==========================================
+        async def read_mu_uid_async():
+            curr_shell = shell_ref.get('ser')
+            if not curr_shell or not curr_shell.is_open:
+                ui.notify('SCPI порт закрыт! Сначала подключитесь к стенду.', type='warning')
+                return
+
+            curr_shell.reset_input_buffer()
+            curr_shell.write(b'SYST:UID:MU?\r\n')
+            print('[SCPI TX]: SYST:UID:MU?')
+
+            start_t = time.time()
+            accum = ""
+            while time.time() - start_t < 1.0:
+                if curr_shell.in_waiting > 0:
+                    accum += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
+                    lines = [l.strip() for l in accum.splitlines() if l.strip()]
+                    filtered = [l for l in lines if 'SYST:UID:MU?' not in l.upper()]
+                    if filtered:
+                        resp_uid = filtered[-1].replace('"', '').strip()
+                        uid_mu_input.set_value(resp_uid)
+                        ui.notify(f'UID МУ успешно прочитан: {resp_uid}', type='positive')
+                        return
+                await asyncio.sleep(0.04)
+
+            lines = [l.strip() for l in accum.splitlines() if l.strip()]
+            filtered = [l for l in lines if 'SYST:UID:MU?' not in l.upper()]
+            if filtered:
+                resp_uid = filtered[-1].replace('"', '').strip()
+                uid_mu_input.set_value(resp_uid)
+                ui.notify(f'UID МУ: {resp_uid}', type='positive')
+            else:
+                ui.notify('Таймаут ответа на SYST:UID:MU?', type='negative')
+
+        system_callbacks['read_mu_uid'] = read_mu_uid_async
+
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            with ui.row().classes('w-full gap-2'):
-                # Телеметрия
-                with ui.card().classes('bg-slate-700/50 p-2 flex-1'):
-                    ui.label('Телеметрия (Бинарный)').classes(
-                        'text-sm font-semibold text-sky-300 mb-1'
-                    )
-                    ports_list = get_available_ports()
-                    tel_select = ui.select(
-                        options=ports_list,
-                        value=ports_list[0] if ports_list else None,
-                        label='Порт',
-                    ).props('dark outlined dense color=sky-400').classes(
-                        'w-full bg-slate-700 rounded text-sm'
-                    )
+            ui.label('Система (SYSTem)').classes(
+                'text-sm font-bold text-yellow-300 text-center w-full mb-1.5 tracking-wide'
+            )
+            with ui.row().classes('w-full items-center justify-between gap-3 px-2'):
+                with ui.row().classes('items-center gap-2 flex-1'):
+                    ui.label('UID МУ:').classes('text-xs text-slate-300 font-semibold')
+                    uid_mu_input = ui.input(placeholder='0xXXXXXXXX-0xXXXXXXXX-0xXXXXXXXX').props(
+                        'dark outlined dense readonly input-class="font-mono text-emerald-400 font-bold text-xs"'
+                    ).classes('flex-1 bg-slate-900 rounded max-w-[380px]')
 
-                    def toggle_tel():
-                        curr = tel_ref.get('ser')
-                        if curr and curr.is_open:
-                            curr.close()
-                            tel_ref['ser'] = None
-                            tel_btn.text = 'Открыть'
-                            tel_btn.classes(remove='bg-red-600', add='bg-sky-600')
-                            ui.notify('Телеметрия закрыта', type='warning')
-                        else:
-                            try:
-                                p_name = tel_select.value
-                                if not p_name or p_name == 'Нет портов':
-                                    raise ValueError('Порт не выбран!')
-                                tel_ref['ser'] = serial.Serial(
-                                    p_name, baudrate=3000000, timeout=0.01
-                                )
-                                tel_btn.text = 'Закрыть'
-                                tel_btn.classes(remove='bg-sky-600', add='bg-red-600')
-                                ui.notify(f'Телеметрия: {p_name}', type='positive')
-                            except Exception as e:
-                                ui.notify(f'Ошибка: {e}', type='negative')
-
-                    tel_btn = ui.button('Открыть', on_click=toggle_tel).classes(
-                        'mt-2 bg-sky-600 text-white text-xs py-1 px-2'
-                    )
-
-                # SCPI / Командный порт
-                with ui.card().classes('bg-slate-700/50 p-2 flex-1'):
-                    ui.label('SCPI / Команды').classes(
-                        'text-sm font-semibold text-emerald-300 mb-1'
-                    )
-                    shell_select = ui.select(
-                        options=ports_list,
-                        value=ports_list[0] if ports_list else None,
-                        label='Порт',
-                    ).props('dark outlined dense color=emerald-400').classes(
-                        'w-full bg-slate-700 rounded text-sm'
-                    )
-
-                    def toggle_shell():
-                        curr = shell_ref.get('ser')
-                        if curr and curr.is_open:
-                            curr.close()
-                            shell_ref['ser'] = None
-                            shell_btn.text = 'Открыть'
-                            shell_btn.classes(remove='bg-red-600', add='bg-emerald-600')
-                            ui.notify('SCPI порт закрыт', type='warning')
-                        else:
-                            try:
-                                p_name = shell_select.value
-                                if not p_name or p_name == 'Нет портов':
-                                    raise ValueError('Порт не выбран!')
-                                shell_ref['ser'] = serial.Serial(
-                                    p_name, baudrate=115200, timeout=0.05
-                                )
-                                shell_btn.text = 'Закрыть'
-                                shell_btn.classes(remove='bg-emerald-600', add='bg-red-600')
-                                ui.notify(f'SCPI открыт на {p_name}', type='positive')
-                            except Exception as e:
-                                ui.notify(f'Ошибка: {e}', type='negative')
-
-                    shell_btn = ui.button('Открыть', on_click=toggle_shell).classes(
-                        'mt-2 bg-emerald-600 text-white text-xs py-1 px-2'
-                    )
-
-            # --- АВТОПОИСК SCPI (*IDN?) И БИНАРНОЙ ТЕЛЕМЕТРИИ (0xBE) ---
-            async def global_auto_scan():
-                ui.notify('Автопоиск портов (SCPI *IDN? + Телеметрия)...', type='info')
-                current_ports = get_available_ports()
-                tel_select.options = current_ports
-                shell_select.options = current_ports
-                found_tel, found_shell = None, None
-
-                for p_name in current_ports:
-                    if p_name == 'Нет портов':
-                        continue
-
-                    # 1. Поиск Телеметрии (по маркеру 0xBE)
-                    if not found_tel:
-                        try:
-                            s = serial.Serial(p_name, baudrate=3000000, timeout=0.05)
-                            s.reset_input_buffer()
-                            start_t = asyncio.get_event_loop().time()
-                            is_tel = False
-                            while (asyncio.get_event_loop().time() - start_t) < 0.6:
-                                if s.in_waiting > 0:
-                                    if b'\xbe' in s.read(s.in_waiting):
-                                        is_tel = True
-                                        break
-                                await asyncio.sleep(0.04)
-                            s.close()
-                            if is_tel:
-                                found_tel = p_name
-                                continue
-                        except Exception:
-                            pass
-
-                    # 2. Поиск SCPI порта по запросу *IDN? (ответ Author-ALARM,UST2)
-                    if not found_shell:
-                        try:
-                            s = serial.Serial(p_name, baudrate=115200, timeout=0.2)
-                            s.reset_input_buffer()
-                            s.reset_output_buffer()
-                            s.write(b'*IDN?\r\n')
-                            await asyncio.sleep(0.15)
-
-                            resp = ""
-                            if s.in_waiting > 0:
-                                resp = s.read(s.in_waiting).decode('utf-8', errors='ignore')
-
-                            if 'Author-ALARM,UST2' in resp:
-                                print(f'[SCPI DETECT]: Найден прибор на {p_name}! Ответ: {resp.strip()}')
-                                found_shell = p_name
-                            s.close()
-                        except Exception:
-                            pass
-
-                if found_tel:
-                    tel_select.value = found_tel
-                    if not (tel_ref.get('ser') and tel_ref['ser'].is_open):
-                        toggle_tel()
-                    ui.notify(f'Телеметрия: {found_tel}', type='positive')
-
-                if found_shell:
-                    shell_select.value = found_shell
-                    if not (shell_ref.get('ser') and shell_ref['ser'].is_open):
-                        toggle_shell()
-
-                    curr_scpi = shell_ref.get('ser')
-                    if curr_scpi and curr_scpi.is_open:
-                        curr_scpi.write(b'*RST\r\n')
-                        print('[SCPI TX]: *RST отправлен')
-
-                    ui.notify(f'SCPI найден на {found_shell} (Выполнен *RST)', type='positive')
-                else:
-                    ui.notify('SCPI порт (Author-ALARM,UST2) не найден!', type='warning')
-
-            def refresh_ports():
-                p = get_available_ports()
-                tel_select.options = p
-                shell_select.options = p
-                ui.notify('Порты обновлены', type='info')
-
-            with ui.row().classes('w-full gap-2 mt-2 items-center px-1'):
-                ui.button('Обновить порты', on_click=refresh_ports).classes(
-                    'bg-slate-700 text-white text-xs py-1 px-2'
-                )
-                ui.button('Автопоиск портов', on_click=global_auto_scan).classes(
-                    'bg-amber-600 text-white font-bold text-xs py-1 px-2'
+                ui.button('Прочитать UID', on_click=read_mu_uid_async).classes(
+                    'bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs py-1.5 px-3 rounded shadow'
                 )
 
         # ==========================================
-        # 2. УПРАВЛЕНИЕ ПИТАНИЕМ (SCPI OUTPut:POWer)
+        # 3. УПРАВЛЕНИЕ ПИТАНИЕМ (SCPI OUTPut:POWer)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             enable_checkboxes = []
@@ -305,7 +193,7 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 3. СВЕТОДИОДЫ (SCPI DISPlay:LED:STATe)
+        # 4. СВЕТОДИОДЫ (SCPI DISPlay:LED:STATe)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Подсистема индикации (DISPlay:LED)').classes(
@@ -334,7 +222,7 @@ def build_dashboard(ports_refs, ui_labels):
                     ).classes('text-white text-xs')
 
         # ==========================================
-        # 4. ДИСКРЕТНЫЕ ДРАЙВЕРЫ (SCPI OUTPut:DOUT 1–18)
+        # 5. ДИСКРЕТНЫЕ ДРАЙВЕРЫ (SCPI OUTPut:DOUT 1–18)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Управление дискретными драйверами (OUTPut:DOUT 1–18)').classes(
@@ -374,14 +262,14 @@ def build_dashboard(ports_refs, ui_labels):
                         )
 
         # ==========================================
-        # 5. ЦАП (SOURce:DAC) И ПОТЕНЦИОМЕТРЫ (SOURce:RESistance)
+        # 6. ЦАП (SOURce:DAC) И ПОТЕНЦИОМЕТРЫ (SOURce:RESistance)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Управление ЦАП (SOURce:DAC) и потенциометрами (SOURce:RESistance)').classes(
                 'text-xs font-semibold text-yellow-300 mb-1.5'
             )
             with ui.row().classes('w-full gap-4 items-center'):
-                # ЦАП: 12-битный код от 0 до 4095 (по умолчанию 4095)
+                # ЦАП: 12-битный код от 0 до 4095
                 with ui.row().classes('items-center gap-1.5 flex-1'):
                     ui.label('ЦАП:').classes('text-xs text-white font-medium')
                     dac_input = ui.input(placeholder='0 - 4095', value='4095').props(
@@ -412,7 +300,7 @@ def build_dashboard(ports_refs, ui_labels):
                         'bg-sky-600 text-white text-xs py-1 px-2'
                     )
 
-                # Потенциометр Канал 1: 8-битный код от 0 до 255 (по умолчанию 0)
+                # Потенциометр Канал 1: 8-битный код от 0 до 255
                 with ui.row().classes('items-center gap-1.5'):
                     ui.label('Резистор 1:').classes('text-xs text-white font-medium')
                     res1_input = ui.input(placeholder='0 - 255', value='0').props(
@@ -424,7 +312,6 @@ def build_dashboard(ports_refs, ui_labels):
                         try:
                             val = int(res1_input.value)
                             if 0 <= val <= 255:
-                                # Каноническая команда SCPI: SOUR:RES <channel>, <value>
                                 cmd = f'SOUR:RES 1, {val}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
@@ -449,7 +336,7 @@ def build_dashboard(ports_refs, ui_labels):
                         'bg-emerald-600 text-white text-xs py-1 px-2'
                     )
 
-                # Потенциометр Канал 2: 8-битный код от 0 до 255 (по умолчанию 0)
+                # Потенциометр Канал 2: 8-битный код от 0 до 255
                 with ui.row().classes('items-center gap-1.5'):
                     ui.label('Резистор 2:').classes('text-xs text-white font-medium')
                     res2_input = ui.input(placeholder='0 - 255', value='0').props(
@@ -461,7 +348,6 @@ def build_dashboard(ports_refs, ui_labels):
                         try:
                             val = int(res2_input.value)
                             if 0 <= val <= 255:
-                                # Каноническая команда SCPI: SOUR:RES <channel>, <value>
                                 cmd = f'SOUR:RES 2, {val}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
@@ -487,7 +373,7 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 6. ДАШБОРД ДАТЧИКОВ
+        # 7. ДАШБОРД ДАТЧИКОВ
         # ==========================================
         def create_metric_card(title, key, unit=''):
             with ui.card().classes(
@@ -542,7 +428,7 @@ def build_dashboard(ports_refs, ui_labels):
                     create_metric_card(f'VSense {i+1}', f'vsense_{i}', unit='В')
 
         # ==========================================
-        # 7. ДАТЧИКИ ТОКА, НАПРЯЖЕНИЯ И ЭНЕРГИИ (1-8)
+        # 8. ДАТЧИКИ ТОКА, НАПРЯЖЕНИЯ И ЭНЕРГИИ (1-8)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             with ui.row().classes('w-full justify-between items-center mb-1'):
@@ -598,7 +484,7 @@ def build_dashboard(ports_refs, ui_labels):
                                 ui.label('Дж').classes('text-[10px] text-slate-400 leading-none')
 
         # ==========================================
-        # 8. ИНТЕРФЕЙСЫ LIN (1-4) (SCPI OUTPut:LINPulldown)
+        # 9. ИНТЕРФЕЙСЫ LIN (1-4) (SCPI OUTPut:LINPulldown)
         # ==========================================
         ui.label('Интерфейсы LIN (1-4)').classes(
             'text-sm font-bold text-sky-300 mt-3'
@@ -675,7 +561,7 @@ def build_dashboard(ports_refs, ui_labels):
             make_lin_block(lin_idx)
 
         # ==========================================
-        # 9. CAN ИНТЕРФЕЙСЫ (1-3)
+        # 10. CAN ИНТЕРФЕЙСЫ (1-3)
         # ==========================================
         ui.label('Интерфейсы CAN (1-3)').classes(
             'text-sm font-bold text-sky-300 mt-3'
@@ -773,7 +659,7 @@ def build_dashboard(ports_refs, ui_labels):
                     )
 
         # ==========================================
-        # 10. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (SCPI SENS:UART)
+        # 11. АВТООПРЕДЕЛЕНИЕ И КАЛИБРОВКА ПОРТОВ UART (SCPI SENS:UART)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Автоопределение и калибровка портов UART').classes(
@@ -1043,7 +929,7 @@ def build_dashboard(ports_refs, ui_labels):
                 ).props('dark outlined dense').classes('w-36 bg-slate-700 text-xs text-white rounded')
 
         # ==========================================
-        # 11. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
+        # 12. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
             ui.label('Логирование данных в файл (CSV/Excel)').classes(
@@ -1108,7 +994,7 @@ def build_dashboard(ports_refs, ui_labels):
                 )
 
         # ==========================================
-        # 12. ОСЦИЛЛОГРАФ (В самом конце)
+        # 13. ОСЦИЛЛОГРАФ (В самом конце)
         # ==========================================
         ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
         build_oscilloscope_panel()
