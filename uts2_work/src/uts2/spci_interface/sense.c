@@ -145,3 +145,90 @@ void sense_uart_reset(void)
 {
    // ring_buf_reset(&dut_rx_ringbuf);
 }
+
+#define TEMP_SENS_COUNT 2
+
+scpi_result_t cmd_sense_temp_q(scpi_t *context)
+{
+    int32_t channel;
+    float temp_val;
+    bool _error_bit;
+    // 1. Запрос конкретного датчика: SENS:TEMP? 1
+    if (SCPI_ParamInt32(context, &channel, FALSE)) 
+    {
+        if (channel < 1 || channel > TEMP_SENS_COUNT) {
+            SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE); // -222
+            return SCPI_RES_ERR;
+        }
+     
+        SERVER_CH_GET_BIT(I2C_SENS_ERROR_CH, channel == 1 ? TMP112_MU_ERROR : TMP112_IU_ERROR,&_error_bit);
+        if (_error_bit)
+         {
+            SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR); // -200 (сбой шины датчика)
+            return SCPI_RES_ERR;
+        }
+        SYSTEM_BUS_GET(I2C1_TEMP1 + channel - 1,&temp_val);
+        // Возвращаем число с плавающей точкой в градусах Цельсия
+        SCPI_ResultFloat(context, temp_val);
+    }
+    // 2. Запрос всех датчиков без параметров: SENS:TEMP? -> "24.5,28.1"
+    else 
+    {
+        for (int ch = 1; ch <= TEMP_SENS_COUNT; ch++) 
+        {
+            SERVER_CH_GET_BIT(I2C_SENS_ERROR_CH, channel == 1 ? TMP112_MU_ERROR : TMP112_IU_ERROR,&_error_bit);
+            if (_error_bit)
+            {
+                SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR); // -200 (сбой шины датчика)
+                return SCPI_RES_ERR;
+            }
+            SYSTEM_BUS_GET(I2C1_TEMP1 + ch - 1,&temp_val);            
+            SCPI_ResultFloat(context, temp_val);
+        }
+    }
+
+    return SCPI_RES_OK;
+}
+
+#define LIGHT_SENS_COUNT 2
+
+scpi_result_t cmd_sense_light_q(scpi_t *context)
+{
+    int32_t channel;
+    float lux_val;
+    bool _error_bit;
+    // 1. Запрос конкретного датчика: SENS:LIG? 1
+    if (SCPI_ParamInt32(context, &channel, FALSE))
+     {
+        if (channel < 1 || channel > LIGHT_SENS_COUNT) {
+            SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE); // -222
+            return SCPI_RES_ERR;
+        }
+
+        SERVER_CH_GET_BIT(I2C_SENS_ERROR_CH, channel == 1 ? BH1750_1_IU_ERROR : BH1750_2_IU_ERROR,&_error_bit);
+        if (_error_bit)
+         {
+            SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR); // -200 (сбой шины датчика)
+            return SCPI_RES_ERR;
+        }
+        SYSTEM_BUS_GET(I2C1_LUX1 + channel - 1,&lux_val);
+
+        // Возвращаем результат в формате float
+        SCPI_ResultFloat(context, lux_val);
+    }
+    // 2. Запрос обоих датчиков: SENS:LIG? -> "350.5,420.0"
+    else {
+        for (int ch = 1; ch <= LIGHT_SENS_COUNT; ch++) {
+            SERVER_CH_GET_BIT(I2C_SENS_ERROR_CH, channel == 1 ? BH1750_1_IU_ERROR : BH1750_2_IU_ERROR,&_error_bit);
+            if (_error_bit)
+            {
+                SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR); // -200 (сбой шины датчика)
+                return SCPI_RES_ERR;
+            }
+            SYSTEM_BUS_GET(I2C1_LUX1 + ch - 1,&lux_val);
+            SCPI_ResultFloat(context, lux_val);
+        }
+    }
+
+    return SCPI_RES_OK;
+}

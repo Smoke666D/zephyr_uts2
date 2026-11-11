@@ -172,6 +172,9 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "SENSe:UART:BAUDrate",  .callback = cmd_sense_uart_baud, },
     { .pattern = "SENSe:UART:BAUDrate?", .callback = cmd_sense_uart_baud_q, },
 
+    { .pattern = "SENSe:TEMPerature[:DATA]?", .callback = cmd_sense_temp_q, },
+    { .pattern = "SENSe:LIGht[:DATA]?", .callback = cmd_sense_light_q, },
+
     /* Подсистема SYSTem */
     { .pattern = "SYSTem:WAIT", .callback = cmd_system_wait, },
     { .pattern = "SYSTem:UID:MU?", .callback = cmd_system_uid_q, },

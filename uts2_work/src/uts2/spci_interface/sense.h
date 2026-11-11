@@ -16,4 +16,7 @@ scpi_result_t cmd_sense_uart_count_q(scpi_t *context);
 scpi_result_t cmd_sense_uart_clear(scpi_t *context);
 scpi_result_t cmd_sense_uart_baud(scpi_t *context);
 scpi_result_t cmd_sense_uart_baud_q(scpi_t *context);
+
+scpi_result_t cmd_sense_temp_q(scpi_t *context);
+scpi_result_t cmd_sense_light_q(scpi_t *context);
 void sense_uart_reset(void);

@@ -314,6 +314,16 @@ typedef struct server_request
         .set_timeout = 0, \
     }
 
+#define SERVER_IN_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = chan_ptr, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+        .set_timeout = 0, \
+    }
+
+
 #define SERVER_CHANNEL_DEFINE(id, chan_ptr, index, chan_type, time_out) \
     const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
         .bus_id = id, \
