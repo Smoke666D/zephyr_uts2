@@ -374,10 +374,10 @@ def build_dashboard(ports_refs, ui_labels):
                         )
 
         # ==========================================
-        # 5. ЦАП (SCPI SOURce:DAC) И РЕЗИСТОРЫ
+        # 5. ЦАП (SOURce:DAC) И ПОТЕНЦИОМЕТРЫ (SOURce:RESistance)
         # ==========================================
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            ui.label('Управление ЦАП (SOURce:DAC) и подстроечными резисторами').classes(
+            ui.label('Управление ЦАП (SOURce:DAC) и потенциометрами (SOURce:RESistance)').classes(
                 'text-xs font-semibold text-yellow-300 mb-1.5'
             )
             with ui.row().classes('w-full gap-4 items-center'):
@@ -393,7 +393,6 @@ def build_dashboard(ports_refs, ui_labels):
                         try:
                             val = int(dac_input.value)
                             if 0 <= val <= 4095:
-                                # Каноническая команда SCPI: SOUR:DAC <value>
                                 cmd = f'SOUR:DAC {val}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
@@ -413,35 +412,36 @@ def build_dashboard(ports_refs, ui_labels):
                         'bg-sky-600 text-white text-xs py-1 px-2'
                     )
 
-                # Резистор 1
+                # Потенциометр Канал 1: 8-битный код от 0 до 255 (по умолчанию 0)
                 with ui.row().classes('items-center gap-1.5'):
                     ui.label('Резистор 1:').classes('text-xs text-white font-medium')
-                    res1_input = ui.input(placeholder='0-100', value='0.00').props(
-                        'dark outlined dense type=number input-class="text-right"'
+                    res1_input = ui.input(placeholder='0 - 255', value='0').props(
+                        'dark outlined dense type=number min=0 max=255 step=1 input-class="text-right"'
                     ).classes('w-20 bg-slate-700 text-xs text-white rounded')
-                    ui.label('кОм').classes('text-xs text-slate-300 font-medium')
+                    ui.label('код (0..255)').classes('text-xs text-slate-300 font-medium')
 
                     def send_res1():
                         try:
-                            val = float(res1_input.value)
-                            if 0.00 <= val <= 100.00:
-                                cmd = f'ADJ_RES set 1 {val:.2f}\r\n'
+                            val = int(res1_input.value)
+                            if 0 <= val <= 255:
+                                # Каноническая команда SCPI: SOUR:RES <channel>, <value>
+                                cmd = f'SOUR:RES 1, {val}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
                                     curr_shell.write(cmd.encode('utf-8'))
                                     ui.notify(
-                                        f'[Резистор 1] Отправлено: {cmd.strip()}', type='positive'
+                                        f'[Резистор 1] SCPI: {cmd.strip()}', type='positive'
                                     )
                                 else:
                                     ui.notify('SCPI порт закрыт!', type='warning')
                             else:
                                 ui.notify(
-                                    'Значение резистора должно быть от 0.00 до 100.00',
+                                    'Значение Резистора 1 должно быть от 0 до 255!',
                                     type='warning',
                                 )
                         except ValueError:
                             ui.notify(
-                                'Введите корректное число для Резистора 1', type='negative'
+                                'Введите целое число для Резистора 1 (0-255)', type='negative'
                             )
 
                     res1_input.on('keydown.enter', send_res1)
@@ -449,35 +449,36 @@ def build_dashboard(ports_refs, ui_labels):
                         'bg-emerald-600 text-white text-xs py-1 px-2'
                     )
 
-                # Резистор 2
+                # Потенциометр Канал 2: 8-битный код от 0 до 255 (по умолчанию 0)
                 with ui.row().classes('items-center gap-1.5'):
                     ui.label('Резистор 2:').classes('text-xs text-white font-medium')
-                    res2_input = ui.input(placeholder='0-100', value='0.00').props(
-                        'dark outlined dense type=number input-class="text-right"'
+                    res2_input = ui.input(placeholder='0 - 255', value='0').props(
+                        'dark outlined dense type=number min=0 max=255 step=1 input-class="text-right"'
                     ).classes('w-20 bg-slate-700 text-xs text-white rounded')
-                    ui.label('кОм').classes('text-xs text-slate-300 font-medium')
+                    ui.label('код (0..255)').classes('text-xs text-slate-300 font-medium')
 
                     def send_res2():
                         try:
-                            val = float(res2_input.value)
-                            if 0.00 <= val <= 100.00:
-                                cmd = f'ADJ_RES set 2 {val:.2f}\r\n'
+                            val = int(res2_input.value)
+                            if 0 <= val <= 255:
+                                # Каноническая команда SCPI: SOUR:RES <channel>, <value>
+                                cmd = f'SOUR:RES 2, {val}\r\n'
                                 curr_shell = shell_ref.get('ser')
                                 if curr_shell and curr_shell.is_open:
                                     curr_shell.write(cmd.encode('utf-8'))
                                     ui.notify(
-                                        f'[Резистор 2] Отправлено: {cmd.strip()}', type='positive'
+                                        f'[Резистор 2] SCPI: {cmd.strip()}', type='positive'
                                     )
                                 else:
                                     ui.notify('SCPI порт закрыт!', type='warning')
                             else:
                                 ui.notify(
-                                    'Значение резистора должно быть от 0.00 до 100.00',
+                                    'Значение Резистора 2 должно быть от 0 до 255!',
                                     type='warning',
                                 )
                         except ValueError:
                             ui.notify(
-                                'Введите корректное число для Резистора 2', type='negative'
+                                'Введите целое число для Резистора 2 (0-255)', type='negative'
                             )
 
                     res2_input.on('keydown.enter', send_res2)

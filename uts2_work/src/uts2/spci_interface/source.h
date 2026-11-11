@@ -9,4 +9,8 @@
 
 scpi_result_t cmd_source_dac(scpi_t *context);
 scpi_result_t cmd_source_dac_q(scpi_t *context);
-scpi_result_t cmd_dac_reset(scpi_t *context);
+
+scpi_result_t cmd_source_res(scpi_t *context);
+scpi_result_t cmd_source_res_q(scpi_t *context);
+
+scpi_result_t cmd_source_reset(scpi_t *context);

@@ -68,7 +68,6 @@ typedef struct dac_data_msg
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
 static int  _ad5243_set_wiper(ad5243_channel_t _channel, uint8_t _value);
-static int  _ad5243_set_resistance_kohm(ad5243_channel_t _ch, float _target_r_kohm);
 static void _dac_update_handler(struct k_work *_work);
 static int  _dac_control_init(void);
 
@@ -135,41 +134,6 @@ static int _ad5243_set_wiper(ad5243_channel_t _channel, uint8_t _value)
     return ret;         
 }
 
-/**
- *  @brief      Установка целевого сопротивления канала AD5243 в кОм
- *  @details    Рассчитывает дискретный код ползунка (0..255) на основе требуемого
- *              сопротивления с учетом сопротивления ползунка и номинала.
- *
- *  @param      _ch            - Канал потенциометра
- *  @param      _target_r_kohm - Целевое сопротивление в кОм
- *
- *  @return     int - Ноль при успехе, отрицательный код ошибки при сбое
- */
-static int _ad5243_set_resistance_kohm(ad5243_channel_t _ch, float _target_r_kohm)
-{
-    uint8_t wiper_val;
-
-    // 1. Защита диапазона (Clamping)
-    if (_target_r_kohm <= AD5243_R_W_KOHM) 
-    {
-        // Все, что ниже сопротивления ползунка, приравниваем к коду 0
-        wiper_val = 0;
-    } 
-    else if (_target_r_kohm >= AD5243_R_MAX_KOHM) 
-    {
-        // Все, что выше максимального физического предела, приравниваем к коду 255
-        wiper_val = 255;
-    } 
-    else 
-    {
-        // 2. Вычисление кода: D = 256 * (R_WB - R_W) / R_AB
-        float calc_val = (256.0f * (_target_r_kohm - AD5243_R_W_KOHM)) / AD5243_R_AB_KOHM;
-        wiper_val = (uint8_t)(calc_val + 0.5f);
-    }
-
-    // 3. Отправка вычисленного байта через I2C
-    return _ad5243_set_wiper(_ch, wiper_val);
-}
 
 /**
  *  @brief      Обработчик воркера обновления параметров ЦАП и AD5243
@@ -197,19 +161,19 @@ static void _dac_update_handler(struct k_work *_work)
         }
         else if (true
                  && req.id == ADJ_RES1
-                 && cache_dac_data.value[1] != req.value.sd_float
+                 && cache_dac_data.value[1] != req.value.sd_uint
                 )        
         {
-            cache_dac_data.value[1] = req.value.sd_float;
-            err = _ad5243_set_resistance_kohm(AD5243_CHANNEL_1, cache_dac_data.value[1]);
+            cache_dac_data.value[1] = req.value.sd_uint;
+            err = _ad5243_set_wiper(AD5243_CHANNEL_1, cache_dac_data.value[1]);
         }
         else if (true
                  && req.id == ADJ_RES2
-                 && cache_dac_data.value[2] != req.value.sd_float
+                 && cache_dac_data.value[2] != req.value.sd_uint
                 )                
         {
-            cache_dac_data.value[2] = req.value.sd_float;
-            err |= _ad5243_set_resistance_kohm(AD5243_CHANNEL_2, cache_dac_data.value[2]);
+            cache_dac_data.value[2] = req.value.sd_uint;
+            err |= _ad5243_set_wiper(AD5243_CHANNEL_2, cache_dac_data.value[2]);
         }
 
         if (err < 0)
@@ -297,8 +261,8 @@ static int _dac_control_init(void)
 SYS_INIT(_dac_control_init, DAC_DEAMON_INIT_LEVEL, DAC_DEAMON_INIT_PRIOR);
 
 SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, 0, UINT_DATA);
-SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, 1, FLOAT_DATA);
-SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, 2, FLOAT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, 1, UINT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, 2, UINT_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

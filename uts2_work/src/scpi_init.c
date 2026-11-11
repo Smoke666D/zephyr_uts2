@@ -33,7 +33,7 @@ static scpi_result_t SCPI_Reset(scpi_t *context) {
 
     cmd_led_reset(context);
     cmd_out_reset(context);
-    cmd_dac_reset(context);
+    cmd_source_reset(context);
 
     return SCPI_RES_OK;
 }
@@ -158,8 +158,12 @@ static const scpi_command_t scpi_commands[] = {
     { .pattern = "OUTPut:DOUT[:STATe]?", .callback = cmd_output_dout_q, },
 
     /* Подсистема SOURce: */
+    /* Всторенный DAC STM32*/
     { .pattern = "SOURce:DAC[:VALue]",  .callback = cmd_source_dac, },
     { .pattern = "SOURce:DAC[:VALue]?", .callback = cmd_source_dac_q, },
+    /* I2C переменное сопротивление*/
+    { .pattern = "SOURce:RESistance[:VALue]",  .callback = cmd_source_res, },
+    { .pattern = "SOURce:RESistance[:VALue]?", .callback = cmd_source_res_q, },
 
     /* Подсистема SENSe:UART (Служебный приемник телеметрии DUT) */
     { .pattern = "SENSe:UART:DATA?",     .callback = cmd_sense_uart_data_q, },
