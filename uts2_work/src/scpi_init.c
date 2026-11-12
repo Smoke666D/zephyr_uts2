@@ -135,6 +135,11 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SYSTem:HARDware[:VERSion]?",  .callback = cmd_system_hardware_q,  },
     { .pattern = "SYSTem:USER",                 .callback = cmd_system_user,        },
     { .pattern = "SYSTem:USER?",                .callback = cmd_system_user_q,      },
+
+
+    { .pattern = "MONItor[:VOLTage]:STARt",  .callback = cmd_monitor_start,         },
+    { .pattern = "MONItor[:VOLTage]:STOP",   .callback = cmd_monitor_stop,          },
+    { .pattern = "MONItor[:VOLTage]:STATe?", .callback = cmd_monitor_state_q,       },
     
     SCPI_CMD_LIST_END
 };
@@ -197,7 +202,7 @@ static scpi_result_t _scpi_reset(scpi_t *_context)
     cmd_led_reset(_context);
     cmd_out_reset(_context);
     cmd_source_reset(_context);
-
+    cmd_monitor_reset(_context);
     return SCPI_RES_OK;
 }
 
@@ -271,6 +276,7 @@ static int _scpi_server_init(void)
 
     k_work_init(&scpi_rx_work, _scpi_rx_work_handler);
 
+    scpi_monitor_init();
     // 4. Включение прерываний UART
     uart_irq_callback_user_data_set(uart_dev, _uart_cb, NULL);
     uart_irq_rx_enable(uart_dev);

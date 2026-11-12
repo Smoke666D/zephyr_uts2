@@ -43,7 +43,7 @@ typedef struct power_control_line_msg
  **********************************************************************************/
 
 static void _enable_port_init(void);
-static void _power_control_update_handler(struct k_work *_work);
+static void  _pwr_ctl_update_handler(struct k_work *_work);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA

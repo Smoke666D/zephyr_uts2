@@ -78,7 +78,6 @@ static const struct device *dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
 static struct k_work_poll  dac_task        __attribute__((section("DTCM")));
 static struct k_poll_event dac_poll_events[1] __attribute__((section("DTCM")));
-static uint32_t            cur_dac_value   __attribute__((section("DTCM"))) = 0;
 static dac_data_msg_t      cache_dac_data  __attribute__((section("DTCM"))) = {0};
 
 static struct i2c_dt_spec i2c_spec = 

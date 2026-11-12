@@ -243,7 +243,7 @@ scpi_result_t cmd_system_hardware(scpi_t *context)
     uint16_t ccc;
     uint8_t a, mm, dd, ee;
     uint32_t word1, word2;
-    int ret1, ret2;
+    
 
     // 1. Считываем целевой узел (IU или CU)
     if (!SCPI_ParamChoice(context, unit_targets, &unit, TRUE)) 
