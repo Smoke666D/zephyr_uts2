@@ -6,8 +6,9 @@
  *  @author     Dymov Igor
  *
  *  @brief      Сервер парсера SCPI-команд для контрольно-измерительного стенда UTS2
- *  @details    Обеспечивает прием команд через UART с использованием кольцевого буфера,
- *              декодирование и выполнение команд IEEE 488.2 и подсистем стенда.
+ *  @details    Обеспечивает прием команд через UART и выполнение асинхронных 
+ *              пользовательских задач в едином потоке воркера (k_work_q),
+ *              полностью исключая пересечение и порчу данных в UART.
  */
 
 /***************************************************************************************************
@@ -18,11 +19,10 @@
 #include <stdbool.h>
 
 #include <zephyr/kernel.h>
-#include <zephyr/console/console.h>
 #include <zephyr/drivers/uart.h>
-#include <zephyr/shell/shell.h>
 #include <zephyr/sys/ring_buffer.h>
-
+#include <zephyr/init.h>
+#include "app_worker.h"
 #include "scpi/scpi.h"
 #include "scpi/ieee488.h"
 
@@ -36,9 +36,6 @@
 #define SCPI_ERROR_QUEUE_SIZE   16
 #define RING_BUF_SIZE           256
 
-/***************************************************************************************************
- *                                          PRIVATE TYPES
- **************************************************************************************************/
 
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
@@ -47,7 +44,8 @@ static size_t        _scpi_write(scpi_t *_context, const char *_data, size_t _le
 static int           _scpi_error(scpi_t *_context, int_fast16_t _err);
 static scpi_result_t _scpi_reset(scpi_t *_context);
 static void          _uart_cb(const struct device *_dev, void *_user_data);
-static void          _scpi_server_thread(void *_p1, void *_p2, void *_p3);
+static void          _scpi_rx_work_handler(struct k_work *_work);
+static int           _scpi_server_init(void);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA
@@ -58,7 +56,10 @@ static char          scpi_input_buffer[SCPI_INPUT_BUF_LEN];
 static scpi_error_t  scpi_error_queue_data[SCPI_ERROR_QUEUE_SIZE];
 static scpi_t        scpi_context;
 
+
 RING_BUF_DECLARE(uart_rx_ringbuf, RING_BUF_SIZE);
+
+static struct k_work scpi_rx_work;
 
 // Интерфейс коллбэков парсера SCPI
 static scpi_interface_t scpi_interface = 
@@ -81,8 +82,8 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "*OPC?",                       .callback = scpi_cmd_opc_q          },   
 
     // Подсистема DISPlay
-    { .pattern = "DISPlay:LED[:STATe]",          .callback = cmd_disp_led_state      },
-    { .pattern = "DISPlay:LED[:STATe]?",         .callback = cmd_disp_led_state_q    },
+    { .pattern = "DISPlay:LED[:STATe]",         .callback = cmd_disp_led_state      },
+    { .pattern = "DISPlay:LED[:STATe]?",        .callback = cmd_disp_led_state_q    },
 
     // Управление выходами питания
     { .pattern = "OUTPut:POWer[:STATe]",        .callback = cmd_output_state        },
@@ -97,10 +98,10 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "OUTPut:MUX[:STATe]",          .callback = cmd_output_mux          },
     { .pattern = "OUTPut:MUX[:STATe]?",         .callback = cmd_output_mux_q        },
 
-    { .pattern = "OUTPut:MUX:JTAG[:CHANnel]",  .callback = cmd_mux_jtag            },
-    { .pattern = "OUTPut:MUX:JTAG[:CHANnel]?", .callback = cmd_mux_jtag_q          },
-    { .pattern = "OUTPut:MUX:UART[:CHANnel]",  .callback = cmd_mux_uart            },
-    { .pattern = "OUTPut:MUX:UART[:CHANnel]?", .callback = cmd_mux_uart_q          },
+    { .pattern = "OUTPut:MUX:JTAG[:CHANnel]",   .callback = cmd_mux_jtag            },
+    { .pattern = "OUTPut:MUX:JTAG[:CHANnel]?",  .callback = cmd_mux_jtag_q          },
+    { .pattern = "OUTPut:MUX:UART[:CHANnel]",   .callback = cmd_mux_uart            },
+    { .pattern = "OUTPut:MUX:UART[:CHANnel]?",  .callback = cmd_mux_uart_q          },
 
     { .pattern = "OUTPut:DOUT[:STATe]",         .callback = cmd_output_dout         },
     { .pattern = "OUTPut:DOUT[:STATe]?",        .callback = cmd_output_dout_q       },
@@ -110,8 +111,8 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SOURce:DAC[:VALue]?",         .callback = cmd_source_dac_q        },
     
     // I2C цифровое переменное сопротивление
-    { .pattern = "SOURce:RESistance[:VALue]",  .callback = cmd_source_res           },
-    { .pattern = "SOURce:RESistance[:VALue]?", .callback = cmd_source_res_q         },
+    { .pattern = "SOURce:RESistance[:VALue]",   .callback = cmd_source_res          },
+    { .pattern = "SOURce:RESistance[:VALue]?",  .callback = cmd_source_res_q        },
 
     // Подсистема SENSe:UART (Приемник телеметрии DUT)
     { .pattern = "SENSe:UART:DATA?",            .callback = cmd_sense_uart_data_q   },
@@ -120,12 +121,10 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SENSe:UART:BAUDrate",         .callback = cmd_sense_uart_baud     },
     { .pattern = "SENSe:UART:BAUDrate?",        .callback = cmd_sense_uart_baud_q   },
 
-    { .pattern = "SENSe:TEMPerature[:DATA]?",    .callback = cmd_sense_temp_q       },
-    { .pattern = "SENSe:LIGht[:DATA]?",          .callback = cmd_sense_light_q      },
-    { .pattern = "SENSe:VOLTage[:DC]?",          .callback = cmd_sense_voltage_q    },
-    
-    // Опциональный псевдоним VISA
-    { .pattern = "MEASure:VOLTage[:DC]?",        .callback = cmd_sense_voltage_q    },
+    { .pattern = "SENSe:TEMPerature[:DATA]?",   .callback = cmd_sense_temp_q        },
+    { .pattern = "SENSe:LIGht[:DATA]?",         .callback = cmd_sense_light_q       },
+    { .pattern = "SENSe:VOLTage[:DC]?",         .callback = cmd_sense_voltage_q     },
+    { .pattern = "MEASure:VOLTage[:DC]?",       .callback = cmd_sense_voltage_q     },
 
     // Подсистема SYSTem
     { .pattern = "SYSTem:WAIT",                 .callback = cmd_system_wait         },
@@ -136,23 +135,28 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SYSTem:HARDware[:VERSion]?",  .callback = cmd_system_hardware_q,  },
     { .pattern = "SYSTem:USER",                 .callback = cmd_system_user,        },
     { .pattern = "SYSTem:USER?",                .callback = cmd_system_user_q,      },
+    
     SCPI_CMD_LIST_END
 };
+
+/***************************************************************************************************
+ *                                        PUBLIC API ДЛЯ АСИНХРОННЫХ ЗАДАЧ
+ **************************************************************************************************/
+
+/**
+ *  @brief      Прямая безопасная отправка строки клиенту из контекста асинхронной задачи
+ */
+void scpi_async_send_text(const char *text)
+{
+    if (text != NULL) {
+        _scpi_write(&scpi_context, text, strlen(text));
+    }
+}
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
  **************************************************************************************************/
 
-/**
- *  @brief      Коллбэк отправки данных обратно клиенту по UART
- *  @details    Побайтово отправляет сформированную парсером SCPI строку через UART.
- *
- *  @param      _context - Указатель на контекст SCPI
- *  @param      _data    - Указатель на буфер с данными
- *  @param      _len     - Длина отправляемых данных в байтах
- *
- *  @return     size_t - Количество отправленных байт
- */
 static size_t _scpi_write(scpi_t *_context, const char *_data, size_t _len) 
 {
     ARG_UNUSED(_context);
@@ -164,16 +168,6 @@ static size_t _scpi_write(scpi_t *_context, const char *_data, size_t _len)
     return _len;
 }
 
-/**
- *  @brief      Обработчик ошибок парсера SCPI
- *  @details    Выводит расшифровку ошибки в системную консоль RTT и отправляет
- *              сообщение с кодом ошибки клиенту в терминал.
- *
- *  @param      _context - Указатель на контекст SCPI
- *  @param      _err     - Код ошибки SCPI
- *
- *  @return     int - Всегда 0
- */
 static int _scpi_error(scpi_t *_context, int_fast16_t _err) 
 {
     if (_err == 0) 
@@ -183,18 +177,14 @@ static int _scpi_error(scpi_t *_context, int_fast16_t _err)
 
     const char *err_desc = SCPI_ErrorTranslate(_err);
 
-    // 1. Вывод в системную консоль и RTT Zephyr
+    // 1. Системный лог
     printk("[SCPI ERROR] Code: %d, Description: %s\r\n", (int)_err, err_desc);
 
-    // 2. Вывод прямо в терминал клиенту для отображения причины ошибки
+    // 2. Ответ клиенту
     char err_msg[128];
     int len = snprintf(err_msg, sizeof(err_msg), "ERR: %d, \"%s\"\r\n", (int)_err, err_desc);
 
-    if (true
-        && len > 0 
-        && _context->interface != NULL 
-        && _context->interface->write != NULL
-       ) 
+    if (len > 0 && _context->interface != NULL && _context->interface->write != NULL) 
     {
         _context->interface->write(_context, err_msg, len);
     }
@@ -202,15 +192,6 @@ static int _scpi_error(scpi_t *_context, int_fast16_t _err)
     return 0;
 }
 
-/**
- *  @brief      Команды сброса стенда (*RST)
- *  @details    Выполняет сброс всех компонентов стенда (светодиоды, выходы,
- *              источники ЦАП и резисторы) в состояние по умолчанию.
- *
- *  @param      _context - Указатель на контекст SCPI
- *
- *  @return     scpi_result_t - Всегда SCPI_RES_OK
- */
 static scpi_result_t _scpi_reset(scpi_t *_context) 
 {
     cmd_led_reset(_context);
@@ -221,16 +202,13 @@ static scpi_result_t _scpi_reset(scpi_t *_context)
 }
 
 /**
- *  @brief      Обработчик прерывания UART по приему данных
- *  @details    Считывает байты из аппаратного FIFO UART и помещает их в кольцевой буфер.
- *
- *  @param      _dev       - Указатель на устройство UART
- *  @param      _user_data - Пользовательские данные
+ *  @brief      Прерывание UART: только складывает байты в буфер и будит воркер
  */
 static void _uart_cb(const struct device *_dev, void *_user_data)
 {
     ARG_UNUSED(_user_data);
     uint8_t c;
+    bool has_data = false;
 
     if (!uart_irq_update(_dev)) 
     {
@@ -239,30 +217,45 @@ static void _uart_cb(const struct device *_dev, void *_user_data)
 
     while (uart_irq_rx_ready(_dev)) 
     {
-        int len = uart_fifo_read(_dev, &c, 1);
-        if (len > 0) 
+        if (uart_fifo_read(_dev, &c, 1) > 0) 
         {
-            ring_buf_put(&uart_rx_ringbuf, &c, 1);
+            if (ring_buf_put(&uart_rx_ringbuf, &c, 1) > 0) 
+            {
+                has_data = true;
+            }
         }
+    }
+
+    // Если поступили байты — активируем обработчик в очереди воркера
+    if (has_data) 
+    {
+        app_worker_submit(&scpi_rx_work, APPLICATION_WORKER);
     }
 }
 
 /**
- *  @brief      Главный поток сервера SCPI
- *  @details    Инициализирует парсер SCPI, включает прерывания UART и обрабатывает
- *              входящие символы из кольцевого буфера.
- *
- *  @param      _p1 - Неиспользуемый параметр потока 1
- *  @param      _p2 - Неиспользуемый параметр потока 2
- *  @param      _p3 - Неиспользуемый параметр потока 3
+ *  @brief      Обработчик воркера: скармливает принятые байты парсеру
+ *  @note       Выполняется в контексте scpi_work_q
  */
-static void _scpi_server_thread(void *_p1, void *_p2, void *_p3)
+static void _scpi_rx_work_handler(struct k_work *_work)
 {
-    ARG_UNUSED(_p1);
-    ARG_UNUSED(_p2);
-    ARG_UNUSED(_p3);
+    ARG_UNUSED(_work);
+    uint8_t buffer[64];
+    uint32_t bytes_read;
 
-    // Инициализация контекста SCPI
+    // Выгребаем все доступные байты пачками
+    while ((bytes_read = ring_buf_get(&uart_rx_ringbuf, buffer, sizeof(buffer))) > 0) 
+    {
+        SCPI_Input(&scpi_context, (char *)buffer, bytes_read);
+    }
+}
+
+/**
+ *  @brief      Инициализация сервера SCPI и запуск выделенного воркера
+ */
+static int _scpi_server_init(void)
+{
+    // 1. Инициализация контекста библиотеки libscpi
     SCPI_Init(&scpi_context,
               scpi_commands,
               &scpi_interface,
@@ -276,29 +269,13 @@ static void _scpi_server_thread(void *_p1, void *_p2, void *_p3)
               scpi_error_queue_data,
               SCPI_ERROR_QUEUE_SIZE);
 
-    // Включение прерываний UART по приему
+    k_work_init(&scpi_rx_work, _scpi_rx_work_handler);
+
+    // 4. Включение прерываний UART
     uart_irq_callback_user_data_set(uart_dev, _uart_cb, NULL);
     uart_irq_rx_enable(uart_dev);
-    
-    uint8_t buffer[SCPI_INPUT_BUF_LEN];
 
-    // Цикл приема и обработки входящих данных
-    while (1) 
-    {
-        uint32_t bytes_read = ring_buf_get(&uart_rx_ringbuf, buffer, sizeof(buffer));
-        if (bytes_read > 0) 
-        {
-            SCPI_Input(&scpi_context, (char *)buffer, bytes_read);
-        } 
-        else 
-        {        
-            k_msleep(2);
-        }        
-    }
+    return 0;
 }
 
-K_THREAD_DEFINE(scpi_tid, 2048, _scpi_server_thread, NULL, NULL, NULL, 10, 0, 0);
-
-/***************************************************************************************************
- *                                           END OF FILE
- **************************************************************************************************/
+SYS_INIT(_scpi_server_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
