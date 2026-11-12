@@ -5,7 +5,6 @@
 #include "app_worker.h"
 #include "scpi/scpi.h"
 
-
 #define MONITOR_MIN_INTERVAL_MS 10U    // Защита: не чаще 10 мс (100 Гц), чтобы не перегружать UART
 #define MONITOR_MAX_INTERVAL_MS 60000U // Максимум 60 секунд
 
