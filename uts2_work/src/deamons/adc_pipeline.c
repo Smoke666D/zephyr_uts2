@@ -27,6 +27,7 @@
 
 #include "system_bus_model.h"
 #include "filters.h"
+#include "system_define.h"
 #include "app_worker.h"
 
 /***************************************************************************************************
@@ -208,7 +209,10 @@ static void _env_listener_handler(struct k_work *_work)
     env_adc_poll_events[0].state = K_POLL_STATE_NOT_READY;
 
     // Повторная отправка воркера на отслеживание семафора DMA
-    app_worker_poll_submit(&env_adc_monitor_work, env_adc_poll_events, REAL_TIME_WORKER);
+    app_worker_poll_submit(&env_adc_monitor_work, 
+                            env_adc_poll_events,
+                            ARRAY_SIZE(env_adc_poll_events),
+                            REAL_TIME_WORKER);
 }
 
 /**
@@ -241,7 +245,10 @@ static void _sense_listener_handler(struct k_work *_work)
     sense_adc_poll_events[0].state = K_POLL_STATE_NOT_READY;
 
     // Повторная отправка воркера на отслеживание семафора DMA
-    app_worker_poll_submit(&sense_adc_monitor_work, sense_adc_poll_events, REAL_TIME_WORKER);
+    app_worker_poll_submit(&sense_adc_monitor_work,
+                            sense_adc_poll_events,
+                            ARRAY_SIZE(env_adc_poll_events),
+                            REAL_TIME_WORKER);
 }
 
 /**
@@ -289,15 +296,21 @@ static int _adc_pipeline_init(void)
                       seq_mux_adc_sem);
 
     k_work_poll_init(&env_adc_monitor_work, _env_listener_handler);                
-    app_worker_poll_submit(&env_adc_monitor_work, env_adc_poll_events, REAL_TIME_WORKER);
+    app_worker_poll_submit(&env_adc_monitor_work,
+                            env_adc_poll_events,
+                            ARRAY_SIZE(env_adc_poll_events),
+                            REAL_TIME_WORKER);
 
     k_work_poll_init(&sense_adc_monitor_work, _sense_listener_handler);                
-    app_worker_poll_submit(&sense_adc_monitor_work, sense_adc_poll_events, REAL_TIME_WORKER);
+    app_worker_poll_submit(&sense_adc_monitor_work,
+                            sense_adc_poll_events,
+                            ARRAY_SIZE(sense_adc_poll_events),
+                            REAL_TIME_WORKER);
     
     return 0;
 }
 
-SYS_INIT(_adc_pipeline_init, APPLICATION, 40);
+SYS_INIT(_adc_pipeline_init, ADC_PIPELINE_DEAMON_INIT_LEVEL, ADC_PIPELINE_DEAMON_INIT_PRIOR);
 
 /***************************************************************************************************
  *                                 Привязка ZBUS к логическим каналам сервера

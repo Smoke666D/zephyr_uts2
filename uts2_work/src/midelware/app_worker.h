@@ -63,9 +63,10 @@ void app_worker_reschedule_submit(struct k_work_delayable *_delayed_work,
                                   worker_type_t _worker_type);
 
 /// @brief Отправка поллинг-задачи в очередь
-void app_worker_poll_submit(struct k_work_poll *_work, 
-                            struct k_poll_event *_poll_event, 
-                            worker_type_t _worker_type);
+int app_worker_poll_submit(struct k_work_poll *_work, 
+                           struct k_poll_event *_poll_events, 
+                           int _num_events,
+                           worker_type _worker_type);
 
 #ifdef __cplusplus
 }

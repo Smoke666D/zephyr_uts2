@@ -132,7 +132,10 @@ static void  _pwr_ctl_update_handler(struct k_work *_work)
         k_sem_give(req.sync);
     }
     pwr_ctl_poll_events[0].state = K_POLL_STATE_NOT_READY;
-    app_worker_poll_submit(&pwr_ctl_task, pwr_ctl_poll_events, COMMON_WORKER);
+    app_worker_poll_submit(&pwr_ctl_task, 
+                            pwr_ctl_poll_events,
+                            ARRAY_SIZE(pwr_ctl_poll_events), 
+                            COMMON_WORKER);
 }
 
 /**
@@ -151,7 +154,10 @@ static int _power_control_init(void)
                       &pwr_ctl_rx_queue); 
 
     k_work_poll_init(&pwr_ctl_task, _pwr_ctl_update_handler); 
-    app_worker_poll_submit(&pwr_ctl_task, pwr_ctl_poll_events, COMMON_WORKER);
+    app_worker_poll_submit(&pwr_ctl_task, 
+                            pwr_ctl_poll_events,
+                            ARRAY_SIZE(pwr_ctl_poll_events),
+                            COMMON_WORKER);
 
     _enable_port_init();
     return 0;

@@ -119,7 +119,10 @@ static void _led_hardware_update_handler(struct k_work *_work)
     }
     // Сброс статуса события перед повторным сабмитом поллинга
     led_poll_events[0].state = K_POLL_STATE_NOT_READY;
-    app_worker_poll_submit(&led_task, led_poll_events, COMMON_WORKER);    
+    app_worker_poll_submit(&led_task,
+                            led_poll_events,
+                            ARRAY_SIZE(led_poll_events),
+                            COMMON_WORKER);
 }
 
 /**
@@ -154,8 +157,11 @@ static int _led_manager_system_init(void)
                       &led_rx_queue); 
 
     k_work_poll_init(&led_task, _led_hardware_update_handler); 
-    app_worker_poll_submit(&led_task, led_poll_events, COMMON_WORKER);
-
+    app_worker_poll_submit(&led_task, 
+                            led_poll_events,
+                            ARRAY_SIZE(led_poll_events),
+                            COMMON_WORKER);
+                            
     LOG_INF("LEDs initialized successfully...");
     return 0;
 }

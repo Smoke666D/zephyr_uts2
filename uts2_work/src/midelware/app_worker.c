@@ -24,7 +24,7 @@
 // Регистрация модуля логирования для планировщика воркеров
 LOG_MODULE_REGISTER(app_worker, LOG_LEVEL_INF);
 
-#define WORKER_STACK_SIZE           2048
+#define WORKER_STACK_SIZE           3048
 #define COMMON_WORKER_PRIORITY      4
 #define REAL_TIME_WORKER_PRIORITY  -1
 
@@ -129,15 +129,16 @@ void app_worker_submit(struct k_work *_work, worker_type _worker_type)
  *  @param      _poll_event  - Указатель на структуру событий поллинга
  *  @param      _worker_type - Тип очереди (стандартная или реального времени)
  */
-void app_worker_poll_submit(struct k_work_poll *_work, 
-                            struct k_poll_event *_poll_event, 
-                            worker_type _worker_type)
+int app_worker_poll_submit(struct k_work_poll *_work, 
+                           struct k_poll_event *_poll_events, 
+                           int _num_events,
+                           worker_type _worker_type)
 {
     struct k_work_q *q = (_worker_type == REAL_TIME_WORKER) 
                          ? &app_real_time_work_q 
                          : &app_work_q;
 
-    k_work_poll_submit_to_queue(q, _work, _poll_event, 1, K_FOREVER);
+    return k_work_poll_submit_to_queue(q, _work, _poll_events, _num_events, K_FOREVER);
 }
 
 SYS_INIT(_app_worker_system_init, POST_KERNEL, 50);
