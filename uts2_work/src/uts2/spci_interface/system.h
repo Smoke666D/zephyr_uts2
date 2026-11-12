@@ -14,3 +14,6 @@ scpi_result_t cmd_system_serial(scpi_t *context);
 
 scpi_result_t cmd_system_hardware(scpi_t *context);
 scpi_result_t cmd_system_hardware_q(scpi_t *context);
+
+scpi_result_t cmd_system_user(scpi_t *context);
+scpi_result_t cmd_system_user_q(scpi_t *context);

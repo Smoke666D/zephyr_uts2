@@ -110,8 +110,8 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SOURce:DAC[:VALue]?",         .callback = cmd_source_dac_q        },
     
     // I2C цифровое переменное сопротивление
-    { .pattern = "SOURce:RESistance[:VALue]",  .callback = cmd_source_res          },
-    { .pattern = "SOURce:RESistance[:VALue]?", .callback = cmd_source_res_q        },
+    { .pattern = "SOURce:RESistance[:VALue]",  .callback = cmd_source_res           },
+    { .pattern = "SOURce:RESistance[:VALue]?", .callback = cmd_source_res_q         },
 
     // Подсистема SENSe:UART (Приемник телеметрии DUT)
     { .pattern = "SENSe:UART:DATA?",            .callback = cmd_sense_uart_data_q   },
@@ -120,20 +120,22 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SENSe:UART:BAUDrate",         .callback = cmd_sense_uart_baud     },
     { .pattern = "SENSe:UART:BAUDrate?",        .callback = cmd_sense_uart_baud_q   },
 
-    { .pattern = "SENSe:TEMPerature[:DATA]?",    .callback = cmd_sense_temp_q        },
-    { .pattern = "SENSe:LIGht[:DATA]?",          .callback = cmd_sense_light_q       },
-    { .pattern = "SENSe:VOLTage[:DC]?",          .callback = cmd_sense_voltage_q     },
+    { .pattern = "SENSe:TEMPerature[:DATA]?",    .callback = cmd_sense_temp_q       },
+    { .pattern = "SENSe:LIGht[:DATA]?",          .callback = cmd_sense_light_q      },
+    { .pattern = "SENSe:VOLTage[:DC]?",          .callback = cmd_sense_voltage_q    },
     
     // Опциональный псевдоним VISA
-    { .pattern = "MEASure:VOLTage[:DC]?",        .callback = cmd_sense_voltage_q     },
+    { .pattern = "MEASure:VOLTage[:DC]?",        .callback = cmd_sense_voltage_q    },
 
     // Подсистема SYSTem
     { .pattern = "SYSTem:WAIT",                 .callback = cmd_system_wait         },
     { .pattern = "SYSTem:UID?",                 .callback = cmd_system_uid_q        },
     { .pattern = "SYSTem:SERial",               .callback = cmd_system_serial,      },
     { .pattern = "SYSTem:SERial?",              .callback = cmd_system_serial_q,    },
-    { .pattern = "SYSTem:HARDware[:VERSion]",  .callback = cmd_system_hardware, },
-    { .pattern = "SYSTem:HARDware[:VERSion]?", .callback = cmd_system_hardware_q, },
+    { .pattern = "SYSTem:HARDware[:VERSion]",   .callback = cmd_system_hardware,    },
+    { .pattern = "SYSTem:HARDware[:VERSion]?",  .callback = cmd_system_hardware_q,  },
+    { .pattern = "SYSTem:USER",                 .callback = cmd_system_user,        },
+    { .pattern = "SYSTem:USER?",                .callback = cmd_system_user_q,      },
     SCPI_CMD_LIST_END
 };
 

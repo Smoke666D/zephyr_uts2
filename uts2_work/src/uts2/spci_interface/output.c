@@ -480,7 +480,7 @@ scpi_result_t cmd_mux_jtag(scpi_t *_context)
     SERVER_CH_SET_SYC(JTAG_MUX0, (uint32_t)ch, &sem_mux_done, &mux_response);
 
     if (false 
-        || k_sem_take(&sem_mux_done, K_MSEC(100)) != 0
+        || k_sem_take(&sem_mux_done, K_MSEC(300)) != 0
         || mux_response != 0
        ) 
     {
@@ -540,7 +540,7 @@ scpi_result_t cmd_mux_uart(scpi_t *_context)
     SERVER_CH_SET_SYC(USB_FB_MUX, (uint32_t)ch, &sem_mux_done, &mux_response);
 
     if (false 
-        || k_sem_take(&sem_mux_done, K_MSEC(100)) != 0
+        || k_sem_take(&sem_mux_done, K_MSEC(300)) != 0
         || mux_response != 0
        ) 
     {

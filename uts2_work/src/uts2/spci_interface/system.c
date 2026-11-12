@@ -121,7 +121,7 @@ scpi_result_t cmd_system_serial(scpi_t *context)
     SERVER_CH_SET_SYC(_target, (uint32_t)sn, &eeprom_done_sem, &eeprom_resp_code);
     
    if (false 
-        || k_sem_take(&eeprom_done_sem, K_MSEC(300)) != 0
+        || k_sem_take(&eeprom_done_sem, K_MSEC(500)) != 0
         || eeprom_resp_code != 0
        ) 
     {
@@ -246,17 +246,20 @@ scpi_result_t cmd_system_hardware(scpi_t *context)
     int ret1, ret2;
 
     // 1. Считываем целевой узел (IU или CU)
-    if (!SCPI_ParamChoice(context, unit_targets, &unit, TRUE)) {
+    if (!SCPI_ParamChoice(context, unit_targets, &unit, TRUE)) 
+    {
         return SCPI_RES_ERR;
     }
 
     // 2. Считываем строковый параметр версии (например: "001.0.12.01.02")
-    if (!SCPI_ParamCharacters(context, &str_ptr, &len, TRUE)) {
+    if (!SCPI_ParamCharacters(context, &str_ptr, &len, TRUE)) 
+    {
         return SCPI_RES_ERR;
     }
     
-        // Проверяем, чтобы строка влезла в наш временный буфер для sscanf
-    if (len >= sizeof(raw_str)) {
+     // Проверяем, чтобы строка влезла в наш временный буфер для sscanf
+    if (len >= sizeof(raw_str)) 
+    {
         SCPI_ErrorPush(context, SCPI_ERROR_ILLEGAL_PARAMETER_VALUE);
         return SCPI_RES_ERR;
     }
@@ -284,7 +287,7 @@ scpi_result_t cmd_system_hardware(scpi_t *context)
         SERVER_CH_SET_SYC(SETTING_IU_HW_VER, (uint32_t)word2,&eeprom_done_sem, &eeprom_resp_code);
         
         if (false 
-            || k_sem_take(&eeprom_done_sem, K_MSEC(300)) != 0
+            || k_sem_take(&eeprom_done_sem, K_MSEC(500)) != 0
             || eeprom_resp_code != 0
         ) 
         {
@@ -300,7 +303,7 @@ scpi_result_t cmd_system_hardware(scpi_t *context)
         SERVER_CH_SET_SYC(SETTING_CU_HW_VER, (uint32_t)word2,&eeprom_done_sem, &eeprom_resp_code);
         
         if (false 
-            || k_sem_take(&eeprom_done_sem, K_MSEC(300)) != 0
+            || k_sem_take(&eeprom_done_sem, K_MSEC(500)) != 0
             || eeprom_resp_code != 0
         ) 
         {
@@ -373,5 +376,56 @@ scpi_result_t cmd_system_hardware_q(scpi_t *context)
         }
     }
 
+    return SCPI_RES_OK;
+}
+
+
+static const scpi_choice_def_t user_targets[] = {
+    {"IU", SETTING_IU_USER_DATA},
+    {"CU", SETTING_CU_USER_DATA},
+    SCPI_CHOICE_LIST_END
+};
+
+scpi_result_t cmd_system_user(scpi_t *context)
+{
+    int32_t _target;
+    uint32_t val;
+
+    if (!SCPI_ParamChoice(context, user_targets, &_target, TRUE)) return SCPI_RES_ERR;
+    if (!SCPI_ParamUInt32(context, &val, TRUE)) return SCPI_RES_ERR;
+
+    k_sem_reset(&eeprom_done_sem);
+            
+    SERVER_CH_SET_SYC(_target, (uint32_t)val ,&eeprom_done_sem, &eeprom_resp_code);
+        
+    if (false 
+        || k_sem_take(&eeprom_done_sem, K_MSEC(500)) != 0
+        || eeprom_resp_code != 0
+    ) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+        return SCPI_RES_ERR; 
+    }    
+    return SCPI_RES_OK;
+}
+
+scpi_result_t cmd_system_user_q(scpi_t *context)
+{
+    int32_t _target;
+    uint32_t val;
+
+    if (SCPI_ParamChoice(context, user_targets, &_target, FALSE)) 
+    {
+        SYSTEM_BUS_GET(_target,&val);        
+        SCPI_ResultUInt32(context, val);
+    } 
+    else 
+    {
+        for (int i = 0; i < ARRAY_SIZE(user_targets) - 1 ; i++) 
+        {
+            SYSTEM_BUS_GET(user_targets[i].tag, &val);        
+            SCPI_ResultUInt32(context, val);
+        }
+    }
     return SCPI_RES_OK;
 }
