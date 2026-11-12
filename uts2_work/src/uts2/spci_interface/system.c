@@ -153,3 +153,225 @@ scpi_result_t cmd_system_serial_q(scpi_t *context)
     }
     return SCPI_RES_OK;
 }
+
+
+enum unit_target {
+    UNIT_IU = 0,
+    UNIT_CU = 1,
+    UNIT_COUNT
+};
+
+static const scpi_choice_def_t unit_targets[] = {
+    {"IU", UNIT_IU},
+    {"CU", UNIT_CU},
+    SCPI_CHOICE_LIST_END
+};
+
+/* ========================================================================= */
+/* 1. ФУНКЦИИ УПАКОВКИ И РАСПАКОВКИ В ДВА 32-БИТНЫХ СЛОВА                    */
+/* ========================================================================= */
+
+// Упаковка 5 полей в два 32-битных слова
+static void pack_hw_to_words(uint16_t ccc, uint8_t a, uint8_t mm, 
+                             uint8_t dd, uint8_t ee, 
+                             uint32_t *w1, uint32_t *w2)
+{
+    // Слово 1: ccc (биты 16..31) | a (биты 8..15) | mm (биты 0..7)
+    *w1 = (((uint32_t)ccc & 0xFFFF) << 16) |
+          (((uint32_t)a   & 0xFF)   << 8)  |
+          (((uint32_t)mm  & 0xFF));
+
+    // Слово 2: dd (биты 8..15) | ee (биты 0..7)
+    *w2 = (((uint32_t)dd  & 0xFF)   << 8)  |
+          (((uint32_t)ee  & 0xFF));
+}
+
+// Распаковка двух 32-битных слов обратно в 5 полей
+static void unpack_words_to_hw(uint32_t w1, uint32_t w2, 
+                               uint16_t *ccc, uint8_t *a, uint8_t *mm, 
+                               uint8_t *dd, uint8_t *ee)
+{
+    *ccc = (uint16_t)((w1 >> 16) & 0xFFFF);
+    *a   = (uint8_t)((w1 >> 8)   & 0xFF);
+    *mm  = (uint8_t)(w1          & 0xFF);
+
+    *dd  = (uint8_t)((w2 >> 8)   & 0xFF);
+    *ee  = (uint8_t)(w2          & 0xFF);
+}
+
+/* ========================================================================= */
+/* 2. СТРОГИЙ ПАРСИНГ И ВАЛИДАЦИЯ СТРОКИ: ccc.a.mm.dd.ee                     */
+/* ========================================================================= */
+
+static bool parse_hw_string(const char *str, uint16_t *ccc, uint8_t *a, 
+                            uint8_t *mm, uint8_t *dd, uint8_t *ee)
+{
+    unsigned int v_ccc, v_a, v_mm, v_dd, v_ee;
+    char trailing;
+
+    // Считываем ровно 5 чисел через точку. %c проверяет, что нет мусора в конце
+    int count = sscanf(str, "%u.%u.%u.%u.%u %c", &v_ccc, &v_a, &v_mm, &v_dd, &v_ee, &trailing);
+    if (count != 5) {
+        return false;
+    }
+
+    // Проверка физических диапазонов по ТЗ:
+    // ccc (0-999), a (0-9), mm (0-99), dd (0-99), ee (0-99)
+    if (v_ccc > 999 || v_a > 9 || v_mm > 99 || v_dd > 99 || v_ee > 99) {
+        return false;
+    }
+
+    *ccc = (uint16_t)v_ccc;
+    *a   = (uint8_t)v_a;
+    *mm  = (uint8_t)v_mm;
+    *dd  = (uint8_t)v_dd;
+    *ee  = (uint8_t)v_ee;
+
+    return true;
+}
+
+/* ========================================================================= */
+/* 3. КОЛБЭК ЗАПИСИ (SET): SYSTem:HARDware <IU|CU>, <hw_string>              */
+/* ========================================================================= */
+
+scpi_result_t cmd_system_hardware(scpi_t *context)
+{
+    int32_t unit;
+    const char *str_ptr;
+    char raw_str[32];
+    size_t len;
+    uint16_t ccc;
+    uint8_t a, mm, dd, ee;
+    uint32_t word1, word2;
+    int ret1, ret2;
+
+    // 1. Считываем целевой узел (IU или CU)
+    if (!SCPI_ParamChoice(context, unit_targets, &unit, TRUE)) {
+        return SCPI_RES_ERR;
+    }
+
+    // 2. Считываем строковый параметр версии (например: "001.0.12.01.02")
+    if (!SCPI_ParamCharacters(context, &str_ptr, &len, TRUE)) {
+        return SCPI_RES_ERR;
+    }
+    
+        // Проверяем, чтобы строка влезла в наш временный буфер для sscanf
+    if (len >= sizeof(raw_str)) {
+        SCPI_ErrorPush(context, SCPI_ERROR_ILLEGAL_PARAMETER_VALUE);
+        return SCPI_RES_ERR;
+    }
+
+    // Копируем и закрываем строку нулем (\0) для безопасной работы sscanf
+    memcpy(raw_str, str_ptr, len);
+    raw_str[len] = '\0';
+
+    // 3. Парсинг и валидация 5 сегментов строки
+    if (!parse_hw_string(raw_str, &ccc, &a, &mm, &dd, &ee)) 
+    {
+        SCPI_ErrorPush(context, SCPI_ERROR_ILLEGAL_PARAMETER_VALUE); // Ошибка -224
+        return SCPI_RES_ERR;
+    }
+
+    // 4. Упаковываем проверенные значения в два 32-битных слова
+    pack_hw_to_words(ccc, a, mm, dd, ee, &word1, &word2);
+
+    // 5. Запись через ваш SERVER_CH_SET (синхронно или асинхронно)
+    if (unit == UNIT_IU) 
+    {
+        SERVER_CH_SET_ASYC(SETTING_IU_HW_ID, word1);
+        k_sem_reset(&eeprom_done_sem);
+            
+        SERVER_CH_SET_SYC(SETTING_IU_HW_VER, (uint32_t)word2,&eeprom_done_sem, &eeprom_resp_code);
+        
+        if (false 
+            || k_sem_take(&eeprom_done_sem, K_MSEC(300)) != 0
+            || eeprom_resp_code != 0
+        ) 
+        {
+            SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+            return SCPI_RES_ERR; 
+        }
+    } 
+    else 
+    {
+        SERVER_CH_SET_ASYC(SETTING_CU_HW_ID, word1);
+        k_sem_reset(&eeprom_done_sem);
+            
+        SERVER_CH_SET_SYC(SETTING_CU_HW_VER, (uint32_t)word2,&eeprom_done_sem, &eeprom_resp_code);
+        
+        if (false 
+            || k_sem_take(&eeprom_done_sem, K_MSEC(300)) != 0
+            || eeprom_resp_code != 0
+        ) 
+        {
+            SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
+            return SCPI_RES_ERR; 
+        }
+    }
+
+    return SCPI_RES_OK;
+}
+
+/* ========================================================================= */
+/* 4. КОЛБЭК ЧТЕНИЯ (GET): SYSTem:HARDware? [<IU|CU>]                         */
+/* ========================================================================= */
+
+// Вспомогательное чтение двух слов по шине и сборка строки
+static int read_hw_string_from_bus(int unit, char *out_str, size_t max_len)
+{
+    uint32_t w1 = 0, w2 = 0;    
+
+    if (unit == UNIT_IU) 
+    {
+        SYSTEM_BUS_GET(SETTING_IU_HW_ID, &w1);
+        SYSTEM_BUS_GET(SETTING_IU_HW_VER, &w2);
+    } 
+    else 
+    {
+        SYSTEM_BUS_GET(SETTING_CU_HW_ID, &w1);
+        SYSTEM_BUS_GET(SETTING_CU_HW_VER, &w2);
+    }
+    
+
+    uint16_t ccc;
+    uint8_t a, mm, dd, ee;
+
+    // Распаковываем слова в 5 чисел
+    unpack_words_to_hw(w1, w2, &ccc, &a, &mm, &dd, &ee);
+
+    // Форматируем обратно в каноническую строку вида "001.0.12.01.02"
+    snprintf(out_str, max_len, "%03u.%u.%02u.%02u.%02u", ccc, a, mm, dd, ee);
+    return 0;
+}
+
+scpi_result_t cmd_system_hardware_q(scpi_t *context)
+{
+    int32_t unit;
+    char hw_str[24];
+
+    // 1. Запрос конкретного узла: SYST:HARD? CU
+    if (SCPI_ParamChoice(context, unit_targets, &unit, FALSE)) 
+    {
+        if (read_hw_string_from_bus(unit, hw_str, sizeof(hw_str)) != 0) 
+        {
+            SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
+            return SCPI_RES_ERR;
+        }
+        SCPI_ResultText(context, hw_str);
+    } 
+    // 2. Запрос обоих узлов разом: SYST:HARD? -> "001.0.12.01.02","002.1.05.00.01"
+    else 
+    {
+        for (int i = 0; i < UNIT_COUNT; i++) 
+        {
+            if (read_hw_string_from_bus(i, hw_str, sizeof(hw_str)) != 0) 
+            {
+                SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
+                return SCPI_RES_ERR;
+            }
+            SCPI_ResultText(context, hw_str);
+        }
+    }
+
+    return SCPI_RES_OK;
+}

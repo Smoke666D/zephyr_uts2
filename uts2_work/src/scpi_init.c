@@ -132,6 +132,8 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SYSTem:UID?",                 .callback = cmd_system_uid_q        },
     { .pattern = "SYSTem:SERial",               .callback = cmd_system_serial,      },
     { .pattern = "SYSTem:SERial?",              .callback = cmd_system_serial_q,    },
+    { .pattern = "SYSTem:HARDware[:VERSion]",  .callback = cmd_system_hardware, },
+    { .pattern = "SYSTem:HARDware[:VERSion]?", .callback = cmd_system_hardware_q, },
     SCPI_CMD_LIST_END
 };
 
@@ -276,7 +278,7 @@ static void _scpi_server_thread(void *_p1, void *_p2, void *_p3)
     uart_irq_callback_user_data_set(uart_dev, _uart_cb, NULL);
     uart_irq_rx_enable(uart_dev);
     
-    uint8_t buffer[128];
+    uint8_t buffer[SCPI_INPUT_BUF_LEN];
 
     // Цикл приема и обработки входящих данных
     while (1) 

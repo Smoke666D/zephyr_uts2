@@ -206,12 +206,7 @@ static void _eeprom_work_poll_handler(struct k_work *_work)
 
         while (k_msgq_get(entry->rx_queue, &req, K_NO_WAIT) == 0) 
         {
-            if (req.sync != NULL && entry->sync_count < MAX_PENDING_SYNCS) 
-            {                
-                entry->pending_syncs[entry->sync_count].sync = req.sync;
-                entry->pending_syncs[entry->sync_count].response = req.response;
-                entry->sync_count++;
-            }
+            
             switch(req.id)
             {
                 case SETTING_IU_SN:
@@ -236,20 +231,33 @@ static void _eeprom_work_poll_handler(struct k_work *_work)
 
         if (memcmp(&entry->staging_cache, &entry->disk_cache, sizeof(eeprom_disk_payload_t)) != 0) 
         {
+            if (req.sync != NULL && entry->sync_count < MAX_PENDING_SYNCS) 
+            {                
+                entry->pending_syncs[entry->sync_count].sync = req.sync;
+                entry->pending_syncs[entry->sync_count].response = req.response;
+                entry->sync_count++;
+            }
             app_worker_reschedule_submit(&entry->debounce_task, 
                                          K_MSEC(EEPROM_DEBOUNCE_DELAY_MS), 
                                          COMMON_WORKER);
         }
         else 
         {
-            _notify_all_pending(entry, 0);
+            if (req.sync != NULL)
+            {
+                if (req.response != NULL)
+                {
+                    *req.response = 0;
+                }
+                k_sem_give(req.sync);                
+            }
         }
     }
 
     eeprom_poll_events[0].state = K_POLL_STATE_NOT_READY;
     eeprom_poll_events[1].state = K_POLL_STATE_NOT_READY;
   
-    app_worker_poll_submit(&eeprom_task, eeprom_poll_events, COMMON_WORKER);
+    app_worker_poll_submit(&eeprom_task, eeprom_poll_events,ARRAY_SIZE(eeprom_poll_events), COMMON_WORKER);
 }
 
 /**
@@ -260,17 +268,6 @@ static void _eeprom_debounce_handler(struct k_work *_work)
     struct k_work_delayable *dwork = k_work_delayable_from_work(_work);
     eeprom_entry_t *entry = CONTAINER_OF(dwork, eeprom_entry_t, debounce_task);
 
-    if (entry->is_busy) 
-    {
-        app_worker_reschedule_submit(&entry->debounce_task, K_MSEC(20), COMMON_WORKER);
-        return;
-    }
-
-    _start_write_transaction(entry);
-}
-
-static void _start_write_transaction(eeprom_entry_t *entry)
-{
     entry->staging_cache.crc16 = _calc_disk_crc(&entry->staging_cache);
     entry->disk_cache = entry->staging_cache;
     
@@ -280,6 +277,7 @@ static void _start_write_transaction(eeprom_entry_t *entry)
 
     _write_page_step(entry);
 }
+
 
 static void _write_page_step(eeprom_entry_t *entry)
 {
@@ -316,13 +314,16 @@ static void _write_page_step(eeprom_entry_t *entry)
 
         _notify_all_pending(entry, 0);
 
-        
-        if (zbus_chan_claim(entry->chan, K_FOREVER) == 0)
-        {
-            eeprom_device_msg_t *chan_msg = (eeprom_device_msg_t *)zbus_chan_msg(entry->chan);
-            chan_msg->serial_number = entry->disk_cache.serial_number;
-            zbus_chan_finish(entry->chan);
-        }
+        eeprom_device_msg_t msg;
+        msg.serial_number = entry->disk_cache.serial_number;
+        msg.product_code = entry->disk_cache.product_code;
+        msg.device_class = entry->disk_cache.device_class;
+        msg.device_num = entry->disk_cache.device_num;
+        msg.device_major_ver = entry->disk_cache.device_major_ver;
+        msg.device_minor_ver = entry->disk_cache.device_minor_ver;
+        msg.usage_counter = entry->disk_cache.usage_counter;
+        zbus_chan_pub(entry->chan, &msg, K_MSEC(2));    
+                
     }
 }
 
@@ -414,7 +415,7 @@ static int _eeprom_mgr_init(void)
    
 
     k_work_poll_init(&eeprom_task, _eeprom_work_poll_handler);
-    app_worker_poll_submit(&eeprom_task, eeprom_poll_events, COMMON_WORKER);
+    app_worker_poll_submit(&eeprom_task, eeprom_poll_events, ARRAY_SIZE(eeprom_poll_events),COMMON_WORKER);
 
     LOG_INF("EEPROM Manager initialized with k_work_poll & Sync support.");
     return 0;
