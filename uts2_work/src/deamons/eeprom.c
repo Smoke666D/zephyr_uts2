@@ -2,10 +2,13 @@
  *  @file       eeprom_mgr.c
  *  @headerfile eeprom_mgr.h
  *
- *  @brief      Менеджер энергонезависимой памяти EEPROM (Microchip 24AA025UID)
- *              с выровненными индексами Zbus, корректной нарезкой страниц и расчетом CRC16.
+ *  @brief      Менеджер энергонезависимой памяти EEPROM (Microchip 24AA025UID).
+ *              Полностью автономный модуль на статическом потоке без SYS_INIT.
  */
 
+/***************************************************************************************************
+ *                                          INCLUDED FILES
+ **************************************************************************************************/
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -17,42 +20,39 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/init.h>
 
 #include "system_bus_model.h"
-#include "app_worker.h"
 #include "system_define.h"
 
 LOG_MODULE_REGISTER(eeprom_mgr, LOG_LEVEL_INF);
 
-#define EEPROM_UID_OFFSET         0xFC
-#define EEPROM_PAGE_SIZE          16U    // Аппаратный размер страницы 24AA025UID
-#define EEPROM_DEBOUNCE_DELAY_MS  50U    // Окно накопления изменений перед сбросом на чип
-#define EEPROM_PAGE_WRITE_TIME_MS 10U    // Аппаратное время цикла записи t_WC (5-10 мс)
-#define MAX_PENDING_SYNCS         8      // Очередь ожидающих квитирования
+/***************************************************************************************************
+ *                                           DEFINITIONS
+ **************************************************************************************************/
+#define EEPROM_UID_OFFSET          0xFC
+#define EEPROM_PAGE_SIZE           16U    // Аппаратная страница 24AA025UID
+#define EEPROM_DEBOUNCE_DELAY_MS   50U    // Окно агрегации изменений перед сбросом на чип
+#define EEPROM_PAGE_WRITE_TIME_MS  10U    // Время прожига t_WC (5-10 мс)
+#define MAX_PENDING_SYNCS          8
 
-#define EEPROM_PAYLOAD_DATA_SIZE  (sizeof(eeprom_disk_payload_t) - sizeof(uint16_t))
+#define EEPROM_PAYLOAD_DATA_SIZE   (sizeof(eeprom_disk_payload_t) - sizeof(uint16_t))
+#define EEPROM_THREAD_STACK_SIZE   1536
+#define EEPROM_THREAD_PRIORITY     5      // Запускается раньше прикладных потоков
 
 /***************************************************************************************************
  *                                          PRIVATE TYPES
  **************************************************************************************************/
 
-/**
- *  @brief Сообщение Zbus: ровно 5 полей по 32 бита, строго совпадающих с индексами 0, 1, 2, 3, 4!
- */
 struct __packed eeprom_device_msg 
 {
-    uint32_t factory_uid;   // Индекс 0: SETTING_IU_ID / SETTING_CU_ID
-    uint32_t serial_number; // Индекс 1: SETTING_IU_SN / SETTING_CU_SN
-    uint32_t hw_id;         // Индекс 2: SETTING_IU_HW_ID / SETTING_CU_HW_ID (Слово 1 HW)
-    uint32_t hw_ver;        // Индекс 3: SETTING_IU_HW_VER / SETTING_CU_HW_VER (Слово 2 HW)
-    uint32_t user_data;     // Индекс 4: SETTING_IU_USER_DATA / SETTING_CU_USER_DATA
+    uint32_t factory_uid;   // 0: SETTING_IU_ID / SETTING_CU_ID
+    uint32_t serial_number; // 1: SETTING_IU_SN / SETTING_CU_SN
+    uint32_t hw_id;         // 2: SETTING_IU_HW_ID / SETTING_CU_HW_ID
+    uint32_t hw_ver;        // 3: SETTING_IU_HW_VER / SETTING_CU_HW_VER
+    uint32_t user_data;     // 4: SETTING_IU_USER_DATA / SETTING_CU_USER_DATA
 };
 typedef struct eeprom_device_msg eeprom_device_msg_t;
 
-/**
- *  @brief Структура на диске EEPROM: 16 байт данных (1 страница) + 2 байта CRC16 = 18 байт
- */
 struct __packed eeprom_disk_payload 
 {
     uint32_t serial_number; // 4 байта (offset 0..3)
@@ -76,34 +76,34 @@ typedef struct eeprom_entry
     const char                *name;
     uint32_t                   error_bit;
     uint32_t                   set_crc_error_bit;
-    struct k_work_delayable    write_task; 
     
     eeprom_disk_payload_t      disk_cache;
     eeprom_disk_payload_t      staging_cache;
 
     pending_sync_t             pending_syncs[MAX_PENDING_SYNCS];
     uint8_t                    sync_count;
-    struct k_mutex             lock;
 } eeprom_entry_t;
 
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
-static void     _eeprom_work_poll_handler(struct k_work *_work);
-static void     _eeprom_write_flush_handler(struct k_work *_work);
-static int      _eeprom_write_pages_sync(const struct device *dev, off_t offset, const void *data, size_t len);
+static void     _eeprom_thread_entry(void *p1, void *p2, void *p3);
+static int      _eeprom_write_pages(const struct device *dev, off_t offset, const void *data, size_t len);
 static uint16_t _calc_disk_crc(const eeprom_disk_payload_t *_disk_data);
-static void     _notify_pending_locked(eeprom_entry_t *_entry, int err);
-static void     _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid_out);
-static int      _eeprom_mgr_init(void);
+static void     _notify_pending(eeprom_entry_t *_entry, int err);
+static bool     _drain_queue(eeprom_entry_t *entry);
+static void     _flush_chip(eeprom_entry_t *entry);
+static void     _read_and_publish_eeprom_chip(eeprom_entry_t *_entry);
 
 /***************************************************************************************************
- *                                           PRIVATE DATA
+ *                                   STATIC DECLARATIONS VIA MACROS
  **************************************************************************************************/
 
+/* Очереди сообщений */
 K_MSGQ_DEFINE(eeprom1_rx_queue, sizeof(server_request), 10, 4);
 K_MSGQ_DEFINE(eeprom2_rx_queue, sizeof(server_request), 10, 4);
 
+/* Каналы Zbus */
 ZBUS_CHAN_DEFINE(eeprom1_chan,
                  eeprom_device_msg_t,
                  NULL, 
@@ -120,6 +120,7 @@ ZBUS_CHAN_DEFINE(eeprom2_chan,
                  {0}
 );
 
+/* Дескрипторы микросхем */
 static eeprom_entry_t eeprom_entries[] = {
     {
         .dev                = DEVICE_DT_GET(DT_NODELABEL(eeprom_1)),
@@ -141,8 +142,20 @@ static eeprom_entry_t eeprom_entries[] = {
     }
 };
 
-static struct k_work_poll  eeprom_task;
-static struct k_poll_event eeprom_poll_events[2];
+/* События поллинга очередей */
+static struct k_poll_event eeprom_poll_events[] = {
+    K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_MSGQ_DATA_AVAILABLE, K_POLL_MODE_NOTIFY_ONLY, &eeprom1_rx_queue),
+    K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_MSGQ_DATA_AVAILABLE, K_POLL_MODE_NOTIFY_ONLY, &eeprom2_rx_queue),
+};
+
+/* Автономный поток EEPROM */
+K_THREAD_DEFINE(eeprom_thread_id, 
+                EEPROM_THREAD_STACK_SIZE,
+                _eeprom_thread_entry, 
+                NULL, NULL, NULL,
+                EEPROM_THREAD_PRIORITY, 
+                0, 
+                0);
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
@@ -153,7 +166,7 @@ static inline uint16_t _calc_disk_crc(const eeprom_disk_payload_t *_disk_data)
     return crc16_itu_t(0xFFFF, (const uint8_t *)_disk_data, EEPROM_PAYLOAD_DATA_SIZE);
 }
 
-static void _notify_pending_locked(eeprom_entry_t *_entry, int err)
+static void _notify_pending(eeprom_entry_t *_entry, int err)
 {
     for (uint8_t i = 0; i < _entry->sync_count; i++) 
     {
@@ -169,13 +182,7 @@ static void _notify_pending_locked(eeprom_entry_t *_entry, int err)
     _entry->sync_count = 0;
 }
 
-/**
- *  @brief  Постраничная запись с соблюдением аппаратных границ 16 байт и пауз t_WC
- */
-static int _eeprom_write_pages_sync(const struct device *dev, 
-                                    off_t offset, 
-                                    const void *data, 
-                                    size_t len)
+static int _eeprom_write_pages(const struct device *dev, off_t offset, const void *data, size_t len)
 {
     const uint8_t *src = (const uint8_t *)data;
     size_t remaining = len;
@@ -189,7 +196,7 @@ static int _eeprom_write_pages_sync(const struct device *dev,
         int err = eeprom_write(dev, cur_offset, src, chunk);
         if (err != 0) 
         {
-            LOG_ERR("eeprom_write failed (err %d) at offset 0x%02X", err, (uint32_t)cur_offset);
+            LOG_ERR("eeprom_write error %d at offset 0x%02X", err, (uint32_t)cur_offset);
             return err;
         }
 
@@ -207,115 +214,80 @@ static int _eeprom_write_pages_sync(const struct device *dev,
     return 0;
 }
 
-/**
- *  @brief Обработчик входящих сообщений (Запись в staging_cache)
- */
-static void _eeprom_work_poll_handler(struct k_work *_work)
+static bool _drain_queue(eeprom_entry_t *entry)
 {
-    ARG_UNUSED(_work);
+    server_request req;
+    bool has_data = false;
 
-    for (size_t i = 0; i < ARRAY_SIZE(eeprom_entries); i++) 
+    while (k_msgq_get(entry->rx_queue, &req, K_NO_WAIT) == 0) 
     {
-        eeprom_entry_t *entry = &eeprom_entries[i];
-        server_request req;
-        bool has_new_data = false;
+        has_data = true;
 
-        k_mutex_lock(&entry->lock, K_FOREVER);
-
-        while (k_msgq_get(entry->rx_queue, &req, K_NO_WAIT) == 0) 
+        switch (req.id)
         {
-            has_new_data = true;
+            case SETTING_IU_SN:
+            case SETTING_CU_SN:            
+                entry->staging_cache.serial_number = req.value.sd_uint;
+                LOG_INF("%s: new SN = %u", entry->name, req.value.sd_uint);
+                break;
 
-            // Теперь каждое поле попадает строго в свой адрес!
-            switch (req.id)
-            {
-                case SETTING_IU_SN:
-                case SETTING_CU_SN:            
-                    entry->staging_cache.serial_number = req.value.sd_uint;
-                    LOG_INF("%s: new SN = %u", entry->name, req.value.sd_uint);
-                    break;
+            case SETTING_IU_HW_ID:
+            case SETTING_CU_HW_ID:             
+                entry->staging_cache.hw_id = req.value.sd_uint;
+                LOG_INF("%s: new HW_ID = 0x%08X", entry->name, req.value.sd_uint);
+                break;
 
-                case SETTING_IU_HW_ID:
-                case SETTING_CU_HW_ID:             
-                    entry->staging_cache.hw_id = req.value.sd_uint;
-                    LOG_INF("%s: new HW_ID = 0x%08X", entry->name, req.value.sd_uint);
-                    break;
+            case SETTING_IU_HW_VER:
+            case SETTING_CU_HW_VER:            
+                entry->staging_cache.hw_ver = req.value.sd_uint;
+                LOG_INF("%s: new HW_VER = 0x%08X", entry->name, req.value.sd_uint);
+                break;
 
-                case SETTING_IU_HW_VER:
-                case SETTING_CU_HW_VER:            
-                    entry->staging_cache.hw_ver = req.value.sd_uint;
-                    LOG_INF("%s: new HW_VER = 0x%08X", entry->name, req.value.sd_uint);
-                    break;
+            case SETTING_IU_USER_DATA:
+            case SETTING_CU_USER_DATA:            
+                entry->staging_cache.user_data = req.value.sd_uint;
+                LOG_INF("%s: new USER_DATA = %u", entry->name, req.value.sd_uint);
+                break;
 
-                case SETTING_IU_USER_DATA:
-                case SETTING_CU_USER_DATA:            
-                    entry->staging_cache.user_data = req.value.sd_uint;
-                    LOG_INF("%s: new USER_DATA = %u", entry->name, req.value.sd_uint);
-                    break;
-
-                default:
-                    LOG_WRN("%s: unknown setting id %d", entry->name, req.id);
-                    break;
-            }
-
-            if (req.sync != NULL) 
-            {
-                if (entry->sync_count < MAX_PENDING_SYNCS) 
-                {
-                    entry->pending_syncs[entry->sync_count].sync = req.sync;
-                    entry->pending_syncs[entry->sync_count].response = req.response;
-                    entry->sync_count++;
-                } 
-                else 
-                {
-                    if (req.response != NULL) {
-                        *req.response = (uint8_t)-ENOMEM;
-                    }
-                    k_sem_give(req.sync);
-                }
-            }
+            default:
+                break;
         }
 
-        if (has_new_data) 
+        if (req.sync != NULL) 
         {
-            if (memcmp(&entry->staging_cache, &entry->disk_cache, sizeof(eeprom_disk_payload_t)) != 0) 
+            if (entry->sync_count < MAX_PENDING_SYNCS) 
             {
-                app_worker_reschedule_submit(&entry->write_task, 
-                                             K_MSEC(EEPROM_DEBOUNCE_DELAY_MS), 
-                                             COMMON_WORKER);
+                entry->pending_syncs[entry->sync_count].sync = req.sync;
+                entry->pending_syncs[entry->sync_count].response = req.response;
+                entry->sync_count++;
             } 
             else 
             {
-                _notify_pending_locked(entry, 0);
+                if (req.response != NULL) {
+                    *req.response = (uint8_t)-ENOMEM;
+                }
+                k_sem_give(req.sync);
             }
         }
-
-        k_mutex_unlock(&entry->lock);
     }
 
-    eeprom_poll_events[0].state = K_POLL_STATE_NOT_READY;
-    eeprom_poll_events[1].state = K_POLL_STATE_NOT_READY;
-    app_worker_poll_submit(&eeprom_task, eeprom_poll_events, ARRAY_SIZE(eeprom_poll_events), COMMON_WORKER);
+    return has_data;
 }
 
-/**
- *  @brief Запись и контрольное чтение с проверкой CRC
- */
-static void _eeprom_write_flush_handler(struct k_work *_work)
+static void _flush_chip(eeprom_entry_t *entry)
 {
-    struct k_work_delayable *dwork = k_work_delayable_from_work(_work);
-    eeprom_entry_t *entry = CONTAINER_OF(dwork, eeprom_entry_t, write_task);
+    if (memcmp(&entry->staging_cache, &entry->disk_cache, sizeof(eeprom_disk_payload_t)) == 0) 
+    {
+        _notify_pending(entry, 0);
+        return;
+    }
 
-    k_mutex_lock(&entry->lock, K_FOREVER);
-
-    // 1. Вычисляем CRC16 для всех 16 байт данных
     entry->staging_cache.crc16 = _calc_disk_crc(&entry->staging_cache);
     entry->disk_cache = entry->staging_cache;
 
-    LOG_INF("Writing %s EEPROM (18 bytes), CRC: 0x%04X", entry->name, entry->disk_cache.crc16);
+    LOG_INF("Writing %s EEPROM (18 bytes), calculated CRC: 0x%04X", entry->name, entry->disk_cache.crc16);
 
-    // 2. Пишем 18 байт (страница 0: 16 байт -> пауза 10 мс -> страница 1: 2 байта CRC)
-    int err = _eeprom_write_pages_sync(entry->dev, 0, &entry->disk_cache, sizeof(eeprom_disk_payload_t));
+    int err = _eeprom_write_pages(entry->dev, 0, &entry->disk_cache, sizeof(eeprom_disk_payload_t));
     if (err != 0) 
     {
         LOG_ERR("Failed to write %s EEPROM (err %d)", entry->name, err);
@@ -323,7 +295,6 @@ static void _eeprom_write_flush_handler(struct k_work *_work)
     } 
     else 
     {
-        // 3. Контрольная проверка вычиткой (Readback verification)
         eeprom_disk_payload_t verify_buf;
         int read_err = eeprom_read(entry->dev, 0, &verify_buf, sizeof(verify_buf));
 
@@ -334,9 +305,8 @@ static void _eeprom_write_flush_handler(struct k_work *_work)
             SERVER_CH_CLEAR_BIT(EEPROM_ERROR_CH, entry->error_bit);
             SERVER_CH_CLEAR_BIT(EEPROM_EVENT_CH, entry->set_crc_error_bit);
 
-            // Публикуем в Zbus строго по тем же полям 0, 1, 2, 3, 4!
             eeprom_device_msg_t msg;
-            msg.factory_uid   = 0; // заводской UID не перезаписывается
+            msg.factory_uid   = 0;
             eeprom_read(entry->dev, EEPROM_UID_OFFSET, &msg.factory_uid, sizeof(uint32_t));
 
             msg.serial_number = verify_buf.serial_number;
@@ -355,19 +325,16 @@ static void _eeprom_write_flush_handler(struct k_work *_work)
         }
     }
 
-    _notify_pending_locked(entry, err);
-
-    k_mutex_unlock(&entry->lock);
+    _notify_pending(entry, err);
 }
 
-static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid_out)
+static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry)
 {
     eeprom_device_msg_t msg = {0};
 
     SERVER_CH_CLEAR_BIT(EEPROM_ERROR_CH, _entry->error_bit);
     SERVER_CH_CLEAR_BIT(EEPROM_EVENT_CH, _entry->set_crc_error_bit);
 
-    // Чтение аппаратного UID (0xFC)
     int err = eeprom_read(_entry->dev, EEPROM_UID_OFFSET, &msg.factory_uid, sizeof(uint32_t));
     if ((err != 0) || (msg.factory_uid == 0x00)) 
     {
@@ -376,10 +343,6 @@ static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid
     }
     else 
     {   
-        if (_uid_out != NULL) {
-            *_uid_out = msg.factory_uid;
-        }
-    
         eeprom_disk_payload_t disk_data;
         int read_err = eeprom_read(_entry->dev, 0x00, &disk_data, sizeof(disk_data));
         if (read_err == 0) 
@@ -414,38 +377,51 @@ static void _read_and_publish_eeprom_chip(eeprom_entry_t *_entry, uint32_t *_uid
     }
 }
 
-static int _eeprom_mgr_init(void)
+/**
+ *  @brief  Точка входа потока: инициализация при старте и бесконечный рабочий цикл
+ */
+static void _eeprom_thread_entry(void *p1, void *p2, void *p3)
 {
-    uint32_t uids[ARRAY_SIZE(eeprom_entries)] = {0};
+    ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
 
+    LOG_INF("EEPROM Manager Thread started. Reading chips...");
+
+    // 1. ПЕРВОНАЧАЛЬНОЕ ЧТЕНИЕ ЧИПОВ ПРИ СТАРТЕ ПОТОКА
     for (size_t i = 0; i < ARRAY_SIZE(eeprom_entries); i++) 
     {
-        eeprom_entry_t *entry = &eeprom_entries[i];
-
-        k_mutex_init(&entry->lock);
-        k_work_init_delayable(&entry->write_task, _eeprom_write_flush_handler);
-        
-        _read_and_publish_eeprom_chip(entry, &uids[i]);
+        _read_and_publish_eeprom_chip(&eeprom_entries[i]);
     }
 
-    k_poll_event_init(&eeprom_poll_events[0],
-                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE,
-                      K_POLL_MODE_NOTIFY_ONLY,
-                      eeprom_entries[0].rx_queue);
+    // 2. БЕСКОНЕЧНЫЙ ЦИКЛ ОБРАБОТКИ
+    while (1) 
+    {
+        int rc = k_poll(eeprom_poll_events, ARRAY_SIZE(eeprom_poll_events), K_FOREVER);
+        if (rc != 0) {
+            continue;
+        }
 
-    k_poll_event_init(&eeprom_poll_events[1],
-                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE,
-                      K_POLL_MODE_NOTIFY_ONLY,
-                      eeprom_entries[1].rx_queue);
+        eeprom_poll_events[0].state = K_POLL_STATE_NOT_READY;
+        eeprom_poll_events[1].state = K_POLL_STATE_NOT_READY;
 
-    k_work_poll_init(&eeprom_task, _eeprom_work_poll_handler);
-    app_worker_poll_submit(&eeprom_task, eeprom_poll_events, ARRAY_SIZE(eeprom_poll_events), COMMON_WORKER);
+        bool modified_iu = _drain_queue(&eeprom_entries[0]);
+        bool modified_cu = _drain_queue(&eeprom_entries[1]);
 
-    LOG_INF("EEPROM Manager initialized reliably.");
-    return 0;
+        if (modified_iu || modified_cu) 
+        {
+            k_msleep(EEPROM_DEBOUNCE_DELAY_MS);
+
+            modified_iu |= _drain_queue(&eeprom_entries[0]);
+            modified_cu |= _drain_queue(&eeprom_entries[1]);
+
+            if (modified_iu) {
+                _flush_chip(&eeprom_entries[0]);
+            }
+            if (modified_cu) {
+                _flush_chip(&eeprom_entries[1]);
+            }
+        }
+    }
 }
-
-SYS_INIT(_eeprom_mgr_init, EEPROM_DEAMON_INIT_LEVEL, EEPROM_DEAMON_INIT_PRIOR);
 
 /***************************************************************************************************
  *                 ПАРАМЕТРЫ МАРШРУТИЗАЦИИ (СТРОГО СОВПАДАЮТ С ИНДЕКСАМИ 0..4)
