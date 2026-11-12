@@ -1,12 +1,14 @@
 import asyncio
 import os
 import time
-import serial
 from nicegui import ui
+import serial
+from serial.tools import list_ports
 
 from logger import start_logger, stop_logger
 from oscilloscope import build_oscilloscope_panel, refresh_logs_ui
 from ports_panel import build_ports_panel, get_available_ports
+from system_panel import build_system_panel, read_all_uids_async
 
 # Поддерживаемые каналы подсистемы OUTPut:POWer
 ENABLE_LINES = [
@@ -46,71 +48,21 @@ raw_logs_dict = {}
 def build_dashboard(ports_refs, ui_labels):
     tel_ref = ports_refs['tel']
     shell_ref = ports_refs['shell']
-    system_callbacks = {}
 
     with ui.column().classes('w-full gap-2') as container:
 
         # ==========================================
         # 1. БЛОК УПРАВЛЕНИЯ ПОРТАМИ (ВЫНЕСЕН В ports_panel.py)
         # ==========================================
-        async def on_scpi_ready():
-            if 'read_mu_uid' in system_callbacks:
-                await system_callbacks['read_mu_uid']()
-
-        build_ports_panel(ports_refs, on_device_connected=on_scpi_ready)
+        build_ports_panel(
+            ports_refs,
+            on_device_connected=lambda: read_all_uids_async(shell_ref),
+        )
 
         # ==========================================
-        # 2. КАРТОЧКА: СИСТЕМА (SYSTem:UID:MU?)
+        # 2. КАРТОЧКА: СИСТЕМА (ВЫНЕСЕНА В system_panel.py)
         # ==========================================
-        async def read_mu_uid_async():
-            curr_shell = shell_ref.get('ser')
-            if not curr_shell or not curr_shell.is_open:
-                ui.notify('SCPI порт закрыт! Сначала подключитесь к стенду.', type='warning')
-                return
-
-            curr_shell.reset_input_buffer()
-            curr_shell.write(b'SYST:UID:MU?\r\n')
-            print('[SCPI TX]: SYST:UID:MU?')
-
-            start_t = time.time()
-            accum = ""
-            while time.time() - start_t < 1.0:
-                if curr_shell.in_waiting > 0:
-                    accum += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
-                    lines = [l.strip() for l in accum.splitlines() if l.strip()]
-                    filtered = [l for l in lines if 'SYST:UID:MU?' not in l.upper()]
-                    if filtered:
-                        resp_uid = filtered[-1].replace('"', '').strip()
-                        uid_mu_input.set_value(resp_uid)
-                        ui.notify(f'UID МУ успешно прочитан: {resp_uid}', type='positive')
-                        return
-                await asyncio.sleep(0.04)
-
-            lines = [l.strip() for l in accum.splitlines() if l.strip()]
-            filtered = [l for l in lines if 'SYST:UID:MU?' not in l.upper()]
-            if filtered:
-                resp_uid = filtered[-1].replace('"', '').strip()
-                uid_mu_input.set_value(resp_uid)
-                ui.notify(f'UID МУ: {resp_uid}', type='positive')
-            else:
-                ui.notify('Таймаут ответа на SYST:UID:MU?', type='negative')
-
-        system_callbacks['read_mu_uid'] = read_mu_uid_async
-
-        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            ui.label('Система (SYSTem)').classes(
-                'text-sm font-bold text-yellow-300 text-center w-full mb-1.5 tracking-wide'
-            )
-            with ui.row().classes('w-full items-center justify-between gap-3 px-2'):
-                with ui.row().classes('items-center gap-2 flex-1'):
-                    ui.label('UID МУ:').classes('text-xs text-slate-300 font-semibold')
-                    uid_mu_input = ui.input(placeholder='0xXXXXXXXX-0xXXXXXXXX-0xXXXXXXXX').props(
-                        'dark outlined dense readonly input-class="font-mono text-emerald-400 font-bold text-xs"'
-                    ).classes('flex-1 bg-slate-900 rounded max-w-[380px]')
-
-                ui.button('Прочитать UID', on_click=read_mu_uid_async).classes(
-                    'bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs py-1.5 px-3 rounded shadow'
-                )
+        build_system_panel(ports_refs)
 
         # ==========================================
         # 3. УПРАВЛЕНИЕ ПИТАНИЕМ (SCPI OUTPut:POWer)
@@ -408,9 +360,16 @@ def build_dashboard(ports_refs, ui_labels):
                 'text-xs font-semibold text-slate-400 mt-1'
             )
             with ui.row().classes('w-full gap-1'):
-                for idx, name in enumerate(
-                    ['P3V3', 'P5V0', 'VIN', 'VDOUT1', 'P40V', 'USB', 'VDOUT2', 'VDOUT3']
-                ):
+                for idx, name in enumerate([
+                    'P3V3',
+                    'P5V0',
+                    'VIN',
+                    'VDOUT1',
+                    'P40V',
+                    'USB',
+                    'VDOUT2',
+                    'VDOUT3',
+                ]):
                     create_metric_card(name, f'env_{idx}', unit='В')
 
             ui.label('AO Channels (1-18)').classes(
@@ -445,19 +404,22 @@ def build_dashboard(ports_refs, ui_labels):
                         ui.notify(f'[{d_name}] Сброс энергии отправлен', type='info')
                     else:
                         ui.notify('SCPI порт закрыт!', type='warning')
+
                 return handler
 
             with ui.grid(columns=4).classes('w-full gap-1.5'):
                 for idx, sensor_name in enumerate(CURRENT_SENSOR_NAMES):
                     i = idx + 1
-                    with ui.card().classes('bg-slate-700 py-1.5 px-2.5 rounded flex flex-col justify-between'):
+                    with ui.card().classes(
+                        'bg-slate-700 py-1.5 px-2.5 rounded flex flex-col justify-between'
+                    ):
                         with ui.row().classes('w-full justify-between items-center mb-1'):
                             ui.label(sensor_name).classes(
                                 'text-[11px] text-yellow-300 font-bold leading-none truncate max-w-[170px]'
                             )
-                            ui.button('Сброс', on_click=make_energy_reset_handler(i, sensor_name)).classes(
-                                'bg-red-700 text-white text-[9px] py-0.5 px-1.5 rounded'
-                            )
+                            ui.button(
+                                'Сброс', on_click=make_energy_reset_handler(i, sensor_name)
+                            ).classes('bg-red-700 text-white text-[9px] py-0.5 px-1.5 rounded')
 
                         with ui.row().classes('w-full justify-between items-center mt-0.5'):
                             ui.label('U:').classes('text-[10px] text-slate-300 leading-none')
@@ -481,7 +443,9 @@ def build_dashboard(ports_refs, ui_labels):
                                 ui_labels[f'curr_e_{i}'] = ui.label('0.000000').classes(
                                     'text-xs font-mono text-amber-400 font-bold leading-none'
                                 )
-                                ui.label('Дж').classes('text-[10px] text-slate-400 leading-none')
+                                ui.label('Дж').classes(
+                                    'text-[10px] text-slate-400 leading-none'
+                                )
 
         # ==========================================
         # 9. ИНТЕРФЕЙСЫ LIN (1-4) (SCPI OUTPut:LINPulldown)
@@ -504,7 +468,10 @@ def build_dashboard(ports_refs, ui_labels):
                         curr_shell = shell_ref.get('ser')
                         if curr_shell and curr_shell.is_open:
                             curr_shell.write(cmd.encode('utf-8'))
-                            ui.notify(f'[{channel_name} PULL_DOWN] SCPI: {cmd.strip()}', type='info')
+                            ui.notify(
+                                f'[{channel_name} PULL_DOWN] SCPI: {cmd.strip()}',
+                                type='info',
+                            )
                         else:
                             ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -524,7 +491,8 @@ def build_dashboard(ports_refs, ui_labels):
                     'text-[10px] text-slate-400 mt-1 mb-0.5'
                 )
                 lin_log = ui.log(max_lines=20).classes(
-                    'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1 rounded'
+                    'w-full h-16 bg-slate-900 text-cyan-400 font-mono text-[11px] p-1'
+                    ' rounded'
                 )
                 lin_log.push(f'LIN{l_idx} готов...')
                 lin_logs_dict[l_idx] = lin_log
@@ -539,7 +507,9 @@ def build_dashboard(ports_refs, ui_labels):
                     def send_lin_msg(idx=l_idx, data_inp=lin_data_input, log=lin_log):
                         ldata = data_inp.value.strip()
                         if not ldata:
-                            ui.notify(f'LIN{idx}: Введите данные для отправки!', type='warning')
+                            ui.notify(
+                                f'LIN{idx}: Введите данные для отправки!', type='warning'
+                            )
                             return
 
                         cmd = f'lin_send {idx} {ldata}\r\n'
@@ -610,7 +580,8 @@ def build_dashboard(ports_refs, ui_labels):
                     'text-[10px] text-slate-400 mt-1 mb-0.5'
                 )
                 can_log = ui.log(max_lines=30).classes(
-                    'w-full h-20 bg-slate-900 text-green-400 font-mono text-[11px] p-1 rounded'
+                    'w-full h-20 bg-slate-900 text-green-400 font-mono text-[11px] p-1'
+                    ' rounded'
                 )
                 can_log.push(f'CAN{can_idx} готов к работе...')
                 can_logs_dict[can_idx] = can_log
@@ -666,19 +637,21 @@ def build_dashboard(ports_refs, ui_labels):
                 'text-sm font-bold text-yellow-300 text-center w-full mb-1.5'
             )
 
-            port_labels_box = ui.row().classes('w-full gap-3 items-center justify-center my-2')
+            port_labels_box = ui.row().classes(
+                'w-full gap-3 items-center justify-center my-2'
+            )
 
             async def shell_cmd_wait(cmd_bytes, target_ack, timeout=4.0):
                 curr_shell = shell_ref.get('ser')
                 if not curr_shell or not curr_shell.is_open:
-                    return False, ""
+                    return False, ''
 
                 curr_shell.reset_input_buffer()
                 curr_shell.write(cmd_bytes)
                 print(f'[SHELL TX]: {cmd_bytes.strip().decode(errors="ignore")}')
 
                 start_t = time.time()
-                accum = ""
+                accum = ''
                 clean_target = target_ack.strip().lower()
 
                 while time.time() - start_t < timeout:
@@ -690,23 +663,30 @@ def build_dashboard(ports_refs, ui_labels):
                             return True, accum
                     await asyncio.sleep(0.04)
 
-                print(f'[SHELL ACK TIMEOUT]: Не дождались "{target_ack}". Буфер: {repr(accum)}')
+                print(
+                    f'[SHELL ACK TIMEOUT]: Не дождались "{target_ack}". Буфер:'
+                    f' {repr(accum)}'
+                )
                 return False, accum
 
             async def scpi_query(query_bytes, timeout=0.6):
                 curr_shell = shell_ref.get('ser')
                 if not curr_shell or not curr_shell.is_open:
-                    return ""
+                    return ''
                 curr_shell.reset_input_buffer()
                 curr_shell.write(query_bytes)
                 query_str = query_bytes.strip().decode('utf-8', errors='ignore')
 
                 start_t = time.time()
-                accum = ""
+                accum = ''
                 while time.time() - start_t < timeout:
                     if curr_shell.in_waiting > 0:
-                        accum += curr_shell.read(curr_shell.in_waiting).decode('utf-8', errors='ignore')
-                        lines = [line.strip() for line in accum.splitlines() if line.strip()]
+                        accum += curr_shell.read(curr_shell.in_waiting).decode(
+                            'utf-8', errors='ignore'
+                        )
+                        lines = [
+                            line.strip() for line in accum.splitlines() if line.strip()
+                        ]
                         filtered = [l for l in lines if l.lower() != query_str.lower()]
                         if filtered:
                             return filtered[-1]
@@ -714,7 +694,7 @@ def build_dashboard(ports_refs, ui_labels):
 
                 lines = [line.strip() for line in accum.splitlines() if line.strip()]
                 filtered = [l for l in lines if l.lower() != query_str.lower()]
-                return filtered[-1] if filtered else ""
+                return filtered[-1] if filtered else ''
 
             async def run_full_detect_procedure():
                 curr_shell = shell_ref.get('ser')
@@ -727,15 +707,21 @@ def build_dashboard(ports_refs, ui_labels):
 
                 # Шаг 1: Выключение EN_USB_UART через SCPI
                 ui.notify('Шаг 1: Выключение EN_USB_UART...', type='info')
-                ok, _ = await shell_cmd_wait(b'OUTP:MUX EN_USB_UART, OFF;*OPC?\r\n', '1')
+                ok, _ = await shell_cmd_wait(
+                    b'OUTP:MUX EN_USB_UART, OFF;*OPC?\r\n', '1'
+                )
                 if not ok:
-                    ui.notify('Ошибка/Таймаут OUTP:MUX EN_USB_UART, OFF', type='negative')
+                    ui.notify(
+                        'Ошибка/Таймаут OUTP:MUX EN_USB_UART, OFF', type='negative'
+                    )
                     btn_start_detect.enable()
                     return
 
                 # Шаг 2: Выключение UART_FB_EN через SCPI
                 ui.notify('Шаг 2: Выключение UART_FB_EN...', type='info')
-                ok, _ = await shell_cmd_wait(b'OUTP:MUX UART_FB_EN, OFF;*OPC?\r\n', '1')
+                ok, _ = await shell_cmd_wait(
+                    b'OUTP:MUX UART_FB_EN, OFF;*OPC?\r\n', '1'
+                )
                 if not ok:
                     ui.notify('Ошибка/Таймаут OUTP:MUX UART_FB_EN, OFF', type='negative')
                     btn_start_detect.enable()
@@ -749,7 +735,9 @@ def build_dashboard(ports_refs, ui_labels):
                     btn_start_detect.enable()
                     return
 
-                ui.notify('Ожидание отключения старых портов в ОС (2 сек)...', type='info')
+                ui.notify(
+                    'Ожидание отключения старых портов в ОС (2 сек)...', type='info'
+                )
                 await asyncio.sleep(2.0)
 
                 base_ports = set(get_available_ports())
@@ -776,7 +764,9 @@ def build_dashboard(ports_refs, ui_labels):
                 curr_shell.write(b'SENS:UART:CLE\r\n')
                 await asyncio.sleep(0.1)
 
-                ui.notify('Ожидание подключения 4 новых COM-портов в Windows...', type='info')
+                ui.notify(
+                    'Ожидание подключения 4 новых COM-портов в Windows...', type='info'
+                )
                 scan_start = time.time()
                 new_ports = []
 
@@ -794,16 +784,25 @@ def build_dashboard(ports_refs, ui_labels):
 
                 print(f'[DETECT] Новые порты хаба: {new_ports}')
                 if len(new_ports) < 4:
-                    ui.notify(f'Найдено только {len(new_ports)} из 4 портов ({", ".join(new_ports)}).', type='negative')
+                    ui.notify(
+                        f'Найдено только {len(new_ports)} из 4 портов'
+                        f' ({", ".join(new_ports)}).',
+                        type='negative',
+                    )
                     btn_start_detect.enable()
                     return
 
                 label_widgets = {}
                 with port_labels_box:
                     for p in new_ports:
-                        with ui.card().classes('bg-slate-700 py-1.5 px-3 rounded text-center border border-slate-600 min-w-[130px]'):
+                        with ui.card().classes(
+                            'bg-slate-700 py-1.5 px-3 rounded text-center border'
+                            ' border-slate-600 min-w-[130px]'
+                        ):
                             ui.label(p).classes('text-xs font-mono font-bold text-sky-300')
-                            lbl = ui.label('Определение...').classes('text-[11px] font-mono text-amber-400')
+                            lbl = ui.label('Определение...').classes(
+                                'text-[11px] font-mono text-amber-400'
+                            )
                             label_widgets[p] = lbl
 
                 open_handles = {}
@@ -824,7 +823,11 @@ def build_dashboard(ports_refs, ui_labels):
                     cmd = f'OUTP:MUX:UART {channel_num};*OPC?\r\n'.encode()
                     ok, _ = await shell_cmd_wait(cmd, '1', timeout=3.0)
                     if not ok:
-                        ui.notify(f'Предупреждение: OUTP:MUX:UART {channel_num} не подтвержден', type='warning')
+                        ui.notify(
+                            'Предупреждение: OUTP:MUX:UART'
+                            f' {channel_num} не подтвержден',
+                            type='warning',
+                        )
                     await asyncio.sleep(0.1)
 
                     matched_port = None
@@ -841,7 +844,10 @@ def build_dashboard(ports_refs, ui_labels):
                         handle.reset_input_buffer()
                         handle.reset_output_buffer()
                         handle.write(test_payload)
-                        print(f'[DETECT TEST]: Шлем в {candidate_p} -> MUX канал {channel_num}')
+                        print(
+                            f'[DETECT TEST]: Шлем в {candidate_p} -> MUX канал'
+                            f' {channel_num}'
+                        )
 
                         got_bytes = False
                         poll_start = time.time()
@@ -858,7 +864,10 @@ def build_dashboard(ports_refs, ui_labels):
 
                         if got_bytes:
                             data_str = await scpi_query(b'SENS:UART:DATA?\r\n', timeout=0.25)
-                            print(f'[DETECT CHECK]: Получены данные от {candidate_p}: {repr(data_str)}')
+                            print(
+                                f'[DETECT CHECK]: Получены данные от {candidate_p}:'
+                                f' {repr(data_str)}'
+                            )
                             if 'TEST' in data_str:
                                 matched_port = candidate_p
                                 break
@@ -869,10 +878,17 @@ def build_dashboard(ports_refs, ui_labels):
                         lbl_w = label_widgets.get(matched_port)
                         if lbl_w:
                             lbl_w.set_text(f'Порт {channel_num}')
-                            lbl_w.classes(remove='text-amber-400', add='text-emerald-400 font-bold')
-                        ui.notify(f'Успех! {matched_port} -> Порт {channel_num}', type='positive')
+                            lbl_w.classes(
+                                remove='text-amber-400', add='text-emerald-400 font-bold'
+                            )
+                        ui.notify(
+                            f'Успех! {matched_port} -> Порт {channel_num}', type='positive'
+                        )
                     else:
-                        ui.notify(f'Не удалось определить порт для канала {channel_num}', type='warning')
+                        ui.notify(
+                            f'Не удалось определить порт для канала {channel_num}',
+                            type='warning',
+                        )
 
                 for p, h in open_handles.items():
                     try:
@@ -884,12 +900,19 @@ def build_dashboard(ports_refs, ui_labels):
                 ui.notify('Процедура автоопределения завершена!', type='info')
 
             with ui.row().classes('w-full justify-center gap-4 items-center mt-1'):
-                btn_start_detect = ui.button('СТАРТ', on_click=run_full_detect_procedure).classes(
-                    'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-6 rounded shadow'
+                btn_start_detect = ui.button(
+                    'СТАРТ', on_click=run_full_detect_procedure
+                ).classes(
+                    'bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs'
+                    ' py-2 px-6 rounded shadow'
                 )
 
             # --- УПРАВЛЕНИЕ JTAG (SCPI OUTPut:MUX JTAG_MUX_EN + OUTPut:MUX:JTAG 1..5) ---
-            with ui.row().classes('w-full justify-center gap-6 items-center mt-3 pt-2 border-t border-slate-700'):
+            with ui.row().classes(
+                'w-full justify-center gap-6 items-center mt-3 pt-2 border-t'
+                ' border-slate-700'
+            ):
+
                 def handle_jtag_enable(e):
                     state = 'ON' if e.value else 'OFF'
                     cmd = f'OUTP:MUX JTAG_MUX_EN, {state}\r\n'
@@ -900,9 +923,9 @@ def build_dashboard(ports_refs, ui_labels):
                     else:
                         ui.notify('SCPI порт закрыт!', type='warning')
 
-                ui.checkbox('JTAG ENABLE', value=False, on_change=handle_jtag_enable).classes(
-                    'text-white text-xs font-semibold'
-                )
+                ui.checkbox(
+                    'JTAG ENABLE', value=False, on_change=handle_jtag_enable
+                ).classes('text-white text-xs font-semibold')
 
                 def handle_jtag_mux(e):
                     mux_val = e.value
@@ -926,7 +949,9 @@ def build_dashboard(ports_refs, ui_labels):
                     value=1,
                     label='Канал JTAG',
                     on_change=handle_jtag_mux,
-                ).props('dark outlined dense').classes('w-36 bg-slate-700 text-xs text-white rounded')
+                ).props('dark outlined dense').classes(
+                    'w-36 bg-slate-700 text-xs text-white rounded'
+                )
 
         # ==========================================
         # 12. БЛОК ЛОГИРОВАНИЯ В CSV/EXCEL С СЕКУНДОМЕРОМ
@@ -941,7 +966,8 @@ def build_dashboard(ports_refs, ui_labels):
                 timer_active = False
 
                 timer_lbl = ui.label('00:00.000').classes(
-                    'text-sm font-mono text-emerald-400 font-bold bg-slate-900 py-1 px-2.5 rounded border border-slate-700'
+                    'text-sm font-mono text-emerald-400 font-bold bg-slate-900 py-1'
+                    ' px-2.5 rounded border border-slate-700'
                 )
 
                 def update_timer_ui():

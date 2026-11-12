@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from nicegui import ui
 import serial
 from serial.tools import list_ports
@@ -28,7 +29,6 @@ def build_ports_panel(ports_refs, on_device_connected=None):
 
                 ports_list = get_available_ports()
                 with ui.row().classes('w-full items-center gap-2'):
-                    # Ширина селекта уменьшена в 2 раза до w-28
                     tel_select = ui.select(
                         options=ports_list,
                         value=ports_list[0] if ports_list else None,
@@ -66,7 +66,6 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                 ui.label('SCPI / Команды').classes('text-xs font-semibold text-emerald-300 mb-1')
 
                 with ui.row().classes('w-full items-center gap-2'):
-                    # Ширина селекта уменьшена в 2 раза до w-28
                     shell_select = ui.select(
                         options=ports_list,
                         value=ports_list[0] if ports_list else None,
@@ -180,12 +179,12 @@ def build_ports_panel(ports_refs, on_device_connected=None):
 
                         ui.notify(f'SCPI найден на {found_shell} (Выполнен *RST)', type='positive')
 
+                        # Безопасный вызов и ожидание коллбэка
                         if on_device_connected:
                             await asyncio.sleep(0.2)
-                            if asyncio.iscoroutinefunction(on_device_connected):
-                                await on_device_connected()
-                            else:
-                                on_device_connected()
+                            res = on_device_connected()
+                            if inspect.isawaitable(res):
+                                await res
                     else:
                         ui.notify('SCPI порт (Author-ALARM,UST2) не найден!', type='warning')
 
