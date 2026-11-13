@@ -292,8 +292,8 @@ static int _scpi_server_init(void)
     // 4. Включение прерываний UART
     uart_irq_callback_user_data_set(uart_dev, _uart_cb, NULL);
     uart_irq_rx_enable(uart_dev);
-
+    SCPI_RegSet(&scpi_context, SCPI_REG_ESR, ESR_PON);
     return 0;
 }
 
-SYS_INIT(_scpi_server_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+SYS_INIT(_scpi_server_init, APPLICATION, 80);
