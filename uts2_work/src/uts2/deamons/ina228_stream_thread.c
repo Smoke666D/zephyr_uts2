@@ -53,6 +53,30 @@ typedef enum cur_sens_channel
 } cur_sens_channel_t;
 
 
+typedef enum 
+{
+    BRD_LOW_CUR_CH       = 1,
+    BRD_LOW_VOL_CH       = 0,
+    BRD_HIGH_CUR_CH      = 3,
+    BRD_HIGH_VOL_CH      = 2,
+    VDUT2_CUR_CH         = 5,
+    VDUT2_VOL_CH         = 4,
+    VDUT3_CUR_CH         = 7,
+    VDUT3_VOL_CH         = 6,
+    VIN_CUR_CH           = 9,
+    VIN_VOL_CH           = 8,
+    DCDC_3_3_CUR_CH      = 11,
+    DCDC_3_3_VOL_CH      = 10,
+    VDOUT_PWR_CUR_CH     = 13,
+    VDOUT_PWR_VOL_CH     = 12,
+    VD5_CUR_CH           = 15,
+    VD5_VOL_CH           = 14,
+} sens_channel__num_t;
+
+
+
+
+
 /**
  *  @brief Пакетное сообщение ZBUS с результатами опроса всех датчиков
  */
@@ -284,22 +308,22 @@ K_THREAD_DEFINE(ina_thread_id, INA228_THREAD_STACK_SIZE, _rti_poller_thread,
                 INA228_THREAD_PRIORITY, 0, 0);
 
 // Регистрация путей шины параметров для Токов и Напряжений
-SERVER_IN_CHANNEL_DEFINE(SENS_BRD_LOW_CURRENT,   &ina_batch_chan, 0,  FLOAT_DATA);
-SERVER_IN_CHANNEL_DEFINE(SENS_BRD_LOW_VOLTAGE,   &ina_batch_chan, 1,  FLOAT_DATA);  
-SERVER_IN_CHANNEL_DEFINE(SENS_BRD_HIGH_CURRENT,  &ina_batch_chan, 2,  FLOAT_DATA); 
-SERVER_IN_CHANNEL_DEFINE(SENS_BRD_HIGH_VOLTAGE,  &ina_batch_chan, 3,  FLOAT_DATA); 
-SERVER_IN_CHANNEL_DEFINE(SENS_VDUT2_CURRENT,     &ina_batch_chan, 4,  FLOAT_DATA);   
-SERVER_IN_CHANNEL_DEFINE(SENS_VDUT2_VOLTAGE,     &ina_batch_chan, 5,  FLOAT_DATA);  
-SERVER_IN_CHANNEL_DEFINE(SENS_VDUT3_CURRENT,     &ina_batch_chan, 6,  FLOAT_DATA);
-SERVER_IN_CHANNEL_DEFINE(SENS_VDUT3_VOLTAGE,     &ina_batch_chan, 7,  FLOAT_DATA);  
-SERVER_IN_CHANNEL_DEFINE(SENS_VIN_CURRENT,       &ina_batch_chan, 8,  FLOAT_DATA);
-SERVER_IN_CHANNEL_DEFINE(SENS_VIN_VOLTAGE,       &ina_batch_chan, 9,  FLOAT_DATA);    
-SERVER_IN_CHANNEL_DEFINE(SENS_DCDC_3_3_CURRENT,  &ina_batch_chan, 10, FLOAT_DATA);
-SERVER_IN_CHANNEL_DEFINE(SENS_DCDC_3_3_VOLTAGE,  &ina_batch_chan, 11, FLOAT_DATA);
-SERVER_IN_CHANNEL_DEFINE(SENS_VDOUT_PWR_CURRENT, &ina_batch_chan, 12, FLOAT_DATA);
-SERVER_IN_CHANNEL_DEFINE(SENS_VDOUT_PWR_VOLTAGE, &ina_batch_chan, 13, FLOAT_DATA);
-SERVER_IN_CHANNEL_DEFINE(SENS_VD5_CURRENT,       &ina_batch_chan, 14, FLOAT_DATA);      
-SERVER_IN_CHANNEL_DEFINE(SENS_VD5_VOLTAGE,       &ina_batch_chan, 15, FLOAT_DATA); 
+SERVER_IN_CHANNEL_DEFINE(SENS_BRD_LOW_CURRENT,   &ina_batch_chan, BRD_LOW_CUR_CH,  FLOAT_DATA);
+SERVER_IN_CHANNEL_DEFINE(SENS_BRD_LOW_VOLTAGE,   &ina_batch_chan, BRD_LOW_VOL_CH,  FLOAT_DATA);  
+SERVER_IN_CHANNEL_DEFINE(SENS_BRD_HIGH_CURRENT,  &ina_batch_chan, BRD_HIGH_CUR_CH,  FLOAT_DATA); 
+SERVER_IN_CHANNEL_DEFINE(SENS_BRD_HIGH_VOLTAGE,  &ina_batch_chan, BRD_HIGH_VOL_CH,  FLOAT_DATA); 
+SERVER_IN_CHANNEL_DEFINE(SENS_VDUT2_CURRENT,     &ina_batch_chan, VDUT2_CUR_CH,  FLOAT_DATA);   
+SERVER_IN_CHANNEL_DEFINE(SENS_VDUT2_VOLTAGE,     &ina_batch_chan, VDUT2_VOL_CH,  FLOAT_DATA);  
+SERVER_IN_CHANNEL_DEFINE(SENS_VDUT3_CURRENT,     &ina_batch_chan, VDUT3_CUR_CH ,  FLOAT_DATA);
+SERVER_IN_CHANNEL_DEFINE(SENS_VDUT3_VOLTAGE,     &ina_batch_chan, VDUT3_VOL_CH ,  FLOAT_DATA);  
+SERVER_IN_CHANNEL_DEFINE(SENS_VIN_CURRENT,       &ina_batch_chan, VIN_CUR_CH,  FLOAT_DATA);
+SERVER_IN_CHANNEL_DEFINE(SENS_VIN_VOLTAGE,       &ina_batch_chan, VIN_VOL_CH,  FLOAT_DATA);    
+SERVER_IN_CHANNEL_DEFINE(SENS_DCDC_3_3_CURRENT,  &ina_batch_chan, DCDC_3_3_CUR_CH, FLOAT_DATA);
+SERVER_IN_CHANNEL_DEFINE(SENS_DCDC_3_3_VOLTAGE,  &ina_batch_chan, DCDC_3_3_VOL_CH, FLOAT_DATA);
+SERVER_IN_CHANNEL_DEFINE(SENS_VDOUT_PWR_CURRENT, &ina_batch_chan, VDOUT_PWR_CUR_CH, FLOAT_DATA);
+SERVER_IN_CHANNEL_DEFINE(SENS_VDOUT_PWR_VOLTAGE, &ina_batch_chan, VDOUT_PWR_VOL_CH, FLOAT_DATA);
+SERVER_IN_CHANNEL_DEFINE(SENS_VD5_CURRENT,       &ina_batch_chan, VD5_CUR_CH, FLOAT_DATA);      
+SERVER_IN_CHANNEL_DEFINE(SENS_VD5_VOLTAGE,       &ina_batch_chan, VD5_VOL_CH, FLOAT_DATA); 
 
 // Регистрация путей шины параметров для Накопленной Энергии
 SERVER_IN_CHANNEL_DEFINE(SENS_I2C_POWER_BRD_LOW,   &ina_power_chan, 0, FLOAT_DATA);

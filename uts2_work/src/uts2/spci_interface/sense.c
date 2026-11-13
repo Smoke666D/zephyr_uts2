@@ -316,3 +316,149 @@ scpi_result_t cmd_sense_voltage_q(scpi_t *context)
 
     return SCPI_RES_OK;
 }
+
+/* 8 датчиков мониторинга питания */
+enum pmon_sensor_id {
+    PMON_BRD_LOW = 0,
+    PMON_BRD_HIGH,
+    PMON_VDUT2,
+    PMON_VDUT3,
+    PMON_VIN,
+    PMON_DCDC_3_3,
+    PMON_VDOUT_PWR,
+    PMON_VD5,
+    PMON_COUNT
+};
+
+/* Словарь имен для парсера SCPI */
+static const scpi_choice_def_t pmon_sensor_choices[] = {
+    {"BRD_LOW",   PMON_BRD_LOW},
+    {"BRD_HIGH",  PMON_BRD_HIGH},
+    {"VDUT2",     PMON_VDUT2},
+    {"VDUT3",     PMON_VDUT3},
+    {"VIN",       PMON_VIN},
+    {"DCDC_3_3",  PMON_DCDC_3_3},
+    {"VDOUT_PWR", PMON_VDOUT_PWR},
+    {"VD5",       PMON_VD5},
+    SCPI_CHOICE_LIST_END
+};
+
+/* Таблица привязки датчиков к каналам SYSTEM_BUS */
+struct pmon_channel_map {
+    uint32_t current_id;
+    uint32_t voltage_id;
+    uint32_t power_id;
+};
+
+static const struct pmon_channel_map pmon_map[PMON_COUNT] = {
+    [PMON_BRD_LOW]   = { SENS_BRD_LOW_CURRENT,   SENS_BRD_LOW_VOLTAGE,   SENS_I2C_POWER_BRD_LOW },
+    [PMON_BRD_HIGH]  = { SENS_BRD_HIGH_CURRENT,  SENS_BRD_HIGH_VOLTAGE,  SENS_I2C_POWER_BRD_HIGH },
+    [PMON_VDUT2]     = { SENS_VDUT2_CURRENT,     SENS_VDUT2_VOLTAGE,     SENS_I2C_POWER_VDUT2 },
+    [PMON_VDUT3]     = { SENS_VDUT3_CURRENT,     SENS_VDUT3_VOLTAGE,     SENS_I2C_POWER_VDUT3 },
+    [PMON_VIN]       = { SENS_VIN_CURRENT,       SENS_VIN_VOLTAGE,       SENS_I2C_POWER_VIN },
+    [PMON_DCDC_3_3]  = { SENS_DCDC_3_3_CURRENT,  SENS_DCDC_3_3_VOLTAGE,  SENS_I2C_POWER_DCDC_3_3 },
+    [PMON_VDOUT_PWR] = { SENS_VDOUT_PWR_CURRENT, SENS_VDOUT_PWR_VOLTAGE, SENS_I2C_POWER_VDOUT_PWR },
+    [PMON_VD5]       = { SENS_VD5_CURRENT,       SENS_VD5_VOLTAGE,       SENS_I2C_POWER_VD5 },
+};
+
+/* ========================================================================= */
+/* 1. ИЗМЕРЕНИЕ ТОКА: SENSe:CURRent[:DC]? [<sensor1>[, <sensor2>, ...]]      */
+/* ========================================================================= */
+scpi_result_t cmd_sense_current_q(scpi_t *context)
+{
+    int32_t sensor_idx;
+    float current_val;
+    int count = 0;
+
+    // Вычитываем запрошенные сенсоры по очереди
+    while (SCPI_ParamChoice(context, pmon_sensor_choices, &sensor_idx, FALSE)) {
+        SYSTEM_BUS_GET(pmon_map[sensor_idx].current_id, &current_val);
+        SCPI_ResultFloat(context, current_val);
+        count++;
+    }
+
+    // Если параметров не было — отдаем ток всех 8 датчиков
+    if (count == 0) {
+        for (int i = 0; i < PMON_COUNT; i++) {
+            SYSTEM_BUS_GET(pmon_map[i].current_id, &current_val);
+            SCPI_ResultFloat(context, current_val);
+        }
+    }
+
+    return SCPI_RES_OK;
+}
+
+/* ========================================================================= */
+/* 2. ИЗМЕРЕНИЕ МОЩНОСТИ: SENSe:POWer[:DC]? [<sensor1>[, <sensor2>, ...]]    */
+/* ========================================================================= */
+scpi_result_t cmd_sense_power_q(scpi_t *context)
+{
+    int32_t sensor_idx;
+    float power_val;
+    int count = 0;
+
+    while (SCPI_ParamChoice(context, pmon_sensor_choices, &sensor_idx, FALSE)) {
+        SYSTEM_BUS_GET(pmon_map[sensor_idx].power_id, &power_val);
+        SCPI_ResultFloat(context, power_val);
+        count++;
+    }
+
+    if (count == 0) {
+        for (int i = 0; i < PMON_COUNT; i++) {
+            SYSTEM_BUS_GET(pmon_map[i].power_id, &power_val);
+            SCPI_ResultFloat(context, power_val);
+        }
+    }
+
+    return SCPI_RES_OK;
+}
+
+/* ========================================================================= */
+/* 3. НАПРЯЖЕНИЕ НА ДАТЧИКЕ: SENSe:POWer:VOLTage? [<sensor1>[, ...]]         */
+/* ========================================================================= */
+scpi_result_t cmd_sense_power_voltage_q(scpi_t *context)
+{
+    int32_t sensor_idx;
+    float volt_val;
+    int count = 0;
+
+    while (SCPI_ParamChoice(context, pmon_sensor_choices, &sensor_idx, FALSE)) {
+        SYSTEM_BUS_GET(pmon_map[sensor_idx].voltage_id, &volt_val);
+        SCPI_ResultFloat(context, volt_val);
+        count++;
+    }
+
+    if (count == 0) {
+        for (int i = 0; i < PMON_COUNT; i++) {
+            SYSTEM_BUS_GET(pmon_map[i].voltage_id, &volt_val);
+            SCPI_ResultFloat(context, volt_val);
+        }
+    }
+
+    return SCPI_RES_OK;
+}
+
+/* ========================================================================= */
+/* 4. КОМПЛЕКСНЫЙ ЗАМЕР: SENSe:POWer:ALL? <sensor> (Напряжение, Ток, Ватты)  */
+/* ========================================================================= */
+scpi_result_t cmd_sense_power_all_q(scpi_t *context)
+{
+    int32_t sensor_idx;
+    float v = 0.0f, i = 0.0f, p = 0.0f;
+
+    // Для комплексного среза имя сенсора обязательно
+    if (!SCPI_ParamChoice(context, pmon_sensor_choices, &sensor_idx, TRUE)) {
+        return SCPI_RES_ERR;
+    }
+
+    SYSTEM_BUS_GET(pmon_map[sensor_idx].voltage_id, &v);
+    SYSTEM_BUS_GET(pmon_map[sensor_idx].current_id, &i);
+    SYSTEM_BUS_GET(pmon_map[sensor_idx].power_id, &p);
+
+    // Отдаем триплет: Напряжение (В), Ток (А), Мощность (Вт)
+    SCPI_ResultFloat(context, v);
+    SCPI_ResultFloat(context, i);
+    SCPI_ResultFloat(context, p);
+
+    return SCPI_RES_OK;
+}

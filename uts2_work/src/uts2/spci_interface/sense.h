@@ -21,4 +21,10 @@ scpi_result_t cmd_sense_temp_q(scpi_t *context);
 scpi_result_t cmd_sense_light_q(scpi_t *context);
 scpi_result_t cmd_sense_voltage_q(scpi_t *context);
 
+
+scpi_result_t cmd_sense_current_q(scpi_t *context);
+scpi_result_t cmd_sense_power_q(scpi_t *context);
+scpi_result_t cmd_sense_power_voltage_q(scpi_t *context);
+scpi_result_t cmd_sense_power_all_q(scpi_t *context);
+
 void sense_uart_reset(void);

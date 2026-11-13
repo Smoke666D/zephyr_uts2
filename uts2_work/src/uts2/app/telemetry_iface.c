@@ -132,36 +132,36 @@ void send_binary_telemetry(const struct device *uart_dev) {
     SYSTEM_BUS_GET(ENV_VDOUT3, &_temp);   pkt.env[7] = _temp;
 
     // Current sensors (24 шт)
-    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,     &_temp); pkt.current_sensors[0] = _temp;
-    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,    &_temp);  pkt.current_sensors[1] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,     &_temp); pkt.current_sensors[1] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,    &_temp);  pkt.current_sensors[0] = _temp;
     SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_LOW,   &_temp); pkt.current_sensors[2] = _temp;
 
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT,   &_temp);  pkt.current_sensors[3] = _temp;
-    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE,   &_temp);  pkt.current_sensors[4] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT,   &_temp);  pkt.current_sensors[4] = _temp;
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE,   &_temp);  pkt.current_sensors[3] = _temp;
     SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_HIGH, &_temp);  pkt.current_sensors[5] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,      &_temp);  pkt.current_sensors[6] = _temp;
-    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,     &_temp);   pkt.current_sensors[7] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,      &_temp);  pkt.current_sensors[7] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,     &_temp);   pkt.current_sensors[6] = _temp;
     SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT2,   &_temp);   pkt.current_sensors[8] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,     &_temp);   pkt.current_sensors[9] = _temp;
-    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,     &_temp);   pkt.current_sensors[10] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,     &_temp);   pkt.current_sensors[10] = _temp;
+    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,     &_temp);   pkt.current_sensors[9] = _temp;
     SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT3,   &_temp);   pkt.current_sensors[11] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VIN_CURRENT,       &_temp);   pkt.current_sensors[12] = _temp;
-    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,       &_temp);   pkt.current_sensors[13] = _temp;
+    SYSTEM_BUS_GET(SENS_VIN_CURRENT,       &_temp);   pkt.current_sensors[13] = _temp;
+    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,       &_temp);   pkt.current_sensors[12] = _temp;
     SYSTEM_BUS_GET(SENS_I2C_POWER_VIN,     &_temp);   pkt.current_sensors[14] = _temp;
 
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT,   &_temp);  pkt.current_sensors[15] = _temp;
-    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE,  &_temp);  pkt.current_sensors[16] = _temp;
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT,   &_temp);  pkt.current_sensors[16] = _temp;
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE,  &_temp);  pkt.current_sensors[15] = _temp;
     SYSTEM_BUS_GET(SENS_I2C_POWER_DCDC_3_3, &_temp);  pkt.current_sensors[17] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &_temp);   pkt.current_sensors[18] = _temp;
-    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &_temp);   pkt.current_sensors[19] = _temp;
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &_temp);   pkt.current_sensors[19] = _temp;
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &_temp);   pkt.current_sensors[18] = _temp;
     SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR, &_temp); pkt.current_sensors[20] = _temp;
 
-    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &_temp);   pkt.current_sensors[21] = _temp;
-    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &_temp);   pkt.current_sensors[22] = _temp;                    
+    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &_temp);   pkt.current_sensors[22] = _temp;
+    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &_temp);   pkt.current_sensors[21] = _temp;                    
     SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,     &_temp);   pkt.current_sensors[23] = _temp;
 
     // LIN voltages (4 шт)
@@ -220,10 +220,7 @@ typedef struct
 
 
 
-
-
 K_MSGQ_DEFINE(all_lin_rx_queue, sizeof(lin_queue_message_t), 10, 4);
-
 K_MSGQ_DEFINE(all_can_rx_queue, sizeof(can_queue_message_t), 10, 4);
 
 static void _lin1_rx_listener_cb(const struct zbus_channel *_chan)

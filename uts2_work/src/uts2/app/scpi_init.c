@@ -126,6 +126,16 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SENSe:VOLTage[:DC]?",         .callback = cmd_sense_voltage_q     },
     { .pattern = "MEASure:VOLTage[:DC]?",       .callback = cmd_sense_voltage_q     },
 
+    /* Подсистема SENSe: Датчики тока и мощности (8 каналов) */
+    { .pattern = "SENSe:CURRent[:DC]?",     .callback = cmd_sense_current_q,       },
+    { .pattern = "MEASure:CURRent[:DC]?",   .callback = cmd_sense_current_q,       }, // Псевдоним
+
+    { .pattern = "SENSe:POWer[:DC]?",       .callback = cmd_sense_power_q,         },
+    { .pattern = "MEASure:POWer[:DC]?",     .callback = cmd_sense_power_q,         }, // Псевдоним
+
+    { .pattern = "SENSe:POWer:VOLTage?",    .callback = cmd_sense_power_voltage_q, },
+    { .pattern = "SENSe:POWer:ALL?",        .callback = cmd_sense_power_all_q,     },
+
     // Подсистема SYSTem
     { .pattern = "SYSTem:WAIT",                 .callback = cmd_system_wait         },
     { .pattern = "SYSTem:UID?",                 .callback = cmd_system_uid_q        },
