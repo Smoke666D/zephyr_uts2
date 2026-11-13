@@ -29,10 +29,10 @@ LOG_MODULE_REGISTER(fram_settings, LOG_LEVEL_INF);
 /***************************************************************************************************
  *                                           DEFINITIONS
  **************************************************************************************************/
-#define FRAM_DEBOUNCE_DELAY_MS   50U    // Окно агрегации изменений (например, HW_ID + HW_VER)
+#define FRAM_DEBOUNCE_DELAY_MS   50U    // Окно агрегации изменений (HW_ID + HW_VER)
 #define MAX_PENDING_SYNCS        8      // Буфер одновременных потоков квитирования
-#define FRAM_THREAD_STACK_SIZE   1536
-#define FRAM_THREAD_PRIORITY     5      // Высокий приоритет: считывает настройки раньше тестов
+#define FRAM_THREAD_STACK_SIZE   2048   // Безопасный размер стека
+#define FRAM_THREAD_PRIORITY     10     // Низкий приоритет: не блокирует системные задачи
 
 typedef enum {
     MU_ID_1 = 0,
@@ -93,12 +93,7 @@ ZBUS_CHAN_DEFINE(settings_uint32_t_chan,
                  {0}
 );
 
-/* Событие поллинга очереди */
-static struct k_poll_event fram_poll_events[] = {
-    K_POLL_EVENT_INITIALIZER(K_POLL_TYPE_MSGQ_DATA_AVAILABLE, K_POLL_MODE_NOTIFY_ONLY, &fram_rx_queue),
-};
-
-/* Объявление прототипа потока */
+/* Прототип функции потока */
 static void _fram_thread_entry(void *p1, void *p2, void *p3);
 
 /* Автономный поток управления FRAM */
@@ -169,57 +164,59 @@ static void _publish_zbus_msg(const struct app_settings_frame *frame)
 }
 
 /**
- *  @brief Вычитка накопившихся сообщений из очереди в staging кэш
+ *  @brief Применение одного запроса к staging-кэшу
  */
-static bool _drain_fram_queue(void)
+static void _process_single_request(const server_request *req)
 {
-    server_request req;
-    bool has_data = false;
-
-    while (k_msgq_get(&fram_rx_queue, &req, K_NO_WAIT) == 0) 
+    switch (req->id) 
     {
-        has_data = true;
-
-        switch (req.id) 
-        {
-            case SETTING_MU_SN:
-                cache_staging_frame.uint32_payload.value[0] = req.value.sd_uint;
-                LOG_INF("MU: new SN = %u", req.value.sd_uint);
-                break;
-            case SETTING_MU_HW_ID:
-                cache_staging_frame.uint32_payload.value[1] = req.value.sd_uint;
-                LOG_INF("MU: new HW_ID = 0x%08X", req.value.sd_uint);
-                break;
-            case SETTING_MU_HW_VER:
-                cache_staging_frame.uint32_payload.value[2] = req.value.sd_uint;
-                LOG_INF("MU: new HW_VER = 0x%08X", req.value.sd_uint);
-                break;
-            default:
-                LOG_WRN("Unknown request ID %d in FRAM queue", req.id);
-                break;
-        }
-
-        // Сохраняем семафор квитирования для каждого запроса
-        if (req.sync != NULL) 
-        {
-            if (pending_sync_count < MAX_PENDING_SYNCS) 
-            {
-                pending_syncs[pending_sync_count].sync = req.sync;
-                pending_syncs[pending_sync_count].response = req.response;
-                pending_sync_count++;
-            } 
-            else 
-            {
-                // Защита от переполнения: сразу возвращаем ошибку клиенту
-                if (req.response != NULL) {
-                    *req.response = (uint8_t)-ENOMEM;
-                }
-                k_sem_give(req.sync);
-            }
-        }
+        case SETTING_MU_SN:
+            cache_staging_frame.uint32_payload.value[0] = req->value.sd_uint;
+            LOG_INF("MU: new SN = %u", req->value.sd_uint);
+            break;
+        case SETTING_MU_HW_ID:
+            cache_staging_frame.uint32_payload.value[1] = req->value.sd_uint;
+            LOG_INF("MU: new HW_ID = 0x%08X", req->value.sd_uint);
+            break;
+        case SETTING_MU_HW_VER:
+            cache_staging_frame.uint32_payload.value[2] = req->value.sd_uint;
+            LOG_INF("MU: new HW_VER = 0x%08X", req->value.sd_uint);
+            break;
+        default:
+            LOG_WRN("Unknown request ID %d in FRAM queue", req->id);
+            break;
     }
 
-    return has_data;
+    // Сохраняем семафор квитирования
+    if (req->sync != NULL) 
+    {
+        if (pending_sync_count < MAX_PENDING_SYNCS) 
+        {
+            pending_syncs[pending_sync_count].sync = req->sync;
+            pending_syncs[pending_sync_count].response = req->response;
+            pending_sync_count++;
+        } 
+        else 
+        {
+            // Защита от переполнения
+            if (req->response != NULL) {
+                *req->response = (uint8_t)-ENOMEM;
+            }
+            k_sem_give(req->sync);
+        }
+    }
+}
+
+/**
+ *  @brief Вычитка всех оставшихся сообщений из очереди (неблокирующая)
+ */
+static void _drain_remaining_queue(void)
+{
+    server_request req;
+    while (k_msgq_get(&fram_rx_queue, &req, K_NO_WAIT) == 0) 
+    {
+        _process_single_request(&req);
+    }
 }
 
 /**
@@ -227,7 +224,7 @@ static bool _drain_fram_queue(void)
  */
 static void _flush_fram_chip(void)
 {
-    // Если данные не изменились — мгновенно подтверждаем успех
+    // Если данные не изменились — подтверждаем успех без лишней записи
     if (memcmp(&cache_staging_frame, &cache_disk_frame, sizeof(struct app_settings_frame)) == 0) 
     {
         _notify_pending(0);
@@ -244,7 +241,6 @@ static void _flush_fram_chip(void)
     int err = 0;
     if (device_is_ready(fram_dev)) 
     {
-        // Запись во FRAM (FRAM пишется быстро без пауз на страницы)
         err = eeprom_write(fram_dev, 0x0000, &cache_disk_frame, sizeof(cache_disk_frame));
         if (err == 0) 
         {
@@ -257,7 +253,7 @@ static void _flush_fram_chip(void)
                 LOG_INF("FRAM written & verified successfully! CRC: 0x%04X", verify_frame.crc16);
                 SERVER_CH_CLEAR_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1, FRAM_MU_ERROR);
 
-                // ОБНОВЛЯЕМ ДАННЫЕ В ZBUS, чтобы SYSTEM_BUS_GET сразу возвращал новые значения!
+                // Обновляем Zbus, чтобы SYSTEM_BUS_GET сразу возвращал новые данные
                 _publish_zbus_msg(&cache_disk_frame);
             } 
             else 
@@ -280,12 +276,11 @@ static void _flush_fram_chip(void)
         err = -ENODEV;
     }
 
-    // Будим всех ждущих клиентов квитирования
     _notify_pending(err);
 }
 
 /**
- *  @brief Основной поток FRAM: инициализация при старте и обработка запросов
+ *  @brief Основной поток FRAM: старт, инициализация и гарантированный сон без spin-lock
  */
 static void _fram_thread_entry(void *p1, void *p2, void *p3)
 {
@@ -327,32 +322,32 @@ static void _fram_thread_entry(void *p1, void *p2, void *p3)
         SERVER_CH_SET_BIT_IF_NEEDED(HARDWARE_ERROR_REGISTER1, FRAM_MU_ERROR);
     }
 
-    // Публикуем стартовые данные в Zbus (UID + сохраненные уставки)
+    // Публикация стартового слепка в Zbus (UID процессора + уставки)
     _publish_zbus_msg(&cache_disk_frame);
 
-    // 2. БЕСКОНЕЧНЫЙ ЦИКЛ ОБРАБОТКИ ЗАПРОСОВ
+    // 2. БЕСКОНЕЧНЫЙ ЦИКЛ ОБРАБОТКИ
     while (1) 
     {
-        // Поток спит и не тратит такты процессора, пока очередь пуста
-        int rc = k_poll(fram_poll_events, ARRAY_SIZE(fram_poll_events), K_FOREVER);
-        if (rc != 0) {
+        server_request first_req;
+
+        // Поток СПИТ НАМЕРТВО здесь, не потребляя такты процессора,
+        // пока в очереди действительно не появится хотя бы одно сообщение
+        if (k_msgq_get(&fram_rx_queue, &first_req, K_FOREVER) != 0) 
+        {
             continue;
         }
 
-        fram_poll_events[0].state = K_POLL_STATE_NOT_READY;
+        // Обрабатываем первое пришедшее сообщение
+        _process_single_request(&first_req);
 
-        // 1. Вычитываем пришедший запрос
-        if (_drain_fram_queue()) 
-        {
-            // 2. Ждем окно дебаунса 50 мс (чтобы объединить HW_ID и HW_VER в одну запись)
-            k_msleep(FRAM_DEBOUNCE_DELAY_MS);
+        // Ждем окно дебаунса 50 мс для объединения HW_ID и HW_VER
+        k_msleep(FRAM_DEBOUNCE_DELAY_MS);
 
-            // 3. Довычитываем второе слово, если оно успело упасть в очередь
-            _drain_fram_queue();
+        // Выгребаем все сообщения, пришедшие за время дебаунса
+        _drain_remaining_queue();
 
-            // 4. Физически сохраняем на микросхему FRAM
-            _flush_fram_chip();
-        }
+        // Сбрасываем изменения во FRAM
+        _flush_fram_chip();
     }
 }
 
