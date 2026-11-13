@@ -35,6 +35,10 @@
  **************************************************************************************************/
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
+
+#define LOW_CUR_DRIVER_COUNT 18
+#define LIN_CONTROL_CNT  4
+#define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
 #define LOW_CUR_CHANNELS_CNT   16
 #define HIGH_CUR_CHANNELS_CNT  2
 

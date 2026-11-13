@@ -34,13 +34,20 @@ LOG_MODULE_REGISTER(led_manager, LOG_LEVEL_INF);
 #define YELLOW_LED_NODE DT_NODELABEL(yellow_led)
 #define RED_LED_NODE    DT_NODELABEL(red_led)
 
-
 /***************************************************************************************************
  *                                          PRIVATE TYPES
  **************************************************************************************************/
+typedef enum
+{
+    RED_LED     = 0,
+    GREEN_LED   = 1,
+    BLUE_LED    = 2,
+    LED_CNT     = 3
+} led_ch_target_t;
+
 typedef struct 
 {
-    bool value[3];    
+    bool value[LED_CNT];    
 } led_channel_t;
 
 /***************************************************************************************************
@@ -59,8 +66,8 @@ static const struct gpio_dt_spec leds[LED_CNT] =
     GPIO_DT_SPEC_GET(RED_LED_NODE, gpios)
 };
 
-static led_channel_t      cache_value     __attribute__((section("DTCM")));
-static struct k_work_poll led_task        __attribute__((section("DTCM")));
+static led_channel_t       cache_value        __attribute__((section("DTCM")));
+static struct k_work_poll  led_task           __attribute__((section("DTCM")));
 static struct k_poll_event led_poll_events[1] __attribute__((section("DTCM")));
 
 K_MSGQ_DEFINE(led_rx_queue, sizeof(server_request), 3, 4);
@@ -168,9 +175,9 @@ static int _led_manager_system_init(void)
 
 SYS_INIT(_led_manager_system_init, LED_DEAMON_INIT_LEVEL, LED_DEAMON_INIT_PRIOR);
 
-SERVER_OUT_CHANNEL_DEFINE(LED1, &led_state_channel, 0, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(LED2, &led_state_channel, 1, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(LED3, &led_state_channel, 2, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LED1, &led_state_channel, RED_LED,    BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LED2, &led_state_channel, GREEN_LED,  BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LED3, &led_state_channel, BLUE_LED,   BOOL_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

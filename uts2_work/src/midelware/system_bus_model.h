@@ -8,18 +8,6 @@ extern "C" {
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/drivers/uart.h>
 
-#define LED_CNT 3
-
-
-#define LOW_CUR_DRIVER_COUNT 18
-#define LIN_CONTROL_CNT  4
-#define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
-
-#define TOTAL_DAC_COUNT 3
-
-
-
-
 
 typedef enum
 {   AIN_AO1,

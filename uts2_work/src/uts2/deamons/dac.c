@@ -50,7 +50,16 @@ LOG_MODULE_REGISTER(dac_work, LOG_LEVEL_INF);
 /***************************************************************************************************
  *                                          PRIVATE TYPES
  **************************************************************************************************/
-typedef enum ad5243_channel
+
+typedef enum
+{
+    INT_DAC      = 0,
+    AD5243_CH1   = 1,
+    AD5243_CH2   = 2,
+    DAC_CH_CNT   = 3
+} dac_ch_target_t;
+
+ typedef enum ad5243_channel
 {
     AD5243_CHANNEL_1 = 0,
     AD5243_CHANNEL_2 = 1
@@ -61,7 +70,7 @@ typedef enum ad5243_channel
  */
 typedef struct dac_data_msg 
 {
-    uint32_t value[TOTAL_DAC_COUNT]; // Буфер значений (8 шагов * 2 канала)
+    uint32_t value[DAC_CH_CNT]; // Буфер значений (8 шагов * 2 канала)
 } dac_data_msg_t;
 
 /***************************************************************************************************
@@ -258,10 +267,10 @@ static int _dac_control_init(void)
 }
 
 SYS_INIT(_dac_control_init, DAC_DEAMON_INIT_LEVEL, DAC_DEAMON_INIT_PRIOR);
-
-SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, 0, UINT_DATA);
-SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, 1, UINT_DATA);
-SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, 2, UINT_DATA);
+    
+SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, INT_DAC, UINT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, AD5243_CH1, UINT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, AD5243_CH2, UINT_DATA);
 
 /***************************************************************************************************
  *                                           END OF FILE

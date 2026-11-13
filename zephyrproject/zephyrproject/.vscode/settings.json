@@ -1,0 +1,7 @@
+{
+    "cmake.enableAutomaticKitScan": false,
+    "cmake.sourceDirectory": "C:/work/zephyr_uts2/zephyrproject/zephyrproject/deps/zephyr",
+    "zephyr-workbench.env.BOARD_ROOT": [
+        "${workspaceFolder}/../../uts2_work"
+    ]
+}
