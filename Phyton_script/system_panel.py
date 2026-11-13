@@ -64,7 +64,7 @@ async def query_scpi_command(
 
 
 async def read_all_uids_async(shell_ref):
-    """Вычитывает последовательно UID (МУ, ИУ, КУ), SN (МУ, ИУ, КУ), HW (МУ, ИУ, КУ) и USER (ИУ, КУ)"""
+    """Вычитывает последовательно UID, SN, HW и USER для всех узлов (МУ, ИУ, КУ)"""
     curr_shell = shell_ref.get('ser')
     if not curr_shell or not curr_shell.is_open:
         notify_user(
@@ -120,7 +120,12 @@ async def read_all_uids_async(shell_ref):
         hw_inputs['CU'].set_value(hw_cu)
     await asyncio.sleep(0.04)
 
-    # 4. Чтение пользовательских данных USER ИУ и КУ
+    # 4. Чтение пользовательских данных USER МУ, ИУ и КУ
+    user_mu = await query_scpi_command(curr_shell, 'SYST:USER? MU', 'SYST:USER?')
+    if user_mu and user_inputs['MU']:
+        user_inputs['MU'].set_value(user_mu)
+    await asyncio.sleep(0.04)
+
     user_iu = await query_scpi_command(curr_shell, 'SYST:USER? IU', 'SYST:USER?')
     if user_iu and user_inputs['IU']:
         user_inputs['IU'].set_value(user_iu)
@@ -381,7 +386,7 @@ def build_system_panel(ports_refs):
                             ' font-bold py-1 px-2 rounded shadow'
                         )
 
-                    # HW МУ (теперь активен!)
+                    # HW МУ
                     with ui.row().classes('w-full items-center gap-1'):
                         ui.label('HW:').classes(
                             'text-[10px] text-slate-300 font-semibold w-9'
@@ -403,18 +408,26 @@ def build_system_panel(ports_refs):
                             ' py-1 px-2 rounded shadow'
                         )
 
-                    # USER МУ (N/A)
+                    # USER МУ (активный ввод + кнопка Set)
                     with ui.row().classes('w-full items-center gap-1'):
                         ui.label('USER:').classes(
                             'text-[10px] text-slate-300 font-semibold w-9'
                         )
                         user_inputs['MU'] = (
-                            ui.input(value='N/A')
+                            ui.input(placeholder='USER (uint32)')
                             .props(
-                                'dark outlined dense readonly input-class="font-mono'
-                                ' text-slate-400 text-[10px]"'
+                                'dark outlined dense input-class="font-mono text-purple-300'
+                                ' font-bold text-[10px]"'
                             )
-                            .classes('flex-1 bg-slate-900/60 rounded max-w-[210px]')
+                            .classes('flex-1 bg-slate-900 rounded max-w-[155px]')
+                        )
+
+                        ui.button(
+                            'Set',
+                            on_click=lambda: write_user_data(shell_ref, 'MU'),
+                        ).classes(
+                            'bg-purple-600 hover:bg-purple-500 text-white text-[9px]'
+                            ' font-bold py-1 px-2 rounded shadow'
                         )
 
                 # --- КОЛОНКА 2: ИНТЕРФЕЙСНЫЙ УЗЕЛ (ИУ) ---

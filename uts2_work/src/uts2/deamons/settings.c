@@ -41,6 +41,7 @@ typedef enum {
     MU_SN   = 3,
     MU_HW_ID = 4,
     MU_HW_VER = 5,
+    MU_USER_DATA   = 6,
 } uint32_t_setting_t;
 
 /***************************************************************************************************
@@ -171,19 +172,17 @@ static void _process_single_request(const server_request *req)
     switch (req->id) 
     {
         case SETTING_MU_SN:
-            cache_staging_frame.uint32_payload.value[0] = req->value.sd_uint;
-            LOG_INF("MU: new SN = %u", req->value.sd_uint);
+            cache_staging_frame.uint32_payload.value[0] = req->value.sd_uint;            
             break;
         case SETTING_MU_HW_ID:
-            cache_staging_frame.uint32_payload.value[1] = req->value.sd_uint;
-            LOG_INF("MU: new HW_ID = 0x%08X", req->value.sd_uint);
+            cache_staging_frame.uint32_payload.value[1] = req->value.sd_uint;            
             break;
         case SETTING_MU_HW_VER:
-            cache_staging_frame.uint32_payload.value[2] = req->value.sd_uint;
-            LOG_INF("MU: new HW_VER = 0x%08X", req->value.sd_uint);
+            cache_staging_frame.uint32_payload.value[2] = req->value.sd_uint;            
             break;
-        default:
-            LOG_WRN("Unknown request ID %d in FRAM queue", req->id);
+        case SETTING_MU_USER_DATA:
+            cache_staging_frame.uint32_payload.value[3] = req->value.sd_uint;            
+        default:            
             break;
     }
 
@@ -354,12 +353,13 @@ static void _fram_thread_entry(void *p1, void *p2, void *p3)
 /***************************************************************************************************
  *                 МАРШРУТЫ СЕРВЕРА ПАРАМЕТРОВ (ИНДЕКСЫ 0..5)
  **************************************************************************************************/
-SERVER_IN_CHANNEL_DEFINE(SETTING_MU_ID_1,   &settings_uint32_t_chan, MU_ID_1,   UINT_DATA); // 0
-SERVER_IN_CHANNEL_DEFINE(SETTING_MU_ID_2,   &settings_uint32_t_chan, MU_ID_2,   UINT_DATA); // 1
-SERVER_IN_CHANNEL_DEFINE(SETTING_MU_ID_3,   &settings_uint32_t_chan, MU_ID_3,   UINT_DATA); // 2
-SERVER_IN_CHANNEL_DEFINE(SETTING_MU_SN,     &settings_uint32_t_chan, MU_SN,     UINT_DATA); // 3
-SERVER_IN_CHANNEL_DEFINE(SETTING_MU_HW_ID,  &settings_uint32_t_chan, MU_HW_ID,  UINT_DATA); // 4
-SERVER_IN_CHANNEL_DEFINE(SETTING_MU_HW_VER, &settings_uint32_t_chan, MU_HW_VER, UINT_DATA); // 5
+SERVER_IN_CHANNEL_DEFINE(SETTING_MU_ID_1,      &settings_uint32_t_chan,    MU_ID_1,   UINT_DATA); // 0
+SERVER_IN_CHANNEL_DEFINE(SETTING_MU_ID_2,      &settings_uint32_t_chan,    MU_ID_2,   UINT_DATA); // 1
+SERVER_IN_CHANNEL_DEFINE(SETTING_MU_ID_3,      &settings_uint32_t_chan,    MU_ID_3,   UINT_DATA); // 2
+SERVER_IN_CHANNEL_DEFINE(SETTING_MU_SN,        &settings_uint32_t_chan,    MU_SN,     UINT_DATA); // 3
+SERVER_IN_CHANNEL_DEFINE(SETTING_MU_HW_ID,     &settings_uint32_t_chan,    MU_HW_ID,  UINT_DATA); // 4
+SERVER_IN_CHANNEL_DEFINE(SETTING_MU_HW_VER,    &settings_uint32_t_chan,    MU_HW_VER, UINT_DATA); // 5
+SERVER_IN_CHANNEL_DEFINE(SETTING_MU_USER_DATA, &settings_uint32_t_chan, MU_USER_DATA, UINT_DATA); // 6
 
 typedef struct 
 {

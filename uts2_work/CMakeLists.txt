@@ -20,20 +20,22 @@ target_include_directories(app PRIVATE
     src/midelware
     src/lib/scpi/libscpi/inc
     src/uts2/spci_interface
+    src/uts2/app
+    src/uts2
 )
 
 file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
     "src/drivers/*.c"   
     "src/midelware/*c"  
-    "src/deamons/*c" 
+    "src/uts2/deamons/*c" 
     "src/lib/scpi/libscpi/src/*.c"
     "src/uts2/spci_interface/*.c"
+    "src/uts2/app/*.c"
 )
 
 target_sources(app PRIVATE 
               
-    src/main.c
-    src/scpi_init.c    
+    src/main.c  
      ${APP_SOURCES} 
 )
 

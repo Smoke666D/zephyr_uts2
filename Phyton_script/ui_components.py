@@ -1,26 +1,14 @@
 import asyncio
 import os
 import time
-from nicegui import ui
 import serial
-from serial.tools import list_ports
+from nicegui import ui
 
 from logger import start_logger, stop_logger
 from oscilloscope import build_oscilloscope_panel, refresh_logs_ui
 from ports_panel import build_ports_panel, get_available_ports
 from system_panel import build_system_panel, read_all_uids_async
-
-# Поддерживаемые каналы подсистемы OUTPut:POWer
-ENABLE_LINES = [
-    'DUT2_PSU',
-    'DUT3_PSU',
-    'P12V',
-    'P40V',
-    'VA',
-    'USB_OUT',
-    'USB_BOOT',
-    'USB_TOP',
-]
+from power_panel import build_power_panel
 
 # Светодиоды SCPI подсистемы DISPlay:LED
 SCPI_LEDS = [
@@ -48,101 +36,29 @@ raw_logs_dict = {}
 def build_dashboard(ports_refs, ui_labels):
     tel_ref = ports_refs['tel']
     shell_ref = ports_refs['shell']
+    system_callbacks = {}
 
     with ui.column().classes('w-full gap-2') as container:
 
         # ==========================================
         # 1. БЛОК УПРАВЛЕНИЯ ПОРТАМИ (ВЫНЕСЕН В ports_panel.py)
         # ==========================================
-        build_ports_panel(
-            ports_refs,
-            on_device_connected=lambda: read_all_uids_async(shell_ref),
-        )
+        async def on_scpi_ready():
+            if 'read_all_uids' in system_callbacks:
+                await system_callbacks['read_all_uids']()
+
+        build_ports_panel(ports_refs, on_device_connected=on_scpi_ready)
 
         # ==========================================
         # 2. КАРТОЧКА: СИСТЕМА (ВЫНЕСЕНА В system_panel.py)
         # ==========================================
+        system_callbacks['read_all_uids'] = lambda: read_all_uids_async(shell_ref)
         build_system_panel(ports_refs)
 
         # ==========================================
-        # 3. УПРАВЛЕНИЕ ПИТАНИЕМ (SCPI OUTPut:POWer)
+        # 3. УПРАВЛЕНИЕ ПИТАНИЕМ (ВЫНЕСЕНО В power_panel.py)
         # ==========================================
-        with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            enable_checkboxes = []
-            bulk_updating = False
-
-            ui.label('Управление питанием (OUTPut:POWer)').classes(
-                'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
-            )
-
-            def pwr_all_on():
-                nonlocal bulk_updating
-                curr_shell = shell_ref.get('ser')
-                if curr_shell and curr_shell.is_open:
-                    curr_shell.write(b'OUTP:POW:ALL ON\r\n')
-                    ui.notify('SCPI: OUTP:POW:ALL ON', type='positive')
-                else:
-                    ui.notify('SCPI порт закрыт!', type='warning')
-
-                bulk_updating = True
-                for cb in enable_checkboxes:
-                    cb.value = True
-                bulk_updating = False
-
-            def pwr_all_off():
-                nonlocal bulk_updating
-                curr_shell = shell_ref.get('ser')
-                if curr_shell and curr_shell.is_open:
-                    curr_shell.write(b'OUTP:POW:ALL OFF\r\n')
-                    ui.notify('SCPI: OUTP:POW:ALL OFF', type='info')
-                else:
-                    ui.notify('SCPI порт закрыт!', type='warning')
-
-                bulk_updating = True
-                for cb in enable_checkboxes:
-                    cb.value = False
-                bulk_updating = False
-
-            def make_en_handler(c_name):
-                def handler(e):
-                    if bulk_updating:
-                        return
-                    state = 'ON' if e.value else 'OFF'
-                    cmd = f'OUTP:POW {c_name}, {state}\r\n'
-                    curr_shell = shell_ref.get('ser')
-                    if curr_shell and curr_shell.is_open:
-                        curr_shell.write(cmd.encode('utf-8'))
-                        ui.notify(f'[{c_name}] SCPI: {cmd.strip()}', type='info')
-                    else:
-                        ui.notify('SCPI порт закрыт!', type='warning')
-
-                return handler
-
-            with ui.row().classes('w-full gap-3 items-center'):
-                with ui.grid(columns=4).classes('flex-1 gap-1'):
-                    for idx, name in enumerate(ENABLE_LINES):
-                        ch_num = idx + 1
-                        cb = ui.checkbox(
-                            f'{ch_num}. {name}',
-                            value=False,
-                            on_change=make_en_handler(name),
-                        ).classes('text-white text-xs')
-                        enable_checkboxes.append(cb)
-
-                with ui.column().classes('gap-1.5 w-44 justify-center'):
-                    ui.button(
-                        'ВКЛЮЧИТЬ ВСЕ',
-                        on_click=pwr_all_on,
-                    ).props('color=positive text-color=white').classes(
-                        'w-full font-bold text-xs py-2 rounded shadow bg-green-600'
-                    )
-
-                    ui.button(
-                        'ВЫКЛЮЧИТЬ ВСЕ',
-                        on_click=pwr_all_off,
-                    ).props('color=negative text-color=white').classes(
-                        'w-full font-bold text-xs py-2 rounded shadow bg-red-600'
-                    )
+        build_power_panel(ports_refs)
 
         # ==========================================
         # 4. СВЕТОДИОДЫ (SCPI DISPlay:LED:STATe)

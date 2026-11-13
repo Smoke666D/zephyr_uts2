@@ -100,6 +100,7 @@ static const scpi_choice_def_t user_targets[] =
 {
     {"IU", SETTING_IU_USER_DATA},
     {"CU", SETTING_CU_USER_DATA},
+    {"MU", SETTING_MU_USER_DATA},
     SCPI_CHOICE_LIST_END
 };
 

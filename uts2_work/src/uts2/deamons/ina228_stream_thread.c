@@ -53,7 +53,6 @@ typedef enum cur_sens_channel
 } cur_sens_channel_t;
 
 
-
 /**
  *  @brief Пакетное сообщение ZBUS с результатами опроса всех датчиков
  */
@@ -62,14 +61,6 @@ typedef struct ina_batch_msg
     float sensors[CUR_SENS_NUM_SENSORS*2];
 } ina_batch_msg_t;
 
-/**
- *  @brief Пакетное сообщение ZBUS с накопленной энергией всех датчиков
- */
-typedef struct ina_energy_msg 
-{
-    float energy[CUR_SENS_NUM_SENSORS];
-} ina_energy_msg_t;
-
 
 typedef struct ina_power_msg 
 {
@@ -77,7 +68,6 @@ typedef struct ina_power_msg
 } ina_power_msg_t;
 
 #define FAST_POLL_INTERVAL_MS     1   /* Быстрый опрос U и I каждые 10 мс (100 Гц) */
-#define SLOW_ENERGY_POLL_TICKS    10   /* Опрос энергии каждые 10 тиков (100 мс / 10 Гц) */
 
 #define INA228_THREAD_STACK_SIZE  3072
 #define INA228_THREAD_PRIORITY    4
@@ -90,13 +80,7 @@ ZBUS_CHAN_DEFINE(ina_batch_chan,
                  ZBUS_OBSERVERS_EMPTY,
                  ZBUS_MSG_INIT(0));
 
-// Канал ZBUS для накопленной энергии
-ZBUS_CHAN_DEFINE(ina_energy_chan,
-                 ina_energy_msg_t,
-                 NULL,
-                 NULL,
-                 ZBUS_OBSERVERS_EMPTY,
-                 ZBUS_MSG_INIT(0));
+
 
 // Канал ZBUS для накопленной энергии
 ZBUS_CHAN_DEFINE(ina_power_chan,
@@ -111,7 +95,6 @@ ZBUS_CHAN_DEFINE(ina_power_chan,
  **************************************************************************************************/
 static double _q31_to_double(int32_t _value, int8_t _shift);
 static void   _process_fast_measurements(ina_batch_msg_t *_batch);
-static void   _process_slow_energy_fetch(void);
 static void   _rti_poller_thread(void *_p1, void *_p2, void *_p3);
 
 /***************************************************************************************************
@@ -260,36 +243,6 @@ static void _process_fast_measurements(ina_batch_msg_t *_batch)
 }
 
 /**
- * @brief Медленное прямое чтение аппаратного регистра энергии 10 раз в секунду (раз в 100 мс)
- */
-static void _process_slow_energy_fetch(void)
-{
-    ina_energy_msg_t energy_msg;
-
-    for (int i = 0; i < CUR_SENS_NUM_SENSORS; i++) 
-    {
-        struct sensor_value e_val;
-        
-        // Точечное прямое чтение регистра энергии INA228
-        int rc = sensor_sample_fetch_chan(devices[i], (enum sensor_channel)SENSOR_CHAN_INA2XX_ENERGY);
-        if (rc == 0) 
-        {
-            rc = sensor_channel_get(devices[i], (enum sensor_channel)SENSOR_CHAN_INA2XX_ENERGY, &e_val);
-            if (rc == 0) 
-            {
-                double delta_e = sensor_value_to_double(&e_val);
-                total_energy[i] += delta_e; // Накапливаем в суммарный счетчик
-            }
-        }
-        
-        energy_msg.energy[i] = total_energy[i];
-    }
-
-    // Публикация накопленной энергии в ZBUS
-    zbus_chan_pub(&ina_energy_chan, &energy_msg, K_NO_WAIT);
-}
-
-/**
  * @brief Главный поток планировщика
  */
 static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
@@ -310,20 +263,12 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
     ina_batch_msg_t batch;
     memset(&batch, 0, sizeof(batch)); 
 
-    uint32_t poll_tick = 0;
-
     while (1) 
     {  
         // 1. Быстрый опрос U и I каждые FAST_POLL_INTERVAL_MS (10 мс)
         _process_fast_measurements(&batch);
 
-        // 2. Опрос энергии раз в 10 тиков (каждые 100 мс)
-        if (++poll_tick >= SLOW_ENERGY_POLL_TICKS) 
-        {
-            poll_tick = 0;
-            _process_slow_energy_fetch();
-        }
-
+        
         k_msleep(FAST_POLL_INTERVAL_MS);
     }
 }
@@ -332,43 +277,6 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
  *                                        PUBLIC FUNCTIONS
  **************************************************************************************************/
 
-/**
- * @brief Запрос сброса накопленной энергии для всех датчиков
- */
-void ina228_request_energy_reset(void)
-{
-    int err = zbus_chan_claim(&ina_energy_chan, K_MSEC(100));
-    if (err == 0) 
-    {
-        ina_energy_msg_t *msg = zbus_chan_msg(&ina_energy_chan);
-        for (int i = 0; i < CUR_SENS_NUM_SENSORS; i++) 
-        {
-            total_energy[i] = 0.0;
-            msg->energy[i] = 0.0;
-        }
-        zbus_chan_finish(&ina_energy_chan);
-        zbus_chan_notify(&ina_energy_chan, K_MSEC(100));
-    }
-}
-
-/**
- * @brief Запрос сброса накопленной энергии для конкретного датчика (0..7)
- */
-void ina228_reset_sensor_energy(uint8_t sensor_idx)
-{
-    if (sensor_idx < CUR_SENS_NUM_SENSORS) 
-    {
-        int err = zbus_chan_claim(&ina_energy_chan, K_MSEC(100));
-        if (err == 0) 
-        {
-            ina_energy_msg_t *msg = zbus_chan_msg(&ina_energy_chan);
-            total_energy[sensor_idx] = 0.0;
-            msg->energy[sensor_idx] = 0.0;
-            zbus_chan_finish(&ina_energy_chan);
-            zbus_chan_notify(&ina_energy_chan, K_MSEC(100));
-        }
-    }
-}
 
 // Запуск потока с использованием стека в DTCM
 K_THREAD_DEFINE(ina_thread_id, INA228_THREAD_STACK_SIZE, _rti_poller_thread, 
