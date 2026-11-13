@@ -15,7 +15,7 @@ LOG_MODULE_REGISTER(telemetry_iface, LOG_LEVEL_INF);
 
 
 #define TELEMETRY_THREAD_STACK_SIZE   4000
-#define TELEMETRY_THREAD_PRIORITY     5    
+#define TELEMETRY_THREAD_PRIORITY     0    
 
 static void     _telemetry_thread_entry(void *p1, void *p2, void *p3);
 

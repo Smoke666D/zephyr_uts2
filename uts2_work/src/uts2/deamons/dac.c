@@ -221,7 +221,8 @@ static int _dac_control_init(void)
     struct dac_channel_cfg dac_ch_cfg = 
     {
         .channel_id = 2, // PA5
-        .resolution = 12
+        .resolution = 12,
+        .buffered   = true  
     };
 
     // Автоматически настраиваем канал 2 при старте системы

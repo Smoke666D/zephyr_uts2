@@ -154,7 +154,7 @@ static void _ads_isr_handler(const struct device *_dev,
 
     if (!k_work_is_pending(&ads_work)) 
     {
-        app_worker_submit(&ads_work, REAL_TIME_WORKER);
+        app_worker_submit(&ads_work, COMMON_WORKER);
     }
 }
 

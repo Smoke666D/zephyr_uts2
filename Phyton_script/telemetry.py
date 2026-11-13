@@ -10,8 +10,9 @@ from nicegui import ui
 TELEMETRY_FORMAT = '<BI' + 'f' * 68
 PACKET_SIZE = struct.calcsize(TELEMETRY_FORMAT)  # 277 байт
 
-incoming_queue = []
-queue_lock = threading.Lock()
+# Хранилище только самого последнего пакета для дашборда
+latest_packet = None
+packet_lock = threading.Lock()
 
 
 def telemetry_reader_loop(
@@ -21,7 +22,13 @@ def telemetry_reader_loop(
     lin_logs_dict=None,
     raw_logs_dict=None,
 ):
+  """
+  Системный поток: вычитывает COM-порт и пишет в логгер на полной скорости (1 кГц).
+  UI таймер: обновляет экран ровно 3 раза в секунду (каждые 330 мс).
+  """
   def _thread_target():
+    nonlocal tel_ser_ref
+    global latest_packet
     serial_buffer = bytearray()
     synchronized = False
 
@@ -35,11 +42,12 @@ def telemetry_reader_loop(
             if chunk:
               serial_buffer.extend(chunk)
 
+          # Защита от переполнения буфера в ОЗУ
           if len(serial_buffer) > 65536:
             serial_buffer = serial_buffer[-16384:]
             synchronized = False
 
-          # 1. Синхронизация: ищем 0xBE и проверяем шаг ровно 277 байт
+          # 1. Синхронизация по маркеру 0xBE и шагу 277 байт
           while not synchronized and len(serial_buffer) >= (PACKET_SIZE * 2):
             idx = serial_buffer.find(b'\xbe')
             if idx == -1:
@@ -58,14 +66,20 @@ def telemetry_reader_loop(
             else:
               del serial_buffer[0]
 
-          # 2. Потоковый разбор пакетов
+          # 2. Потоковый разбор пакетов на полной скорости (1 кГц)
           while synchronized and len(serial_buffer) >= PACKET_SIZE:
             if serial_buffer[0] == 0xBE:
               pkt = serial_buffer[:PACKET_SIZE]
               try:
                 unpacked = struct.unpack(TELEMETRY_FORMAT, pkt)
-                with queue_lock:
-                  incoming_queue.append(unpacked)
+
+                # --- ЭТАП 1: 100% ПАКЕТОВ УХОДЯТ В ЛОГ НА ДИСК (1 кГц без потерь) ---
+                log_packet(unpacked)
+
+                # --- ЭТАП 2: СОХРАНЯЕМ СВЕЖИЙ СРЕЗ ДЛЯ ДАШБОРДА ---
+                with packet_lock:
+                  latest_packet = unpacked
+
               except Exception as e:
                 print(f'Ошибка распаковки: {e}')
               del serial_buffer[:PACKET_SIZE]
@@ -79,32 +93,19 @@ def telemetry_reader_loop(
       else:
         time.sleep(0.05)
 
+  # Запуск системного потока чтения
   threading.Thread(target=_thread_target, daemon=True).start()
 
+  # Функция обновления дашборда
   def ui_update_callback():
-    with queue_lock:
-      if not incoming_queue:
+    global latest_packet
+    with packet_lock:
+      if latest_packet is None:
         return
-      packets_batch = list(incoming_queue)
-      incoming_queue.clear()
+      latest_pkt = latest_packet
 
     try:
-      # Записываем в логгер абсолютно все пакеты
-      for unpacked in packets_batch:
-        log_packet(unpacked)
-
-      # Для текстовых виджетов берем последний срез
-      # unpacked[0] = magic (0xBE)
-      # unpacked[1] = timestamp_ms (uint32)
-      # unpacked[2..5] = rf_power, ntc, ext_vsense, brd_detect (4 float)
-      # unpacked[6..9] = temp_gnd, temp_vdd, light_gnd, light_vdd (4 float)
-      # unpacked[10..27] = ao[18]
-      # unpacked[28..33] = vsense[6]
-      # unpacked[34..41] = env[8] (сместилось назад на 10 позиций!)
-      # unpacked[42..65] = current_sensors[24]
-      # unpacked[66..69] = lin_voltages[4]
-      latest_pkt = packets_batch[-1]
-
+      # Обновление основных датчиков
       ui_labels['rf_power'].set_text(f'{latest_pkt[2]:.2f}')
       ui_labels['ntc'].set_text(f'{latest_pkt[3]:.2f}')
       ui_labels['ext_vsense'].set_text(f'{latest_pkt[4]:.2f}')
@@ -114,31 +115,38 @@ def telemetry_reader_loop(
       ui_labels['light_gnd'].set_text(f'{latest_pkt[8]:.2f}')
       ui_labels['light_vdd'].set_text(f'{latest_pkt[9]:.2f}')
 
-      # AO каналы (10..27)
+      # AO каналы (1-18)
       for i in range(18):
         val = latest_pkt[10 + i]
         ui_labels[f'ao_{i}'].set_text(f'{val:.2f}')
 
-      # VSense (28..33)
+      # VSense (1-6)
       for i in range(6):
         ui_labels['vsense_%d' % i].set_text(f'{latest_pkt[28 + i]:.2f}')
 
-      # Environment (34..41) — было 44..51
+      # Environment (1-8)
       for i in range(8):
         ui_labels['env_%d' % i].set_text(f'{latest_pkt[34 + i]:.2f}')
 
-      # Датчики тока (42..65) — было 52..75
+      # Датчики тока, напряжения и мощности (8 каналов)
       curr_offset = 42
       for i in range(1, 9):
         v_val = latest_pkt[curr_offset]
         i_val = latest_pkt[curr_offset + 1]
-        e_val = latest_pkt[curr_offset + 2]
+        p_val = latest_pkt[curr_offset + 2]
+
         ui_labels[f'curr_v_{i}'].set_text(f'{v_val:.2f}')
         ui_labels[f'curr_i_{i}'].set_text(f'{i_val:.4f}')
-        ui_labels[f'curr_e_{i}'].set_text(f'{e_val:.6f}')
+
+        # Вывод мощности (4 знака после запятой)
+        if f'curr_p_{i}' in ui_labels:
+          ui_labels[f'curr_p_{i}'].set_text(f'{p_val:.4f}')
+        elif f'curr_e_{i}' in ui_labels:
+          ui_labels[f'curr_e_{i}'].set_text(f'{p_val:.4f}')
+
         curr_offset += 3
 
-      # Напряжения LIN (66..69) — было 75..78
+      # Напряжения LIN (1-4)
       for i in range(1, 5):
         lin_v = latest_pkt[65 + i]
         if f'lin_v_{i}' in ui_labels:
@@ -147,4 +155,5 @@ def telemetry_reader_loop(
     except Exception as e:
       print(f'Ошибка обновления UI: {e}')
 
+  # Таймер вывода на дашборд: ровно 3 раза в секунду (каждые 330 мс)
   ui.timer(0.33, ui_update_callback)
