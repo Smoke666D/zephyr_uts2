@@ -262,18 +262,10 @@ static int _read_hw_string_from_bus(int _unit, char *_out_str, size_t _max_len)
 {
     uint32_t w1 = 0;
     uint32_t w2 = 0;    
-
-    if (_unit == UNIT_IU) 
-    {
-        SYSTEM_BUS_GET(SETTING_IU_HW_ID, &w1);
-        SYSTEM_BUS_GET(SETTING_IU_HW_VER, &w2);
-    } 
-    else 
-    {
-        SYSTEM_BUS_GET(SETTING_CU_HW_ID, &w1);
-        SYSTEM_BUS_GET(SETTING_CU_HW_VER, &w2);
-    }
-
+    
+    SYSTEM_BUS_GET(hw_target[_unit].HW_ID, &w1);
+    SYSTEM_BUS_GET(hw_target[_unit].HW_VER, &w2);
+    
     uint16_t ccc;
     uint8_t a, mm, dd, ee;
 
