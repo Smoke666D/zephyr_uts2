@@ -137,6 +137,8 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "SENSe:POWer:ALL?",        .callback = cmd_sense_power_all_q,     },
 
     // Подсистема SYSTem
+    { .pattern = "SYSTem:ERRor[:NEXT]?",       .callback = SCPI_SystemErrorNextQ    },
+    { .pattern = "SYSTem:ERRor:COUNt?",        .callback = SCPI_SystemErrorCountQ   },
     { .pattern = "SYSTem:WAIT",                 .callback = cmd_system_wait         },
     { .pattern = "SYSTem:UID?",                 .callback = cmd_system_uid_q        },
     { .pattern = "SYSTem:SERial",               .callback = cmd_system_serial,      },

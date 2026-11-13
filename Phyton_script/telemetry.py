@@ -147,4 +147,4 @@ def telemetry_reader_loop(
     except Exception as e:
       print(f'Ошибка обновления UI: {e}')
 
-  ui.timer(0.05, ui_update_callback)
+  ui.timer(0.33, ui_update_callback)

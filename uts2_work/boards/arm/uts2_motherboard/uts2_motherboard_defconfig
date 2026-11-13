@@ -27,7 +27,7 @@ CONFIG_CAN=y
 CONFIG_CAN_FD_MODE=y
 
 CONFIG_SENSOR_ASYNC_API=y
-CONFIG_I2C_STM32_V2_TIMING=y
+#CONFIG_I2C_STM32_V2_TIMING=y
 
 # Подключение драйверов внешних датчиков и микросхем
 CONFIG_TMP112=y
