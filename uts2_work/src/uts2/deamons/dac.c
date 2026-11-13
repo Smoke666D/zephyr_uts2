@@ -161,7 +161,7 @@ static void _dac_update_handler(struct k_work *_work)
 
         if (true
             && req.id == DAC_VALUE
-            && cache_dac_data.value[0] != req.value.sd_float
+            && cache_dac_data.value[0] != req.value.sd_uint
            )
         {
             cache_dac_data.value[0] = req.value.sd_uint;                            
