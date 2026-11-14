@@ -182,7 +182,7 @@ typedef enum
     UART_DETECT_RX,
     /* Сюда в будущем можно добавлять любые другие параметры других модулей */
     SYSTEM_BUS_COUNT
-} SYSTEM_BUS_ID;
+} SERVER_CHANNEL_ID;
 
 
 #define EEPROM_EVENT_CH EVENT_1_REG
@@ -267,7 +267,7 @@ typedef struct
 
 struct system_bus_handler
 {
-    SYSTEM_BUS_ID         bus_id;  //ID параметра
+    SERVER_CHANNEL_ID         bus_id;  //ID параметра
     const struct zbus_channel   *channel; // Ссылка на канал
     SYSTEM_BUS_DATA_TYPE  channel_type;    
     uint32_t              system_index;
@@ -283,7 +283,7 @@ typedef union erver_data
 typedef struct server_request
 {
     server_data_t value;
-    SYSTEM_BUS_ID id;
+    SERVER_CHANNEL_ID id;
     struct k_sem * sync;
     uint8_t * response;
 } server_request;
@@ -310,18 +310,7 @@ typedef struct server_request
     }
 
     
- int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
- int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
- int bus_set_real(SYSTEM_BUS_ID id, float _val);
- int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
-
-#define SYSTEM_BUS_SET(id, val) _Generic((val), \
-        bool:       bus_set_bool(id, val), \
-        int:        bus_set_u32(id, val),  \
-        unsigned:   bus_set_u32(id, val),  \
-        float:      bus_set_real(id, val) \
-    )
 
 
 #define SERVER_OUT_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
@@ -332,9 +321,9 @@ typedef struct server_request
         .system_index = index, \
     }
 
- int serever_set_bool(SYSTEM_BUS_ID id, bool _val,     struct k_sem * sync, uint8_t * ret);
- int serever_set_u32( SYSTEM_BUS_ID id, uint32_t _val, struct k_sem * sync, uint8_t * ret);
- int serever_set_real(SYSTEM_BUS_ID id, float _val,    struct k_sem * sync, uint8_t * ret);
+ int serever_set_bool(SERVER_CHANNEL_ID id, bool _val,     struct k_sem * sync, uint8_t * ret);
+ int serever_set_u32( SERVER_CHANNEL_ID id, uint32_t _val, struct k_sem * sync, uint8_t * ret);
+ int serever_set_real(SERVER_CHANNEL_ID id, float _val,    struct k_sem * sync, uint8_t * ret);
  
 
 
@@ -356,9 +345,9 @@ typedef struct server_request
 )((id), (val))
 
 
-int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
-int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
-int bus_get_real(SYSTEM_BUS_ID id, float * _val);
+int bus_get_bool(SERVER_CHANNEL_ID id, bool * _val);
+int bus_get_u32(SERVER_CHANNEL_ID id,  uint32_t * _val);
+int bus_get_real(SERVER_CHANNEL_ID id, float * _val);
 
 // 2. Пишем макрос, который смотрит на тип указателя `val`
 #define SYSTEM_BUS_GET(id, val) _Generic(*(val), \
@@ -369,9 +358,9 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val);
 )((id), (val))
 
 
-int bus_get_bool_ch(SYSTEM_BUS_ID id, bool * _val,uint8_t size);
-int bus_get_u32_ch(SYSTEM_BUS_ID id,  uint32_t * _val,uint8_t size);
-int bus_get_real_ch(SYSTEM_BUS_ID id, float * _val,uint8_t size);
+int bus_get_bool_ch(SERVER_CHANNEL_ID id, bool * _val,uint8_t size);
+int bus_get_u32_ch(SERVER_CHANNEL_ID id,  uint32_t * _val,uint8_t size);
+int bus_get_real_ch(SERVER_CHANNEL_ID id, float * _val,uint8_t size);
 
 // 2. Пишем макрос, который смотрит на тип указателя `val`
 #define SYSTEM_BUS_GET_CHANNEL(id, val, size) _Generic(*(val), \
@@ -381,13 +370,13 @@ int bus_get_real_ch(SYSTEM_BUS_ID id, float * _val,uint8_t size);
     float:    bus_get_real_ch  \
 )((id), (val), (size))
 
-int bus_set_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
-int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index);
-int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
-int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index);
-int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val);
-int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask);
-int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask);
+int bus_set_bit(SERVER_CHANNEL_ID id, uint8_t bit_index);
+int bus_clear_bit(SERVER_CHANNEL_ID id, uint8_t bit_index);
+int bus_set_bit_if_needed(SERVER_CHANNEL_ID id, uint8_t bit_index);
+int bus_clear_bit_if_needed(SERVER_CHANNEL_ID id, uint8_t bit_index);
+int bus_get_bit(SERVER_CHANNEL_ID id, uint8_t bit_index, bool *bit_val);
+int bus_set_mask(SERVER_CHANNEL_ID id, uint32_t mask);
+int bus_clear_mask(SERVER_CHANNEL_ID id, uint32_t mask);
 
 
 #define SERVER_CH_SET_BIT( id, mask) bus_set_bit(id, mask)
@@ -402,32 +391,16 @@ int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask);
 
 
 
-int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
+int bus_get_can(SERVER_CHANNEL_ID id,  system_can_message_t * _val);
 
 #define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
     system_can_message_t: bus_get_can     \
 )((id), (val))
 
-/* Базовые функции установки массива параметров */
-int bus_set_bool_arr(bool val, const SYSTEM_BUS_ID *ids, size_t count);
-int bus_set_u32_arr(uint32_t val, const SYSTEM_BUS_ID *ids, size_t count);
-int bus_set_real_arr(float val, const SYSTEM_BUS_ID *ids, size_t count);
 
-/* Вспомогательный макрос генерации массива "на лету" */
-#define _BUS_CALL_MULTI(fn, val, ...) \
-    fn((val), (const SYSTEM_BUS_ID[]){__VA_ARGS__}, sizeof((const SYSTEM_BUS_ID[]){__VA_ARGS__}) / sizeof(SYSTEM_BUS_ID))
-
-/* Универсальный макрос с автоопределением типа значения */
-#define SYSTEM_BUS_SET_MULTI(val, ...) _Generic((val), \
-    bool:          bus_set_bool_arr, \
-    int:           bus_set_u32_arr,  \
-    unsigned int:  bus_set_u32_arr,  \
-    uint32_t:      bus_set_u32_arr,  \
-    float:         bus_set_real_arr  \
-)((val), (const SYSTEM_BUS_ID[]){__VA_ARGS__}, sizeof((const SYSTEM_BUS_ID[]){__VA_ARGS__}) / sizeof(SYSTEM_BUS_ID))
     
 
-int bus_listener_attach(const struct zbus_observer *listener, SYSTEM_BUS_ID id);
+int bus_listener_attach(const struct zbus_observer *listener, SERVER_CHANNEL_ID id);
 
 
 static inline uint32_t uart_detect_pack_cfg(uint32_t baudrate, 

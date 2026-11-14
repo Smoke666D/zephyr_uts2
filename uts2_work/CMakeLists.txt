@@ -39,7 +39,7 @@ target_sources(app PRIVATE
      ${APP_SOURCES} 
 )
 
-
 add_subdirectory(drivers/seq_mux_adc)
 add_subdirectory(drivers/scan_cont_adc)
 add_subdirectory(drivers/hc_595_chain)
+

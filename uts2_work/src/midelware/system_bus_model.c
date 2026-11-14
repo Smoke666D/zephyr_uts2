@@ -32,7 +32,7 @@ static int system_bus_cache_init(void)
 }
 
 
-static inline const struct system_bus_handler * _get_valid_handler(SYSTEM_BUS_ID id)
+static inline const struct system_bus_handler * _get_valid_handler(SERVER_CHANNEL_ID id)
 {
     // 1. Проверка границ массива кэша
     if (id >= SYSTEM_BUS_COUNT)
@@ -53,17 +53,12 @@ static inline const struct system_bus_handler * _get_valid_handler(SYSTEM_BUS_ID
 
 
 
-
-
-
-
-
-int bus_set_u32p(SYSTEM_BUS_ID id,  uint32_t * _val)
+int bus_set_u32p(SERVER_CHANNEL_ID id,  uint32_t * _val)
 {
     return 0;
 }
 
-int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val)
+int bus_set_can(SERVER_CHANNEL_ID id,  system_can_message_t * _val)
 {
     const struct system_bus_handler *handler = _get_valid_handler(id);
     if (false
@@ -77,7 +72,7 @@ int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val)
     return ret;        
 }
 
-int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val)
+int bus_get_can(SERVER_CHANNEL_ID id,  system_can_message_t * _val)
 {
 
 const struct system_bus_handler *handler = _get_valid_handler(id);
@@ -100,7 +95,7 @@ const struct system_bus_handler *handler = _get_valid_handler(id);
 
     
 /* Внутренний помощник для валидации и получения доступа к каналу */
-static inline bool _validate_and_claim_handler(SYSTEM_BUS_ID id, SYSTEM_BUS_DATA_TYPE _type, const struct system_bus_handler **out_handler, void **out_msg)
+static inline bool _validate_and_claim_handler(SERVER_CHANNEL_ID id, SYSTEM_BUS_DATA_TYPE _type, const struct system_bus_handler **out_handler, void **out_msg)
 {
     if (id >= SYSTEM_BUS_COUNT) {
         return false;
@@ -131,7 +126,7 @@ static inline bool _validate_and_claim_handler(SYSTEM_BUS_ID id, SYSTEM_BUS_DATA
 
 
 
-int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
+int bus_set_bool(SERVER_CHANNEL_ID id, bool _val)
 {
     const struct system_bus_handler *handler;
     void *raw_msg;
@@ -153,7 +148,7 @@ int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
 
 
 
-int serever_set_bool(SYSTEM_BUS_ID id, bool _val, struct k_sem * sync, uint8_t * ret)
+int serever_set_bool(SERVER_CHANNEL_ID id, bool _val, struct k_sem * sync, uint8_t * ret)
 {
     if (id >= SYSTEM_BUS_COUNT) 
     {
@@ -186,7 +181,7 @@ int serever_set_bool(SYSTEM_BUS_ID id, bool _val, struct k_sem * sync, uint8_t *
     
 }
 
- int serever_set_u32(SYSTEM_BUS_ID id, uint32_t _val,struct k_sem * sync, uint8_t * ret)
+ int serever_set_u32(SERVER_CHANNEL_ID id, uint32_t _val,struct k_sem * sync, uint8_t * ret)
  {
          if (id >= SYSTEM_BUS_COUNT) 
     {
@@ -216,7 +211,7 @@ int serever_set_bool(SYSTEM_BUS_ID id, bool _val, struct k_sem * sync, uint8_t *
     };
     return k_msgq_put(target_queue, &_request, K_MSEC(10));
  }
- int serever_set_real(SYSTEM_BUS_ID id, float _val,struct k_sem * sync, uint8_t * ret)
+ int serever_set_real(SERVER_CHANNEL_ID id, float _val,struct k_sem * sync, uint8_t * ret)
  {
      if (id >= SYSTEM_BUS_COUNT) 
     {
@@ -249,7 +244,7 @@ int serever_set_bool(SYSTEM_BUS_ID id, bool _val, struct k_sem * sync, uint8_t *
  }
  
 
-int bus_get_bool(SYSTEM_BUS_ID id, bool *_val)
+int bus_get_bool(SERVER_CHANNEL_ID id, bool *_val)
 {
     if (_val == NULL) 
     {
@@ -272,7 +267,7 @@ int bus_get_bool(SYSTEM_BUS_ID id, bool *_val)
     return 0;
 }
 
-int bus_get_u32(SYSTEM_BUS_ID id, uint32_t * _val)
+int bus_get_u32(SERVER_CHANNEL_ID id, uint32_t * _val)
 {
     if (_val == NULL) 
     {
@@ -299,7 +294,7 @@ int bus_get_u32(SYSTEM_BUS_ID id, uint32_t * _val)
 }
 
 
-int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
+int bus_set_u32(SERVER_CHANNEL_ID id, uint32_t _val)
 {
 
     const struct system_bus_handler *handler;
@@ -323,7 +318,7 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
 /**
  * @brief Установить (в единицу) конкретный бит (0..31) по системному ID
  */
-int bus_set_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
+int bus_set_bit(SERVER_CHANNEL_ID id, uint8_t bit_index)
 {
     if (bit_index > 31) {
         return -EINVAL;
@@ -345,7 +340,7 @@ int bus_set_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
 /**
  * @brief Сбросить (в ноль) конкретный бит (0..31) по системному ID
  */
-int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
+int bus_clear_bit(SERVER_CHANNEL_ID id, uint8_t bit_index)
 {
     if (bit_index > 31) {
         return -EINVAL;
@@ -372,7 +367,7 @@ int bus_clear_bit(SYSTEM_BUS_ID id, uint8_t bit_index)
  * @param mask Маска устанавливаемых бит (биты, равные 1, будут установлены в 1)
  * @return 0 в случае успеха, либо отрицательный код ошибки (-EINVAL, -ENODEV)
  */
-int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask)
+int bus_set_mask(SERVER_CHANNEL_ID id, uint32_t mask)
 {
     uint32_t val = 0;
     int ret = bus_get_u32(id, &val);
@@ -396,7 +391,7 @@ int bus_set_mask(SYSTEM_BUS_ID id, uint32_t mask)
  * @param mask Маска сбрасываемых бит (биты, равные 1, будут сброшены в 0)
  * @return 0 в случае успеха, либо отрицательный код ошибки (-EINVAL, -ENODEV)
  */
-int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask)
+int bus_clear_mask(SERVER_CHANNEL_ID id, uint32_t mask)
 {
     uint32_t val = 0;
     int ret = bus_get_u32(id, &val);
@@ -420,7 +415,7 @@ int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask)
  * 
  * @return    int       - 0 при успехе, отрицательный код ошибки при сбое
  */
-int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val)
+int bus_get_bit(SERVER_CHANNEL_ID id, uint8_t bit_index, bool *bit_val)
 {
     if (bit_index > 31 || bit_val == NULL) {
         return -EINVAL;
@@ -440,7 +435,7 @@ int bus_get_bit(SYSTEM_BUS_ID id, uint8_t bit_index, bool *bit_val)
 /**
  * @brief Безопасно установить бит в 1, если он еще не был установлен
  */
-int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index)
+int bus_set_bit_if_needed(SERVER_CHANNEL_ID id, uint8_t bit_index)
 {
     if (bit_index > 31) {
         return -EINVAL;
@@ -466,7 +461,7 @@ int bus_set_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index)
 /**
  * @brief Безопасно сбросить бит в 0, если он еще не был сброшен
  */
-int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index)
+int bus_clear_bit_if_needed(SERVER_CHANNEL_ID id, uint8_t bit_index)
 {
     if (bit_index > 31) {
         return -EINVAL;
@@ -489,7 +484,7 @@ int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index)
     return bus_set_u32(id, val);
 }
  
- int bus_set_real(SYSTEM_BUS_ID id, float _val)
+ int bus_set_real(SERVER_CHANNEL_ID id, float _val)
 {
 
 
@@ -511,7 +506,7 @@ int bus_clear_bit_if_needed(SYSTEM_BUS_ID id, uint8_t bit_index)
 }
 
 
-int bus_get_real(SYSTEM_BUS_ID id, float * _val)
+int bus_get_real(SERVER_CHANNEL_ID id, float * _val)
 {
   
     if (_val == NULL) 
@@ -542,7 +537,7 @@ SYS_INIT(system_bus_cache_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
 
 
 
-int bus_listener_attach(const struct zbus_observer *listener, SYSTEM_BUS_ID id)
+int bus_listener_attach(const struct zbus_observer *listener, SERVER_CHANNEL_ID id)
 {
     const struct system_bus_handler *handler = _get_valid_handler(id);
     if (handler == NULL || handler->channel == NULL || listener == NULL) {

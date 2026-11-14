@@ -6,9 +6,9 @@
       "active": "true"
     }
   ],
-  "zephyr-workbench.westWorkspace": "c:\\work\\zephyr_uts2\\zephyrproject\\zephyrproject",
+  "zephyr-workbench.westWorkspace": "${workspaceFolder}/../../zephyrproject1",
   "zephyr-workbench.toolchain": "zephyr",
-  "zephyr-workbench.sdk": "${workspaceFolder}/../../../SDK/zephyr-sdk-1.0.1",
+  "zephyr-workbench.sdk": "${workspaceFolder}/../../../../../zephyr/toochan/zephyr-sdk-1.0.1",
   "zephyr-workbench.intellisense.provider": "cpptools",
   "cmake.configureOnOpen": false,
   "cmake.enableAutomaticKitScan": false,
