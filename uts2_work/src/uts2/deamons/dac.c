@@ -85,9 +85,9 @@ static int  _dac_control_init(void);
  **************************************************************************************************/
 static const struct device *dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
-static struct k_work_poll  dac_task        __attribute__((section("DTCM")));
+static struct k_work_poll  dac_task           __attribute__((section("DTCM")));
 static struct k_poll_event dac_poll_events[1] __attribute__((section("DTCM")));
-static dac_data_msg_t      cache_dac_data  __attribute__((section("DTCM"))) = {0};
+static dac_data_msg_t      cache_dac_data     __attribute__((section("DTCM"))) = {0};
 
 static struct i2c_dt_spec i2c_spec = 
 {
@@ -123,16 +123,9 @@ static int _ad5243_set_wiper(ad5243_channel_t _channel, uint8_t _value)
 {
     uint8_t tx_data[2];
     
-    if (_channel == AD5243_CHANNEL_1) 
-    {
-        tx_data[0] = 0x00; // Выбор канала 1 (W1)
-    } 
-    else 
-    {
-        tx_data[0] = 0x80; // Выбор канала 2 (W2)
-    }
-
+    tx_data[0] = (_channel == AD5243_CHANNEL_1) ? 0x00 : 0x80; // Выбор канала 1 (W1)
     tx_data[1] = _value; // Значение положения движка (0..255)
+
     int ret = i2c_write_dt(&i2c_spec, tx_data, sizeof(tx_data));
     if (ret < 0) 
     {
@@ -189,14 +182,7 @@ static void _dac_update_handler(struct k_work *_work)
             LOG_ERR("AD5243 connection error!");
         }        
     }
-    if (req.sync != NULL)
-    {
-        if (req.response != NULL)
-        {
-            *req.response = err;
-        }
-        k_sem_give(req.sync);
-    }
+    server_request_finish(&req, err);
     dac_poll_events[0].state = K_POLL_STATE_NOT_READY;
     app_worker_poll_submit(&dac_task, dac_poll_events, ARRAY_SIZE(dac_poll_events),COMMON_WORKER);  
 }
@@ -269,7 +255,7 @@ static int _dac_control_init(void)
 
 SYS_INIT(_dac_control_init, DAC_DEAMON_INIT_LEVEL, DAC_DEAMON_INIT_PRIOR);
     
-SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, INT_DAC, UINT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, INT_DAC,    UINT_DATA);
 SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, AD5243_CH1, UINT_DATA);
 SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, AD5243_CH2, UINT_DATA);
 

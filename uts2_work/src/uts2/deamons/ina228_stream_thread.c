@@ -172,7 +172,7 @@ RTIO_DEFINE_WITH_MEMPOOL(ina_rtio,
                          sizeof(void *));
 
 // Объявление стека в секции DTCM
-K_THREAD_STACK_DEFINE(rti_poller_stack, INA228_THREAD_STACK_SIZE) __attribute__((section(".dtcm_noinit")));
+K_THREAD_STACK_DEFINE(rti_poller_stack, INA228_THREAD_STACK_SIZE);
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS

@@ -28,6 +28,7 @@
 
 #include "spci_uts2.h"
 #include "system_bus_model.h"
+#include "system_define.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -296,4 +297,4 @@ static int _scpi_server_init(void)
     return 0;
 }
 
-SYS_INIT(_scpi_server_init, APPLICATION, 80);
+SYS_INIT(_scpi_server_init, SCPI_WORKER_INIT_LEVEL, SCPI_WORKER_INIT_PRIOR);

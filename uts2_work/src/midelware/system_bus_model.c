@@ -484,6 +484,31 @@ int bus_clear_bit_if_needed(SERVER_CHANNEL_ID id, uint8_t bit_index)
     return bus_set_u32(id, val);
 }
  
+float server_get_float(SERVER_CHANNEL_ID id)
+{
+  
+    // Проверяем что декспритор канала существует и канал нужного типа
+    const struct system_bus_handler *handler = cache[id];
+    if (true
+        && handler != NULL 
+        && handler->channel_type == FLOAT_DATA
+        && zbus_chan_claim(handler->channel, K_MSEC(10)) 
+    ) 
+    {
+        // Читаем данные
+        const float *msg = zbus_chan_msg(handler->channel);
+        float res = msg[handler->system_index];
+        // Освобождаем канал
+        zbus_chan_finish(handler->channel);
+        return (res);
+    }
+    else 
+    {
+        return NAN;
+    }
+}
+
+
  int bus_set_real(SERVER_CHANNEL_ID id, float _val)
 {
 

@@ -7,7 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 #include "system_bus_model.h"
-
+#include "spci_helpers.h"
 
 #define SCPI_READ_CHUNK_MAX 100
 
@@ -294,27 +294,7 @@ static const scpi_choice_def_t adc_channel_choices[] = {
 
 scpi_result_t cmd_sense_voltage_q(scpi_t *context)
 {
-    int32_t channel;
-    float volt_val;
-    int count = 0;
-    
-     while (SCPI_ParamChoice(context, adc_channel_choices, &channel, FALSE)) 
-     {
-        SYSTEM_BUS_GET(channel, &volt_val);        
-        SCPI_ResultFloat(context, volt_val);
-        count++;
-    }
-    // 2. Запрос всех 48 каналов сразу: SENS:VOLT?
-    if (count == 0)
-    {
-        for (int ch = 0; ch < ARRAY_SIZE(adc_channel_choices) -1; ch++) 
-        {
-            SYSTEM_BUS_GET(adc_channel_choices[ch].tag, &volt_val);                    
-            SCPI_ResultFloat(context, volt_val);
-        }
-    }
-
-    return SCPI_RES_OK;
+    return get_server_float_ch_to_spci(context, adc_channel_choices,ARRAY_SIZE(adc_channel_choices) -1);
 }
 
 /* 8 датчиков мониторинга питания */

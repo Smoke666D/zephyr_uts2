@@ -237,7 +237,7 @@ typedef enum
 
 
 
-#define POWER_CONTROL_LINE_CNT 8
+
 
 typedef enum
 {  
@@ -388,9 +388,6 @@ int bus_clear_mask(SERVER_CHANNEL_ID id, uint32_t mask);
 #define SERVER_CH_GET_BIT(id, mask, val) bus_get_bit(id, mask, val)
 
 
-
-
-
 int bus_get_can(SERVER_CHANNEL_ID id,  system_can_message_t * _val);
 
 #define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
@@ -434,6 +431,20 @@ static inline enum uart_config_data_bits uart_detect_unpack_data(uint32_t cfg)
     return (enum uart_config_data_bits)((cfg >> 29) & 0x07);
 }
 
+static inline void server_request_finish(server_request * req, int err)
+{
+    if (req->sync != NULL)
+    {
+        if (req->response != NULL)
+        {
+            *req->response = err;
+        }
+        k_sem_give(req->sync);
+    }
+
+}
+
+float server_get_float(SERVER_CHANNEL_ID id);
 
 #ifdef __cplusplus
 }

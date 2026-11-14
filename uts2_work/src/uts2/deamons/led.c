@@ -116,14 +116,7 @@ static void _led_hardware_update_handler(struct k_work *_work)
             err = -EINVAL;
         }        
     }
-    if (req.sync != NULL)
-    {
-        if (req.response != NULL)
-        {
-            *req.response = 0;
-        }
-        k_sem_give(req.sync);
-    }
+    server_request_finish(&req,0);
     // Сброс статуса события перед повторным сабмитом поллинга
     led_poll_events[0].state = K_POLL_STATE_NOT_READY;
     app_worker_poll_submit(&led_task,

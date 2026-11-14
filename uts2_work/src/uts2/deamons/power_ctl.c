@@ -33,6 +33,20 @@
  **************************************************************************************************/
 LOG_MODULE_REGISTER(power_control_module, LOG_LEVEL_INF);
 
+typedef enum
+{
+    DUT2_PSU = 0,
+    DUT3_PSU = 1,  
+    P12V     = 2,
+    P24V     = 3,
+    VA       = 4,
+    USB_OUT  = 5,
+    USB_BOOT = 6,
+    USB_TOP  = 7,
+    POWER_CONTROL_LINE_CNT = 8
+} power_ctl_line_target_t;
+
+
 typedef struct power_control_line_msg 
 {
     bool state[POWER_CONTROL_LINE_CNT]; // Наш тестовый буфер (8 шагов * 2 канала)
@@ -123,14 +137,7 @@ static void  _pwr_ctl_update_handler(struct k_work *_work)
             err = -EINVAL;
         }
     }    
-    if (req.sync != NULL)
-    {
-        if (req.response != NULL)
-        {
-            *req.response = 0;
-        }
-        k_sem_give(req.sync);
-    }
+    server_request_finish(&req,0);
     pwr_ctl_poll_events[0].state = K_POLL_STATE_NOT_READY;
     app_worker_poll_submit(&pwr_ctl_task, 
                             pwr_ctl_poll_events,
