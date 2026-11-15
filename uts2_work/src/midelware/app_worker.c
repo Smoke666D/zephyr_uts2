@@ -17,6 +17,7 @@
 #include <zephyr/logging/log.h>
 
 #include "app_worker.h"
+#include "system_define.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -25,9 +26,7 @@
 LOG_MODULE_REGISTER(app_worker, LOG_LEVEL_INF);
 
 #define WORKER_STACK_SIZE           3048
-#define APP_WORKER_PRIORITY         7
-#define COMMON_WORKER_PRIORITY      4
-#define REAL_TIME_WORKER_PRIORITY  -1
+
 
 
 /***************************************************************************************************

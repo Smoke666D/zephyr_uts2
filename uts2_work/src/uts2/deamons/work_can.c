@@ -7,6 +7,7 @@
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/iterable_sections.h>
+#include "system_define.h"
 
 LOG_MODULE_REGISTER(dev_can_init, LOG_LEVEL_INF);
 
@@ -232,7 +233,7 @@ static void can_rx_callback(const struct device *dev, struct can_frame *frame, v
     }
 
     // Передаем задачу на обработку приема в защищенный workqueue
-    app_worker_submit(&can_rx_task, REAL_TIME_WORKER);
+    app_worker_submit(&can_rx_task, CAN_K_WORKER);
 }
 
 

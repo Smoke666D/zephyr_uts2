@@ -8,6 +8,7 @@
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/iterable_sections.h>
+#include "system_define.h"
 
 LOG_MODULE_REGISTER(uart_4ch_driver, LOG_LEVEL_INF);
 
@@ -174,7 +175,7 @@ static void uart_isr_callback(const struct device *dev, void *user_data)
             // Кладываем принятый байт в RX-очередь (безопасно для ISR благодаря K_NO_WAIT)
             k_msgq_put(&ctx->rx_msgq, &received_byte, K_NO_WAIT);
         }
-        app_worker_submit(&uart_rx_task, REAL_TIME_WORKER);
+        app_worker_submit(&uart_rx_task, LIN_K_WORKER);
     }
 }
 
@@ -314,7 +315,7 @@ static int uart_subsystem_init(void)
     return 0;
 }
 
-SYS_INIT(uart_subsystem_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+SYS_INIT(uart_subsystem_init, LIN_DEAMON_INIT_LEVEL, LIN_DEAMON_INIT_PRIOR);
 
 SERVER_CHANNEL_DEFINE(LIN1_TX, &lin1_tx_chan, 0, UINT_DATA);
 SERVER_CHANNEL_DEFINE(LIN2_TX, &lin2_tx_chan, 0, UINT_DATA);
