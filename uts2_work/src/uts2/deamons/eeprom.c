@@ -37,7 +37,7 @@ LOG_MODULE_REGISTER(eeprom_mgr, LOG_LEVEL_INF);
 
 #define EEPROM_PAYLOAD_DATA_SIZE   (sizeof(eeprom_disk_payload_t) - sizeof(uint16_t))
 #define EEPROM_THREAD_STACK_SIZE   1536
-#define EEPROM_THREAD_PRIORITY     5      // Запускается раньше прикладных потоков
+
 
 /***************************************************************************************************
  *                                          PRIVATE TYPES

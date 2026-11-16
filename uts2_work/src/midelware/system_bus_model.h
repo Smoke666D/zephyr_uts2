@@ -360,6 +360,8 @@ int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
 int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
 int bus_get_real(SYSTEM_BUS_ID id, float * _val);
 
+float server_get_float(SYSTEM_BUS_ID id );
+
 // 2. Пишем макрос, который смотрит на тип указателя `val`
 #define SYSTEM_BUS_GET(id, val) _Generic(*(val), \
     bool:     bus_get_bool, \

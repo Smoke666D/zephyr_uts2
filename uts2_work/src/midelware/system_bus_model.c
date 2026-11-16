@@ -538,6 +538,34 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val)
 
 }
 
+
+float server_get_float(SYSTEM_BUS_ID id )
+{
+    float _data = NAN;
+
+    const struct system_bus_handler *handler = cache[id];
+    if (handler == NULL || handler->channel_type != FLOAT_DATA) 
+    {
+        return false;
+    }
+
+    
+    // Захватываем данные канала Zbus с таймаутом
+    if (zbus_chan_claim(handler->channel, K_MSEC(10)) != 0) {
+        return false;
+    }
+
+
+    // Читаем данные
+    float *msg = zbus_chan_msg(handler->channel);
+    _data = msg[handler->system_index];
+
+    // Освобождаем канал
+    zbus_chan_finish(handler->channel);
+    return _data;
+
+}
+
 SYS_INIT(system_bus_cache_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
 
 

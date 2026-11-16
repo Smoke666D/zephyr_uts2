@@ -29,6 +29,7 @@
 #include <zephyr/drivers/sensor/ina2xx.h>
 
 #include "system_bus_model.h"
+#include "system_define.h"
 
 
 /***************************************************************************************************
@@ -94,7 +95,7 @@ typedef struct ina_power_msg
 #define FAST_POLL_INTERVAL_MS     1   /* Быстрый опрос U и I каждые 10 мс (100 Гц) */
 
 #define INA228_THREAD_STACK_SIZE  3072
-#define INA228_THREAD_PRIORITY    4
+
 
 // Канал ZBUS для быстрых данных (U, I)
 ZBUS_CHAN_DEFINE(ina_batch_chan,
