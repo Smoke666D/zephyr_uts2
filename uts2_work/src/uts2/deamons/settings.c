@@ -32,7 +32,6 @@ LOG_MODULE_REGISTER(fram_settings, LOG_LEVEL_INF);
 #define FRAM_DEBOUNCE_DELAY_MS   50U    // Окно агрегации изменений (HW_ID + HW_VER)
 #define MAX_PENDING_SYNCS        8      // Буфер одновременных потоков квитирования
 #define FRAM_THREAD_STACK_SIZE   2048   // Безопасный размер стека
-#define FRAM_THREAD_PRIORITY     10     // Низкий приоритет: не блокирует системные задачи
 
 typedef enum {
     MU_ID_1 = 0,

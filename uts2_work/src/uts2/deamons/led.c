@@ -129,7 +129,7 @@ static void _led_hardware_update_handler(struct k_work *_work)
     app_worker_poll_submit(&led_task,
                             led_poll_events,
                             ARRAY_SIZE(led_poll_events),
-                            COMMON_WORKER);
+                            LED_K_WORK);
 }
 
 /**
@@ -167,7 +167,7 @@ static int _led_manager_system_init(void)
     app_worker_poll_submit(&led_task, 
                             led_poll_events,
                             ARRAY_SIZE(led_poll_events),
-                            COMMON_WORKER);
+                            LED_K_WORK);
                             
     LOG_INF("LEDs initialized successfully...");
     return 0;

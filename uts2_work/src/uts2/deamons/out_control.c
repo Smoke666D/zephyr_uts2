@@ -29,6 +29,7 @@
 
 #include "system_bus_model.h"
 #include "app_worker.h"
+#include "system_define.h"
 
 /***************************************************************************************************
  *                                           DEFINITIONS
@@ -186,7 +187,7 @@ static void  _hc595_ctl_update_handler(struct k_work *_work)
         k_sem_give(req.sync);
     }
     hc595_ctl_poll_events[0].state = K_POLL_STATE_NOT_READY;
-    app_worker_poll_submit(&hc595_ctl_task, hc595_ctl_poll_events, ARRAY_SIZE(hc595_ctl_poll_events),REAL_TIME_WORKER);
+    app_worker_poll_submit(&hc595_ctl_task, hc595_ctl_poll_events, ARRAY_SIZE(hc595_ctl_poll_events), OUT_CTL_K_WORK);
 }
 
 
@@ -207,12 +208,12 @@ static int _out_manager_system_init(void)
                       &hc595_ctl_rx_queue); 
 
     k_work_poll_init(&hc595_ctl_task, _hc595_ctl_update_handler); 
-    app_worker_poll_submit(&hc595_ctl_task, hc595_ctl_poll_events,ARRAY_SIZE(hc595_ctl_poll_events), REAL_TIME_WORKER);
+    app_worker_poll_submit(&hc595_ctl_task, hc595_ctl_poll_events,ARRAY_SIZE(hc595_ctl_poll_events), OUT_CTL_K_WORK);
 
     return 0;
 }
 
-SYS_INIT(_out_manager_system_init, APPLICATION, 40);
+SYS_INIT(_out_manager_system_init, OUT_CTL_DEAMON_INIT_LEVEL,OUT_CTL_DEAMON_INIT_PRIOR);
 
 SERVER_OUT_CHANNEL_DEFINE(DOUT1, &hc595_chan, 0, UINT_DATA);
 SERVER_OUT_CHANNEL_DEFINE(DOUT2, &hc595_chan, 1, UINT_DATA);

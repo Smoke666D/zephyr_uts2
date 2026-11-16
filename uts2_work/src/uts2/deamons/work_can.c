@@ -7,6 +7,7 @@
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/iterable_sections.h>
+#include "system_define.h"
 
 LOG_MODULE_REGISTER(dev_can_init, LOG_LEVEL_INF);
 
@@ -129,7 +130,7 @@ static void _can_tx_listener_cb(const struct zbus_channel *_chan)
     }
     
     // Передаем задачу на исполнение в защищенный workqueue
-    app_worker_submit(&can_task, REAL_TIME_WORKER);
+    app_worker_submit(&can_task, CAN_K_WORK);
 }
 
 /* Функция отправки следующего пакета из программной очереди в железо */
@@ -232,7 +233,7 @@ static void can_rx_callback(const struct device *dev, struct can_frame *frame, v
     }
 
     // Передаем задачу на обработку приема в защищенный workqueue
-    app_worker_submit(&can_rx_task, REAL_TIME_WORKER);
+    app_worker_submit(&can_rx_task, CAN_K_WORK);
 }
 
 
@@ -312,7 +313,7 @@ static int dev_can_init(void)
     return 0;
 }
 
-SYS_INIT(dev_can_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+SYS_INIT(dev_can_init, CAN_DEAMON_INIT_LEVEL , CAN_DEAMON_INIT_PRIOR);
 
 SERVER_IN_CHANNEL_DEFINE(CAN1_TX, &can1_tx_chan, 0, CAN_MSG_DATA);
 SERVER_IN_CHANNEL_DEFINE(CAN2_TX, &can2_tx_chan, 0, CAN_MSG_DATA);

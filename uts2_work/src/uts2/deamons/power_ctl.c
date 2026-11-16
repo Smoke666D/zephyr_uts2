@@ -135,7 +135,7 @@ static void  _pwr_ctl_update_handler(struct k_work *_work)
     app_worker_poll_submit(&pwr_ctl_task, 
                             pwr_ctl_poll_events,
                             ARRAY_SIZE(pwr_ctl_poll_events), 
-                            COMMON_WORKER);
+                            POWER_CTL_K_WORK);
 }
 
 /**
@@ -157,7 +157,7 @@ static int _power_control_init(void)
     app_worker_poll_submit(&pwr_ctl_task, 
                             pwr_ctl_poll_events,
                             ARRAY_SIZE(pwr_ctl_poll_events),
-                            COMMON_WORKER);
+                            POWER_CTL_K_WORK);
 
     _enable_port_init();
     return 0;

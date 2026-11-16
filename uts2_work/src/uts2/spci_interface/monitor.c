@@ -4,6 +4,7 @@
 #include "system_bus_model.h"
 #include "app_worker.h"
 #include "scpi/scpi.h"
+#include "system_define.h"
 
 #define MONITOR_MIN_INTERVAL_MS 10U    // Защита: не чаще 10 мс (100 Гц), чтобы не перегружать UART
 #define MONITOR_MAX_INTERVAL_MS 60000U // Максимум 60 секунд
@@ -134,7 +135,7 @@ static void _monitor_work_handler(struct k_work *work)
     if (monitor_ctx.is_running) {
         app_worker_reschedule_submit(&monitor_ctx.work, 
                                      K_MSEC(monitor_ctx.interval_ms), 
-                                     APPLICATION_WORKER);
+                                     SCPI_MONITOR_K_WORK);
     }
 }
 

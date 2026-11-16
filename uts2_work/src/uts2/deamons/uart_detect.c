@@ -8,6 +8,8 @@
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/drivers/uart.h>
 #include "system_bus_model.h"
+#include "app_worker.h"
+#include "system_define.h"
 
 LOG_MODULE_REGISTER(uart_detect, LOG_LEVEL_INF);
 ZBUS_CHAN_DECLARE(uart_detect_cfg_chan); /* Канал настроек порта */
@@ -53,7 +55,7 @@ static void uart_detect_isr(const struct device *dev, void *user_data)
             ring_buf_put(&rx_rb, temp_buf, recv_len);
         }
 
-        k_work_submit(&rx_work);
+         app_worker_submit(&rx_work,UART_DETECT_K_WORK);
     }
 }
 
@@ -143,6 +145,6 @@ static int uart_detect_init(void)
     return 0;
 }
 
-SYS_INIT(uart_detect_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+SYS_INIT(uart_detect_init, UART_DETECT_DEAMON_INIT_LEVEL, UART_DETECT_DEAMON_INIT_PRIOR);
 
 SERVER_IN_CHANNEL_DEFINE(UART_DETECT_RX, &uart_detect_rx_chan, 0, UINT_DATA);

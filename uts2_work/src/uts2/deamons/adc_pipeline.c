@@ -212,7 +212,7 @@ static void _env_listener_handler(struct k_work *_work)
     app_worker_poll_submit(&env_adc_monitor_work, 
                             env_adc_poll_events,
                             ARRAY_SIZE(env_adc_poll_events),
-                            REAL_TIME_WORKER);
+                            ADC_PIPELINE_K_WORK);
 }
 
 /**
@@ -248,7 +248,7 @@ static void _sense_listener_handler(struct k_work *_work)
     app_worker_poll_submit(&sense_adc_monitor_work,
                             sense_adc_poll_events,
                             ARRAY_SIZE(env_adc_poll_events),
-                            REAL_TIME_WORKER);
+                            ADC_PIPELINE_K_WORK);
 }
 
 /**
@@ -299,13 +299,13 @@ static int _adc_pipeline_init(void)
     app_worker_poll_submit(&env_adc_monitor_work,
                             env_adc_poll_events,
                             ARRAY_SIZE(env_adc_poll_events),
-                            REAL_TIME_WORKER);
+                            ADC_PIPELINE_K_WORK);
 
     k_work_poll_init(&sense_adc_monitor_work, _sense_listener_handler);                
     app_worker_poll_submit(&sense_adc_monitor_work,
                             sense_adc_poll_events,
                             ARRAY_SIZE(sense_adc_poll_events),
-                            REAL_TIME_WORKER);
+                            ADC_PIPELINE_K_WORK);
     
     return 0;
 }
