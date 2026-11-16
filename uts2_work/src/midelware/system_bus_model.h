@@ -260,11 +260,6 @@ typedef struct {
 
 
 
-typedef struct 
-{
-    float  value[4];    
-} FLOAT_ARRAY_CHANNEL_4_t;
-
 struct system_bus_handler
 {
     SYSTEM_BUS_ID         bus_id;  //ID параметра
@@ -313,7 +308,7 @@ typedef struct server_request
  int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
  int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
  int bus_set_real(SYSTEM_BUS_ID id, float _val);
- int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
+
 
 
 #define SYSTEM_BUS_SET(id, val) _Generic((val), \
@@ -337,7 +332,6 @@ typedef struct server_request
  int serever_set_real(SYSTEM_BUS_ID id, float _val,    struct k_sem * sync, uint8_t * ret);
  
 
-
 #define SERVER_CH_SET_ASYC(id, val) _Generic((val), \
         bool:       serever_set_bool(id, val, NULL, NULL), \
         uint32_t:        serever_set_u32(id, val, NULL, NULL),  \
@@ -351,9 +345,7 @@ typedef struct server_request
     )
 
 
-#define SYSTEM_BUS_SET_P(id, val) _Generic(*(val), \
-    system_can_message_t: bus_set_can              \
-)((id), (val))
+
 
 
 int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
@@ -400,14 +392,17 @@ int bus_clear_mask(SYSTEM_BUS_ID id, uint32_t mask);
 #define SERVER_CH_CLEAR_BIT_IF_NEEDED( id, mask) bus_clear_bit_if_needed(id, mask)
 #define SERVER_CH_GET_BIT(id, mask, val) bus_get_bit(id, mask, val)
 
+int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
-
+#define SYSTEM_BUS_SET_P(id, val) _Generic(*(val), \
+    system_can_message_t: bus_set_can              \
+)((id), (val))
 
 
 int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 
 #define SYSTEM_BUS_GET_P(id, val) _Generic(*(val), \
-    system_can_message_t: bus_get_can     \
+    system_can_message_t: bus_get_can              \
 )((id), (val))
 
 /* Базовые функции установки массива параметров */

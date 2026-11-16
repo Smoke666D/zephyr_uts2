@@ -25,7 +25,7 @@
 #include "app_worker.h"
 #include "scpi/scpi.h"
 #include "scpi/ieee488.h"
-
+#include "can_fd.h"
 #include "spci_uts2.h"
 #include "system_bus_model.h"
 
@@ -152,6 +152,16 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "MONItor[:VOLTage]:STARt",  .callback = cmd_monitor_start,         },
     { .pattern = "MONItor[:VOLTage]:STOP",   .callback = cmd_monitor_stop,          },
     { .pattern = "MONItor[:VOLTage]:STATe?", .callback = cmd_monitor_state_q,       },
+
+  //  { .pattern = "CAN:BAUDrate",             .callback = cmd_can_baud,              },
+  //  { .pattern = "CAN:BAUDrate?",            .callback = cmd_can_baud_q,            },
+   // { .pattern = "CAN:MODE",                 .callback = cmd_can_mode,              },
+  //  { .pattern = "CAN[:STATe]",              .callback = cmd_can_state,             },
+  //  { .pattern = "CAN:TRANsmit",             .callback = cmd_can_transmit,          },
+    { .pattern = "CAN:RECEive?",             .callback = cmd_can_receive_q          },
+    { .pattern = "CAN:COUNt?",               .callback = cmd_can_count_q,           },
+    { .pattern = "CAN:CLEar",                .callback = cmd_can_clear,             },
+  //  { .pattern = "CAN:STATus?",              .callback = cmd_can_status_q,          },
     
     SCPI_CMD_LIST_END
 };

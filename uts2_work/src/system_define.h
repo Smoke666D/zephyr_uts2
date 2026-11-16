@@ -25,6 +25,8 @@
 #define OUT_CTL_DEAMON_INIT_PRIOR       40
 #define MCP_CTL_DEAMON_INIT_LEVEL       APPLICATION
 #define MCP_CTL_DEAMON_INIT_PRIOR       70
+#define SPCI_CAN_INIT_LEVEL             APPLICATION
+#define SPCI_CAN_INIT_PRIOR             51
 
 #define TELEMETRY_THREAD_PRIORITY       0    
 #define INA228_THREAD_PRIORITY          4
