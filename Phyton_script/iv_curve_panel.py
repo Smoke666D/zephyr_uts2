@@ -12,9 +12,10 @@ stats_container = None
 refresh_logs_callback = None
 log_info_label = None
 
-# Кэш прочитанного файла: { 'sensor_name': {'V': [...], 'I': [...], 'P': [...]} }
+# Кэш прочитанного файла: { 'sensor_name': {'V': [...], 'I': [...]} }
 cached_sensors_data = {}
 selected_sensors = []
+filter_window_ms = 1  # По умолчанию 1 мс (фильтр выключен)
 
 # Имена датчиков тока стенда
 CURRENT_SENSOR_NAMES = [
@@ -32,75 +33,96 @@ SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e']
 
 
 def get_log_files():
-  os.makedirs(LOGS_DIR, exist_ok=True)
-  pattern = os.path.join(LOGS_DIR, '*.csv')
-  files = glob.glob(pattern)
-  files.sort(key=os.path.getmtime, reverse=True)
-  return files
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    pattern = os.path.join(LOGS_DIR, '*.csv')
+    files = glob.glob(pattern)
+    files.sort(key=os.path.getmtime, reverse=True)
+    return files
 
 
 def refresh_iv_logs_ui():
-  global refresh_logs_callback
-  if refresh_logs_callback:
-    refresh_logs_callback()
+    global refresh_logs_callback
+    if refresh_logs_callback:
+        refresh_logs_callback()
+
+
+def apply_median_filter(data_list, window):
+    """
+    Применяет одномерный медианный фильтр с нечётным размером окна.
+    Если window <= 1 или размер данных меньше окна, возвращает копию списка.
+    """
+    if window <= 1 or len(data_list) < window:
+        return list(data_list)
+
+    half = window // 2
+    n = len(data_list)
+    result = [0.0] * n
+
+    # Для краевых точек берем меньшее симметричное окно
+    for i in range(n):
+        start = max(0, i - half)
+        end = min(n, i + half + 1)
+        sub = sorted(data_list[start:end])
+        result[i] = sub[len(sub) // 2]
+
+    return result
 
 
 def update_stats_panel():
-  """Вычисляет базовую статистику ВАХ для выбранных датчиков (только U и I)"""
-  global stats_container, selected_sensors, cached_sensors_data
-  if not stats_container:
-    return
+    """Вычисляет базовую статистику ВАХ для выбранных датчиков"""
+    global stats_container, selected_sensors, cached_sensors_data, filter_window_ms
+    if not stats_container:
+        return
 
-  stats_container.clear()
-  if not selected_sensors:
-    return
+    stats_container.clear()
+    if not selected_sensors:
+        return
 
-  with stats_container:
-    with ui.row().classes('w-full gap-2 items-center'):
-      for idx, s_name in enumerate(selected_sensors):
-        if s_name in cached_sensors_data:
-          data = cached_sensors_data[s_name]
-          v_arr = data['V']
-          i_arr = data['I']
-          if not v_arr or not i_arr:
-            continue
+    with stats_container:
+        with ui.row().classes('w-full gap-2 items-center'):
+            for idx, s_name in enumerate(selected_sensors):
+                if s_name in cached_sensors_data:
+                    raw_data = cached_sensors_data[s_name]
+                    if not raw_data['V'] or not raw_data['I']:
+                        continue
 
-          color = SERIES_COLORS[idx % len(SERIES_COLORS)]
-          v_max = max(v_arr)
-          i_max = max(i_arr)
-          i_avg = sum(i_arr) / len(i_arr)
-          v_avg = sum(v_arr) / len(v_arr)
+                    # Статистика считается по отфильтрованным значениям
+                    v_arr = apply_median_filter(raw_data['V'], filter_window_ms)
+                    i_arr = apply_median_filter(raw_data['I'], filter_window_ms)
 
-          # Эквивалентное сопротивление R = U_avg / I_avg
-          r_eq_str = (
-              f'{v_avg / i_avg:.1f} Ом'
-              if abs(i_avg) > 1e-4
-              else '>100 кОм'
-          )
+                    color = SERIES_COLORS[idx % len(SERIES_COLORS)]
+                    v_max = max(v_arr)
+                    i_max = max(i_arr)
+                    i_avg = sum(i_arr) / len(i_arr)
+                    v_avg = sum(v_arr) / len(v_arr)
 
-          with ui.card().classes(
-              'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border'
-              ' border-slate-700/80 shadow-md flex flex-col justify-between'
-          ):
-            with ui.row().classes('w-full justify-between items-center mb-1'):
-              ui.label(s_name).style(f'color: {color};').classes(
-                  'text-xs font-bold leading-none truncate max-w-[200px]'
-              )
-              ui.label(f'R_экв: {r_eq_str}').classes(
-                  'text-[10px] font-mono text-slate-300'
-              )
+                    r_eq_str = (
+                        f'{v_avg / i_avg:.1f} Ом'
+                        if abs(i_avg) > 1e-4
+                        else '>100 кОм'
+                    )
 
-            with ui.row().classes(
-                'w-full justify-between items-center text-[10px] font-mono'
-                ' leading-none'
-            ):
-              ui.label(f'U_max: {v_max:.2f} В').classes('text-emerald-400')
-              ui.label(f'I_max: {i_max:.4f} А').classes('text-sky-400')
+                    with ui.card().classes(
+                        'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border border-slate-700/80 shadow-md flex flex-col justify-between'
+                    ):
+                        with ui.row().classes('w-full justify-between items-center mb-1'):
+                            ui.label(s_name).style(f'color: {color};').classes(
+                                'text-xs font-bold leading-none truncate max-w-[200px]'
+                            )
+                            ui.label(f'R_экв: {r_eq_str}').classes(
+                                'text-[10px] font-mono text-slate-300'
+                            )
+
+                        with ui.row().classes(
+                            'w-full justify-between items-center text-[10px] font-mono leading-none'
+                        ):
+                            ui.label(f'U_max: {v_max:.2f} В').classes('text-emerald-400')
+                            ui.label(f'I_max: {i_max:.4f} А').classes('text-sky-400')
 
 
 def render_chart():
-  """Перерисовывает график ВАХ (X: Напряжение В, Y: Ток А)"""
-  global chart_container, selected_sensors, cached_sensors_data
+  """Перерисовывает график ВАХ (X: Напряжение В, Y: Ток А) с медианной фильтрацией"""
+  global chart_container, selected_sensors, cached_sensors_data, filter_window_ms
   if not chart_container or not cached_sensors_data:
     return
 
@@ -114,11 +136,14 @@ def render_chart():
       color = SERIES_COLORS[idx % len(SERIES_COLORS)]
       legend.append(s_name)
 
-      v_list = cached_sensors_data[s_name]['V']
-      i_list = cached_sensors_data[s_name]['I']
+      raw_v = cached_sensors_data[s_name]['V']
+      raw_i = cached_sensors_data[s_name]['I']
 
-      # Формируем двумерные точки: [Напряжение, Ток]
-      points = list(zip(v_list, i_list))
+      # Применяем медианный фильтр к обеим осям
+      v_filtered = apply_median_filter(raw_v, filter_window_ms)
+      i_filtered = apply_median_filter(raw_i, filter_window_ms)
+
+      points = list(zip(v_filtered, i_filtered))
 
       series.append({
           'name': s_name,
@@ -134,7 +159,7 @@ def render_chart():
       'animation': False,
       'tooltip': {
           'trigger': 'axis',
-          'formatter': (  # Кастомный тултип с показом U и I
+          'formatter': (
               'function (params) {'
               '  if (!params || !params.length) return "";'
               '  let res = params[0].seriesName + "<br/>";'
@@ -229,7 +254,7 @@ def rebuild_checkboxes():
 
 
 def load_log_for_iv(file_path):
-  """Вычитывает лог и извлекает ТОЛЬКО пары U и I для каждого из 8 датчиков"""
+  """Вычитывает лог и извлекает пары U и I"""
   global cached_sensors_data, selected_sensors, log_info_label
   if not file_path or not os.path.exists(file_path):
     ui.notify('Файл лога не найден!', type='warning')
@@ -254,7 +279,6 @@ def load_log_for_iv(file_path):
     if not header:
       return
 
-    # Ищем ТОЛЬКО колонки напряжения (V) и тока (I)
     sensor_col_indices = {}
     for i in range(1, 9):
       s_name = CURRENT_SENSOR_NAMES[i - 1]
@@ -309,7 +333,7 @@ def load_log_for_iv(file_path):
 
 
 def build_iv_curve_panel():
-  """Строит панель офлайн-анализа вольт-амперных характеристик"""
+  """Строит панель офлайн-анализа вольт-амперных характеристик с медианным фильтром"""
   global chart_container, channels_container, stats_container, refresh_logs_callback, log_info_label
 
   with ui.card().classes('bg-slate-800 p-3 w-full'):
@@ -356,6 +380,43 @@ def build_iv_curve_panel():
             'bg-slate-700 text-white text-xs py-1 px-2'
         )
 
+        # --- НАСТРОЙКА ОКНА МЕДИАННОГО ФИЛЬТРА (1..101 мс, шаг 2) ---
+        with ui.row().classes(
+            'items-center gap-1 bg-slate-700/60 px-2 py-0.5 rounded border'
+            ' border-slate-600'
+        ):
+          ui.label('Медиана:').classes(
+              'text-xs text-slate-300 font-semibold'
+          )
+
+          def on_filter_change(e):
+            global filter_window_ms
+            try:
+              val = int(e.value)
+              # Ограничиваем диапазон 1..101
+              val = max(1, min(101, val))
+              # Делаем нечётным (если вдруг ввели четное)
+              if val > 1 and val % 2 == 0:
+                val += 1
+              filter_window_ms = val
+              filter_input.set_value(val)
+              render_chart()
+            except (ValueError, TypeError):
+              pass
+
+          filter_input = (
+              ui.number(
+                  value=1,
+                  min=1,
+                  max=101,
+                  step=2,
+                  on_change=on_filter_change,
+              )
+              .props('dark outlined dense input-class="text-center font-mono text-xs w-12"')
+              .classes('bg-slate-800 rounded')
+          )
+          ui.label('мс').classes('text-[11px] text-slate-400')
+
         def on_open():
           sel_w = current_select.get('widget')
           t_path = sel_w.value if sel_w else None
@@ -378,7 +439,7 @@ def build_iv_curve_panel():
           'text-xs text-slate-400 italic py-10 self-center'
       )
 
-    # Сетка из 8 чекбоксов датчиков тока (4 колонки x 2 ряда)
+    # Сетка из 8 чекбоксов датчиков тока
     channels_container = ui.grid(columns=4).classes(
         'w-full gap-1.5 bg-slate-700/30 p-2.5 rounded mt-2'
     )
