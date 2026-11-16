@@ -87,6 +87,8 @@ static const struct device *dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
 static struct k_work_poll  dac_task        __attribute__((section("DTCM")));
 static struct k_poll_event dac_poll_events[1] __attribute__((section("DTCM")));
+static struct k_work_poll  int_dac_task        __attribute__((section("DTCM")));
+static struct k_poll_event int_dac_poll_events[1] __attribute__((section("DTCM")));
 static dac_data_msg_t      cache_dac_data  __attribute__((section("DTCM"))) = {0};
 
 static struct i2c_dt_spec i2c_spec = 
@@ -96,12 +98,22 @@ static struct i2c_dt_spec i2c_spec =
 };
 
 K_MSGQ_DEFINE(dac_rx_queue, sizeof(server_request), 3, 4);
+K_MSGQ_DEFINE(int_dac_rx_queue, sizeof(server_request), 3, 4);
 
 ZBUS_CHAN_DEFINE(
     dac_chan,
     struct dac_data_msg,
     NULL,
     &dac_rx_queue,
+    ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(0)
+);
+
+ZBUS_CHAN_DEFINE(
+    int_dac_chan,
+    uint32_t,
+    NULL,
+    &int_dac_rx_queue,
     ZBUS_OBSERVERS_EMPTY,
     ZBUS_MSG_INIT(0)
 );
@@ -160,14 +172,6 @@ static void _dac_update_handler(struct k_work *_work)
     {    
 
         if (true
-            && req.id == DAC_VALUE
-            && cache_dac_data.value[0] != req.value.sd_uint
-           )
-        {
-            cache_dac_data.value[0] = req.value.sd_uint;                            
-            dac_write_value(dac_dev, 2, cache_dac_data.value[0]);
-        }
-        else if (true
                  && req.id == ADJ_RES1
                  && cache_dac_data.value[1] != req.value.sd_uint
                 )        
@@ -199,6 +203,38 @@ static void _dac_update_handler(struct k_work *_work)
     }
     dac_poll_events[0].state = K_POLL_STATE_NOT_READY;
     app_worker_poll_submit(&dac_task, dac_poll_events, ARRAY_SIZE(dac_poll_events), DAC_K_WORK);  
+}
+
+
+static void _int_dac_update_handler(struct k_work *_work)
+{
+    ARG_UNUSED(_work);
+    int err = 0;
+    server_request req;
+
+    if (k_msgq_get(&int_dac_rx_queue, &req, K_NO_WAIT) == 0)
+    {    
+
+        if (true
+            && req.id == DAC_VALUE
+            && cache_dac_data.value[0] != req.value.sd_uint
+           )
+        {
+            cache_dac_data.value[0] = req.value.sd_uint;                            
+            dac_write_value(dac_dev, 2, cache_dac_data.value[0]);
+        }
+       
+    }
+    if (req.sync != NULL)
+    {
+        if (req.response != NULL)
+        {
+            *req.response = err;
+        }
+        k_sem_give(req.sync);
+    }
+    int_dac_poll_events[0].state = K_POLL_STATE_NOT_READY;
+    app_worker_poll_submit(&int_dac_task, int_dac_poll_events, ARRAY_SIZE(int_dac_poll_events), INT_DAC_K_WORK);  
 }
 
 /**
@@ -238,8 +274,16 @@ static int _dac_control_init(void)
                       K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
                       &dac_rx_queue); 
 
+    k_poll_event_init(&int_dac_poll_events[0],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
+                      K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
+                      &int_dac_rx_queue); 
+
     k_work_poll_init(&dac_task, _dac_update_handler); 
     app_worker_poll_submit(&dac_task, dac_poll_events,ARRAY_SIZE(dac_poll_events), DAC_K_WORK);
+
+    k_work_poll_init(&int_dac_task, _int_dac_update_handler); 
+    app_worker_poll_submit(&int_dac_task, int_dac_poll_events,ARRAY_SIZE(int_dac_poll_events), INT_DAC_K_WORK);
 
     LOG_INF("DAC1 Channel 2 (PA5) successfully initialized!");
 
@@ -269,7 +313,7 @@ static int _dac_control_init(void)
 
 SYS_INIT(_dac_control_init, DAC_DEAMON_INIT_LEVEL, DAC_DEAMON_INIT_PRIOR);
     
-SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &dac_chan, INT_DAC, UINT_DATA);
+SERVER_OUT_CHANNEL_DEFINE(DAC_VALUE, &int_dac_chan, INT_DAC, UINT_DATA);
 SERVER_OUT_CHANNEL_DEFINE(ADJ_RES1,  &dac_chan, AD5243_CH1, UINT_DATA);
 SERVER_OUT_CHANNEL_DEFINE(ADJ_RES2,  &dac_chan, AD5243_CH2, UINT_DATA);
 

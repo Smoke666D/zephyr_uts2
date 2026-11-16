@@ -75,9 +75,6 @@ typedef enum
 } sens_channel__num_t;
 
 
-
-
-
 /**
  *  @brief Пакетное сообщение ZBUS с результатами опроса всех датчиков
  */

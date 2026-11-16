@@ -46,5 +46,6 @@
 #define LED_K_WORK                      COMMON_WORKER
 #define I2C_SENS_K_WORK                 COMMON_WORKER
 #define DAC_K_WORK                      COMMON_WORKER
+#define INT_DAC_K_WORK                  REAL_TIME_WORKER
 #define ASS1115_K_WORK                  COMMON_WORKER
 #define ADC_PIPELINE_K_WORK             REAL_TIME_WORKER
