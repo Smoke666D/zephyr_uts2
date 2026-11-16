@@ -80,7 +80,93 @@ void send_binary_telemetry(const struct device *uart_dev) {
 
     pkt.timestamp_ms = k_uptime_get_32();
 
-    float _temp;
+
+
+    SYSTEM_BUS_GET(RF_POWER, &pkt.rf_power);
+    SYSTEM_BUS_GET(NTC, &pkt.ntc);
+    SYSTEM_BUS_GET(EXT_VSENSE, &pkt.ext_vsense);
+    SYSTEM_BUS_GET(BRD_DETECT, &pkt.brd_detect);
+
+    SYSTEM_BUS_GET(I2C1_TEMP1, &pkt.temp_gnd);
+    SYSTEM_BUS_GET(I2C1_TEMP2, &pkt.temp_vdd);
+    SYSTEM_BUS_GET(I2C1_LUX1, &pkt.light_gnd);
+    SYSTEM_BUS_GET(I2C1_LUX2, &pkt.light_vdd);
+
+    // AO 1-6, 7-12, 13-18
+    SYSTEM_BUS_GET(AIN_AO1, &pkt.ao[0]);
+    SYSTEM_BUS_GET(AIN_AO2, &pkt.ao[1]);
+    SYSTEM_BUS_GET(AIN_AO3, &pkt.ao[2]);
+    SYSTEM_BUS_GET(AIN_AO4, &pkt.ao[3]);
+    SYSTEM_BUS_GET(AIN_AO5, &pkt.ao[4]);
+    SYSTEM_BUS_GET(AIN_AO6, &pkt.ao[5]);
+
+    SYSTEM_BUS_GET(AIN_AO7, &pkt.ao[6]);
+    SYSTEM_BUS_GET(AIN_AO8, &pkt.ao[7]);
+    SYSTEM_BUS_GET(AIN_AO9, &pkt.ao[8]);
+    SYSTEM_BUS_GET(AIN_AO10, &pkt.ao[9]);
+    SYSTEM_BUS_GET(AIN_AO11, &pkt.ao[10]);
+    SYSTEM_BUS_GET(AIN_AO12, &pkt.ao[11]);
+
+        SYSTEM_BUS_GET(AIN_AO13, &pkt.ao[12]);
+    SYSTEM_BUS_GET(AIN_AO14, &pkt.ao[13]);
+    SYSTEM_BUS_GET(AIN_AO15, &pkt.ao[14]);
+    SYSTEM_BUS_GET(AIN_AO16, &pkt.ao[15]);
+    SYSTEM_BUS_GET(AIN_AO17, &pkt.ao[16]);
+    SYSTEM_BUS_GET(AIN_AO18, &pkt.ao[17]);
+
+        SYSTEM_BUS_GET(AIN_AVsense1, &pkt.vsense[0]);
+    SYSTEM_BUS_GET(AIN_AVsense2, &pkt.vsense[1]);
+    SYSTEM_BUS_GET(AIN_AVsense3, &pkt.vsense[2]);
+    SYSTEM_BUS_GET(AIN_AVsense4, &pkt.vsense[3]);
+    SYSTEM_BUS_GET(AIN_AVsense5, &pkt.vsense[4]);
+    SYSTEM_BUS_GET(AIN_AVsense6, &pkt.vsense[5]);
+    SYSTEM_BUS_GET(ENV_P3V3,  &pkt.env[0]);
+    SYSTEM_BUS_GET(ENV_P5V0,  &pkt.env[1]);
+    SYSTEM_BUS_GET(ENV_VIN,   &pkt.env[2]);
+    SYSTEM_BUS_GET(ENV_VDOUT1, &pkt.env[3]);
+    SYSTEM_BUS_GET(ENV_P40V,  &pkt.env[4]);
+    SYSTEM_BUS_GET(ENV_USB,   &pkt.env[5]);
+    SYSTEM_BUS_GET(ENV_VDOUT2, &pkt.env[6]);
+    SYSTEM_BUS_GET(ENV_VDOUT3, &pkt.env[7]);
+
+
+    SYSTEM_BUS_GET(SENS_BRD_LOW_CURRENT,   &pkt.current_sensors[1]);
+    SYSTEM_BUS_GET(SENS_BRD_LOW_VOLTAGE,  &pkt.current_sensors[0]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_LOW,       &pkt.current_sensors[2]);
+
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_CURRENT, &pkt.current_sensors[4]);
+    SYSTEM_BUS_GET(SENS_BRD_HIGH_VOLTAGE, &pkt.current_sensors[3]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_BRD_HIGH,       &pkt.current_sensors[5]);
+
+    SYSTEM_BUS_GET(SENS_VDUT2_CURRENT,    &pkt.current_sensors[7]);
+    SYSTEM_BUS_GET(SENS_VDUT2_VOLTAGE,   &pkt.current_sensors[6]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT2,       &pkt.current_sensors[8]);
+
+    SYSTEM_BUS_GET(SENS_VDUT3_CURRENT,   &pkt.current_sensors[10]);
+    SYSTEM_BUS_GET(SENS_VDUT3_VOLTAGE,   &pkt.current_sensors[9]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDUT3,       &pkt.current_sensors[11]);
+
+    SYSTEM_BUS_GET(SENS_VIN_CURRENT,     &pkt.current_sensors[13]);
+    SYSTEM_BUS_GET(SENS_VIN_VOLTAGE,     &pkt.current_sensors[12]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VIN,       &pkt.current_sensors[14]);
+
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_CURRENT, &pkt.current_sensors[16]);
+    SYSTEM_BUS_GET(SENS_DCDC_3_3_VOLTAGE, &pkt.current_sensors[15]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_DCDC_3_3,       &pkt.current_sensors[17]);
+
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_CURRENT, &pkt.current_sensors[19]);
+    SYSTEM_BUS_GET(SENS_VDOUT_PWR_VOLTAGE, &pkt.current_sensors[18]);
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VDOUT_PWR, &pkt.current_sensors[20]);
+
+    SYSTEM_BUS_GET(SENS_VD5_CURRENT,       &pkt.current_sensors[22]);
+    SYSTEM_BUS_GET(SENS_VD5_VOLTAGE,       &pkt.current_sensors[21]);                    
+    SYSTEM_BUS_GET(SENS_I2C_POWER_VD5,     &pkt.current_sensors[23]);
+
+    SYSTEM_BUS_GET(LIN_AO1,       &pkt.lin_voltages[0]);
+    SYSTEM_BUS_GET(LIN_AO2,       &pkt.lin_voltages[1]);
+    SYSTEM_BUS_GET(LIN_AO3,       &pkt.lin_voltages[2]);
+    SYSTEM_BUS_GET(LIN_AO4,       &pkt.lin_voltages[3]);
+    /*float _temp;
     // Заполняем данными из твоего системного буфера
    pkt.rf_power   = server_get_float(RF_POWER);
     pkt.ntc        = server_get_float(NTC);
@@ -170,7 +256,7 @@ void send_binary_telemetry(const struct device *uart_dev) {
     pkt.lin_voltages[1] = server_get_float(LIN_AO2);
     pkt.lin_voltages[2] = server_get_float(LIN_AO3);
     pkt.lin_voltages[3] = server_get_float(LIN_AO4);
-
+*/
      k_msgq_put(&telemetry_queue,&pkt,K_NO_WAIT);
 
 }

@@ -12,12 +12,41 @@ stats_container = None
 refresh_logs_callback = None
 log_info_label = None
 
+# Кэш прочитанного файла: { 'display_name': [values...] } и список временных меток
 cached_data = {}
 cached_timestamps = []
 selected_channels = []
 
 # Цвета для 4 каналов: Голубой, Зеленый, Желтый, Розовый
 SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e']
+
+# Список названий датчиков для формирования красивых имён колонок
+SENSOR_NAMES = [
+    'BOARD LOW',
+    'BOARD HIGH',
+    'Питание метки №2',
+    'Питание метки №1',
+    'Питание стенда',
+    'Линия 3.3В стенда',
+    'Питание тестируемого узла',
+    'Линия 5В стенда',
+]
+
+# Таблица маппинга сырых имен из CSV в понятные имена
+COLUMN_RENAME_MAP = {}
+for idx, name in enumerate(SENSOR_NAMES):
+  i = idx + 1
+  # Напряжение
+  COLUMN_RENAME_MAP[f'Cur_V_{i}'] = f'{name} V'
+  COLUMN_RENAME_MAP[f'Cur_V{i}'] = f'{name} V'
+  # Ток
+  COLUMN_RENAME_MAP[f'Cur_I_{i}'] = f'{name} I'
+  COLUMN_RENAME_MAP[f'Cur_I{i}'] = f'{name} I'
+  # Мощность / Энергия
+  COLUMN_RENAME_MAP[f'Cur_E_{i}'] = f'{name} P'
+  COLUMN_RENAME_MAP[f'Cur_E{i}'] = f'{name} P'
+  COLUMN_RENAME_MAP[f'Cur_P_{i}'] = f'{name} P'
+  COLUMN_RENAME_MAP[f'Cur_P{i}'] = f'{name} P'
 
 
 def update_oscilloscope_data(*args, **kwargs):
@@ -39,6 +68,7 @@ def refresh_logs_ui():
 
 
 def update_stats_panel():
+  """Вычисляет среднее, мин и макс с процентами отклонения и выводит над графиком"""
   global stats_container, selected_channels, cached_data
   if not stats_container:
     return
@@ -68,26 +98,34 @@ def update_stats_panel():
             str_dev_min = '0.0%'
 
           with ui.card().classes(
-              'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border border-slate-700/80 shadow-md flex flex-col justify-between'
+              'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border'
+              ' border-slate-700/80 shadow-md flex flex-col justify-between'
           ):
             with ui.row().classes('w-full justify-between items-center mb-1'):
               ui.label(col_name).style(f'color: {color};').classes(
-                  'text-xs font-bold leading-none truncate'
+                  'text-xs font-bold leading-none truncate max-w-[200px]'
               )
               ui.label(f'Avg: {v_avg:.3f}').classes(
                   'text-[11px] font-mono text-slate-200 font-semibold'
               )
 
-            with ui.row().classes('w-full justify-between items-center text-[10px] font-mono leading-none'):
+            with ui.row().classes(
+                'w-full justify-between items-center text-[10px] font-mono'
+                ' leading-none'
+            ):
               with ui.row().classes('items-center gap-1'):
                 ui.label('Max:').classes('text-slate-400')
                 ui.label(f'{v_max:.3f}').classes('text-emerald-400 font-bold')
-                ui.label(f'({str_dev_max})').classes('text-emerald-500/80 text-[9px]')
+                ui.label(f'({str_dev_max})').classes(
+                    'text-emerald-500/80 text-[9px]'
+                )
 
               with ui.row().classes('items-center gap-1'):
                 ui.label('Min:').classes('text-slate-400')
                 ui.label(f'{v_min:.3f}').classes('text-rose-400 font-bold')
-                ui.label(f'({str_dev_min})').classes('text-rose-500/80 text-[9px]')
+                ui.label(f'({str_dev_min})').classes(
+                    'text-rose-500/80 text-[9px]'
+                )
 
 
 def render_chart():
@@ -102,11 +140,6 @@ def render_chart():
   legend = []
   y_axes = []
 
-  # Настройки позиционирования осей:
-  # Канал 0: Слева, отступ 0
-  # Канал 1: Справа, отступ 0
-  # Канал 2: Слева, смещение 55px дальше
-  # Канал 3: Справа, смещение 55px дальше
   axis_positions = [
       {'position': 'left', 'offset': 0},
       {'position': 'right', 'offset': 0},
@@ -123,15 +156,18 @@ def render_chart():
       # 1. Создаем персональную ось Y для этого канала
       y_axes.append({
           'type': 'value',
-          'scale': True, # Автомасштаб под размах сигнала
+          'scale': True,
           'position': pos_cfg['position'],
           'offset': pos_cfg['offset'],
           'axisLine': {'show': True, 'lineStyle': {'color': color}},
           'axisLabel': {'color': color, 'fontSize': 10},
-          'splitLine': {'show': (idx == 0), 'lineStyle': {'color': '#334155'}}, # Сетка только от первой оси, чтоб не пестрило
+          'splitLine': {
+              'show': (idx == 0),
+              'lineStyle': {'color': '#334155'},
+          },
       })
 
-      # 2. Привязываем линию к ее номеру оси через yAxisIndex
+      # 2. Привязываем линию к соответствующей оси Y
       series.append({
           'name': col_name,
           'type': 'line',
@@ -143,14 +179,17 @@ def render_chart():
           'lineStyle': {'width': 1.5},
       })
 
-  # Раздвигаем боковые отступы grid, если осей больше 2, чтобы подписи не накладывались
   left_margin = '7%' if len(selected_channels) > 2 else '4%'
   right_margin = '7%' if len(selected_channels) > 1 else '4%'
 
   chart_options = {
       'animation': False,
       'tooltip': {'trigger': 'axis'},
-      'xAxis': {'type': 'category', 'data': cached_timestamps, 'boundaryGap': False},
+      'xAxis': {
+          'type': 'category',
+          'data': cached_timestamps,
+          'boundaryGap': False,
+      },
       'yAxis': y_axes if y_axes else [{'type': 'value'}],
       'series': series,
       'legend': {'data': legend, 'textStyle': {'color': '#fff'}},
@@ -169,24 +208,29 @@ def render_chart():
 
   chart_container.clear()
   with chart_container:
-    ui.echart(chart_options).style('width: 100%; height: 340px;').classes('rounded bg-slate-900')
+    ui.echart(chart_options).style('width: 100%; height: 340px;').classes(
+        'rounded bg-slate-900'
+    )
 
 
 def rebuild_channel_checkboxes(columns):
+  """Строит сетку чекбоксов для выбора каналов с понятными именами"""
   global channels_container, selected_channels
   if not channels_container:
     return
 
   channels_container.clear()
   with channels_container:
-    ui.label('Выберите каналы для графика (до 4 каналов с раздельными осями Y):').classes(
-        'text-xs font-semibold text-yellow-300 col-span-full mb-1'
-    )
+    ui.label(
+        'Выберите каналы для графика (до 4 каналов с раздельными осями'
+        ' Y):'
+    ).classes('text-xs font-semibold text-yellow-300 col-span-full mb-1')
 
     for col in columns:
       is_default = col in selected_channels
 
       def make_handler(col_name):
+
         def on_change(e):
           global selected_channels
           if e.value:
@@ -200,6 +244,7 @@ def rebuild_channel_checkboxes(columns):
             if col_name in selected_channels:
               selected_channels.remove(col_name)
           render_chart()
+
         return on_change
 
       ui.checkbox(
@@ -247,14 +292,20 @@ def load_log_to_chart(file_path):
 
     idx_mcu_ms = header.index('MCU_Time_ms') if 'MCU_Time_ms' in header else -1
 
-    data_cols = [
-        col.strip()
-        for col in header
-        if col.strip() and col.strip() not in ('Time', 'Timestamp', 'MCU_Time_ms')
-    ]
+    # Составляем список отображаемых колонок и связку с сырыми именами в CSV
+    data_cols = []
+    col_mapping = {}  # display_name -> raw_header_col
 
-    for col in data_cols:
-      cached_data[col] = []
+    for col in header:
+      c_clean = col.strip()
+      if not c_clean or c_clean in ('Time', 'Timestamp', 'MCU_Time_ms'):
+        continue
+      display_name = COLUMN_RENAME_MAP.get(c_clean, c_clean)
+      data_cols.append(display_name)
+      col_mapping[display_name] = c_clean
+
+    for col_disp in data_cols:
+      cached_data[col_disp] = []
 
     for row_idx, row in enumerate(reader):
       if not row or len(row) <= idx_time:
@@ -269,16 +320,18 @@ def load_log_to_chart(file_path):
         except ValueError:
           pass
 
-      for col in data_cols:
-        c_idx = header.index(col)
+      for col_disp in data_cols:
+        raw_col = col_mapping[col_disp]
+        c_idx = header.index(raw_col)
         if len(row) > c_idx:
           try:
-            cached_data[col].append(float(row[c_idx]))
+            cached_data[col_disp].append(float(row[c_idx]))
           except ValueError:
-            cached_data[col].append(0.0)
+            cached_data[col_disp].append(0.0)
         else:
-          cached_data[col].append(0.0)
+          cached_data[col_disp].append(0.0)
 
+    # Расчет длительности лога
     duration_str = '00:00.000'
     if mcu_ms_timestamps:
       total_ms = mcu_ms_timestamps[-1] - mcu_ms_timestamps[0]
@@ -294,15 +347,21 @@ def load_log_to_chart(file_path):
       duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
 
     if log_info_label:
-      log_info_label.set_text(f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}')
+      log_info_label.set_text(
+          f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}'
+      )
 
+    # По умолчанию выбираем AO_1 и AO_2
     selected_channels = [c for c in ['AO_1', 'AO_2'] if c in data_cols]
     if not selected_channels and data_cols:
       selected_channels = data_cols[:2]
 
     rebuild_channel_checkboxes(data_cols)
     render_chart()
-    ui.notify(f'Загружено {len(cached_timestamps)} точек ({duration_str})', type='positive')
+    ui.notify(
+        f'Загружено {len(cached_timestamps)} точек ({duration_str})',
+        type='positive',
+    )
 
   except Exception as e:
     print(f'[ERROR] Ошибка загрузки лога: {e}')
@@ -319,7 +378,8 @@ def build_oscilloscope_panel():
             'text-sm font-bold text-sky-400'
         )
         log_info_label = ui.label('').classes(
-            'text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700'
+            'text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5'
+            ' rounded border border-slate-700'
         )
 
       with ui.row().classes('items-center gap-2'):
@@ -331,14 +391,20 @@ def build_oscilloscope_panel():
           files = get_log_files()
 
           with select_box:
-            opts = {f: os.path.basename(f) for f in files} if files else {'': 'Нет логов'}
+            opts = (
+                {f: os.path.basename(f) for f in files}
+                if files
+                else {'': 'Нет логов'}
+            )
             first_val = files[0] if files else None
 
             sel = ui.select(
                 options=opts,
                 value=first_val,
                 label='Лог-файл',
-            ).props('dark outlined dense').classes('w-72 bg-slate-700 text-xs text-white rounded')
+            ).props('dark outlined dense').classes(
+                'w-72 bg-slate-700 text-xs text-white rounded'
+            )
 
             current_select['widget'] = sel
 
@@ -367,14 +433,17 @@ def build_oscilloscope_panel():
             on_click=on_open_click,
         ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
 
+    # Панель статистических карточек над графиком
     stats_container = ui.row().classes('w-full mb-1.5')
 
+    # Контейнер для графика
     chart_container = ui.column().classes('w-full')
     with chart_container:
       ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
           'text-xs text-slate-400 italic py-10 self-center'
       )
 
-    channels_container = ui.grid(columns=6).classes(
-        'w-full gap-1 bg-slate-700/30 p-2 rounded mt-2'
+    # Сетка чекбоксов каналов (в 4 колонки для комфортного размещения длинных названий)
+    channels_container = ui.grid(columns=4).classes(
+        'w-full gap-1.5 bg-slate-700/30 p-2.5 rounded mt-2'
     )
