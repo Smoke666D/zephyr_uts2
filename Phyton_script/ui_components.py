@@ -14,6 +14,7 @@ from power_panel import build_power_panel
 from sensors_panel import build_sensors_panel
 from system_panel import build_system_panel, read_all_uids_async
 from uart_detect_panel import build_uart_detect_panel
+from iv_curve_panel import build_iv_curve_panel
 
 can_logs_dict = {}
 lin_logs_dict = {}
@@ -70,7 +71,13 @@ def build_dashboard(ports_refs, ui_labels):
 
         # 11. Автоопределение портов UART и JTAG (uart_detect_panel.py)
         build_uart_detect_panel(ports_refs)
-
+# ==========================================
+        # 14. ГРАФИК ВОЛЬТ-АМПЕРНЫХ ХАРАКТЕРИСТИК (ВАХ)
+        # ==========================================
+        ui.label('Вольт-амперные характеристики (ВАХ)').classes(
+            'text-sm font-bold text-sky-300 mt-3 mb-1'
+        )
+        build_iv_curve_panel()
 
 
     container.make_sortable()
