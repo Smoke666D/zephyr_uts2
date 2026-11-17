@@ -237,10 +237,11 @@ static void _uart_cb(const struct device *_dev, void *_user_data)
     uint8_t c;
     bool has_data = false;
 
-    if (!uart_irq_update(_dev)) 
+    uart_irq_update(_dev);
+    /*if (!uart_irq_update(_dev)) 
     {
         return;
-    }
+    }*/
 
     while (uart_irq_rx_ready(_dev)) 
     {
