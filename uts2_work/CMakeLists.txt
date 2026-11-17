@@ -14,24 +14,9 @@ target_compile_definitions(app PRIVATE
     USE_FULL_ERROR_LIST=1
 )
 
-target_include_directories(app PRIVATE 
-    src 
-    src/drivers
-    src/midelware
-    src/lib/scpi/libscpi/inc
-    src/uts2/spci_interface
-    src/uts2/app
-    src/uts2
-)
-
-file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
-    "src/drivers/*.c"   
-    "src/midelware/*c"  
-    "src/uts2/deamons/*c" 
-    "src/lib/scpi/libscpi/src/*.c"
-    "src/uts2/spci_interface/*.c"
-    "src/uts2/app/*.c"
-)
+if(BOARD STREQUAL "uts2_motherboard")
+    add_subdirectory(src/uts2)
+endif()
 
 target_sources(app PRIVATE 
               
@@ -39,7 +24,3 @@ target_sources(app PRIVATE
      ${APP_SOURCES} 
 )
 
-
-add_subdirectory(drivers/seq_mux_adc)
-add_subdirectory(drivers/scan_cont_adc)
-add_subdirectory(drivers/hc_595_chain)
