@@ -116,6 +116,17 @@
     };
 };
 
+/ {
+    aliases {
+        /* Привязываем алиас dac-timer к таймеру TIM6 */
+        dac-timer = &timers6;
+    };
+};
+
+&timers6 {
+    status = "okay";
+};
+
 &backup_sram {
 	status = "okay";
 };
@@ -615,7 +626,6 @@ zephyr_udc0: &usbotg_hs {
     pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
     pinctrl-names = "default";
     bitrate = <500000>;
-
 };
 
 &fdcan2 {
@@ -624,8 +634,6 @@ zephyr_udc0: &usbotg_hs {
     pinctrl-0 = <&fdcan2_rx_pb5 &fdcan2_tx_pb6>;
     pinctrl-names = "default";
     bitrate = <500000>;
-   
-
 };
 
 &fdcan3 {
@@ -634,9 +642,7 @@ zephyr_udc0: &usbotg_hs {
     pinctrl-0 = <&fdcan3_rx_pd12 &fdcan3_tx_pd13>;
     pinctrl-names = "default";
     bitrate = <500000>;
-
 };
-
 
 
 / {

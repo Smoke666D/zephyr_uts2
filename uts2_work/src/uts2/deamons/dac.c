@@ -26,7 +26,10 @@
 #include <zephyr/drivers/dac.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/logging/log.h>
-
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/drivers/clock_control/stm32_clock_control.h>
+#include <stm32h7xx_ll_dac.h>
+#include <stm32h7xx_ll_tim.h>
 #include "system_define.h"
 #include "system_bus_model.h"
 #include "app_worker.h"
@@ -47,6 +50,18 @@ LOG_MODULE_REGISTER(dac_work, LOG_LEVEL_INF);
 #define AD5243_R_W_KOHM      0.12f   // Сопротивление ползунка 120 Ом (0.12 кОм)
 #define AD5243_R_MAX_KOHM    (AD5243_R_W_KOHM + (AD5243_R_AB_KOHM * 255.0f / 256.0f))
 
+
+#define DAC_TIM_NODE DT_ALIAS(dac_timer)
+
+#if !DT_NODE_HAS_STATUS(DAC_TIM_NODE, okay)
+#error "Алиас 'dac-timer' не определен или отключен в DeviceTree (.overlay)!"
+#endif
+
+/* 2. Получаем базовый адрес регистров таймера напрямую из DT */
+#define DAC_TIM_REG  ((TIM_TypeDef *)DT_REG_ADDR(DAC_TIM_NODE))
+
+/* 3. Извлекаем информацию о подсистеме тактирования (RCC) для этого таймера */
+static const struct stm32_pclken tim_clk_info = STM32_CLOCK_INFO(0, DAC_TIM_NODE);
 /***************************************************************************************************
  *                                          PRIVATE TYPES
  **************************************************************************************************/
@@ -73,6 +88,11 @@ typedef struct dac_data_msg
     uint32_t value[DAC_CH_CNT]; // Буфер значений (8 шагов * 2 канала)
 } dac_data_msg_t;
 
+
+typedef struct dac_ramp_msg 
+{
+    uint32_t value[3]; // Буфер значений (8 шагов * 2 канала)
+} dac_ramp_msg_t;
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
@@ -85,11 +105,11 @@ static int  _dac_control_init(void);
  **************************************************************************************************/
 static const struct device *dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
-static struct k_work_poll  dac_task        __attribute__((section("DTCM")));
-static struct k_poll_event dac_poll_events[1] __attribute__((section("DTCM")));
-static struct k_work_poll  int_dac_task        __attribute__((section("DTCM")));
-static struct k_poll_event int_dac_poll_events[1] __attribute__((section("DTCM")));
-static dac_data_msg_t      cache_dac_data  __attribute__((section("DTCM"))) = {0};
+static struct k_work_poll  dac_task                 __attribute__((section("DTCM")));
+static struct k_poll_event dac_poll_events[1]       __attribute__((section("DTCM")));
+static struct k_work_poll  int_dac_task             __attribute__((section("DTCM")));
+static struct k_poll_event int_dac_poll_events[1]   __attribute__((section("DTCM")));
+static dac_data_msg_t      cache_dac_data           __attribute__((section("DTCM"))) = {0};
 
 static struct i2c_dt_spec i2c_spec = 
 {
@@ -108,6 +128,16 @@ ZBUS_CHAN_DEFINE(
     ZBUS_OBSERVERS_EMPTY,
     ZBUS_MSG_INIT(0)
 );
+
+ZBUS_CHAN_DEFINE(
+    dac_ramp_chan,
+    struct dac_data_msg,
+    NULL,
+    NULL,
+    ZBUS_OBSERVERS_EMPTY,
+    ZBUS_MSG_INIT(0)
+);
+
 
 ZBUS_CHAN_DEFINE(
     int_dac_chan,
