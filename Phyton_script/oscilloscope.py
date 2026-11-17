@@ -17,6 +17,9 @@ cached_data = {}
 cached_timestamps = []
 selected_channels = []
 
+# Индивидуальное окно медианного фильтра для каждого выбранного канала (по умолчанию 1 мс = выкл)
+channel_filters_ms = {}
+
 # Цвета для 4 каналов: Голубой, Зеленый, Желтый, Розовый
 SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e']
 
@@ -35,415 +38,462 @@ SENSOR_NAMES = [
 # Таблица маппинга сырых имен из CSV в понятные имена
 COLUMN_RENAME_MAP = {}
 for idx, name in enumerate(SENSOR_NAMES):
-  i = idx + 1
-  # Напряжение
-  COLUMN_RENAME_MAP[f'Cur_V_{i}'] = f'{name} V'
-  COLUMN_RENAME_MAP[f'Cur_V{i}'] = f'{name} V'
-  # Ток
-  COLUMN_RENAME_MAP[f'Cur_I_{i}'] = f'{name} I'
-  COLUMN_RENAME_MAP[f'Cur_I{i}'] = f'{name} I'
-  # Мощность / Энергия
-  COLUMN_RENAME_MAP[f'Cur_E_{i}'] = f'{name} P'
-  COLUMN_RENAME_MAP[f'Cur_E{i}'] = f'{name} P'
-  COLUMN_RENAME_MAP[f'Cur_P_{i}'] = f'{name} P'
-  COLUMN_RENAME_MAP[f'Cur_P{i}'] = f'{name} P'
+    i = idx + 1
+    COLUMN_RENAME_MAP[f'Cur_V_{i}'] = f'{name} V'
+    COLUMN_RENAME_MAP[f'Cur_V{i}'] = f'{name} V'
+    COLUMN_RENAME_MAP[f'Cur_I_{i}'] = f'{name} I'
+    COLUMN_RENAME_MAP[f'Cur_I{i}'] = f'{name} I'
+    COLUMN_RENAME_MAP[f'Cur_E_{i}'] = f'{name} P'
+    COLUMN_RENAME_MAP[f'Cur_E{i}'] = f'{name} P'
+    COLUMN_RENAME_MAP[f'Cur_P_{i}'] = f'{name} P'
+    COLUMN_RENAME_MAP[f'Cur_P{i}'] = f'{name} P'
 
 
 def update_oscilloscope_data(*args, **kwargs):
-  pass
+    pass
 
 
 def get_log_files():
-  os.makedirs(LOGS_DIR, exist_ok=True)
-  pattern = os.path.join(LOGS_DIR, '*.csv')
-  files = glob.glob(pattern)
-  files.sort(key=os.path.getmtime, reverse=True)
-  return files
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    pattern = os.path.join(LOGS_DIR, '*.csv')
+    files = glob.glob(pattern)
+    files.sort(key=os.path.getmtime, reverse=True)
+    return files
 
 
 def refresh_logs_ui():
-  global refresh_logs_callback
-  if refresh_logs_callback:
-    refresh_logs_callback()
+    global refresh_logs_callback
+    if refresh_logs_callback:
+        refresh_logs_callback()
+
+
+def apply_median_filter(data_list, window):
+    """Применяет одномерный медианный фильтр с нечётным размером окна"""
+    if window <= 1 or len(data_list) < window:
+        return list(data_list)
+
+    half = window // 2
+    n = len(data_list)
+    result = [0.0] * n
+
+    for i in range(n):
+        start = max(0, i - half)
+        end = min(n, i + half + 1)
+        sub = sorted(data_list[start:end])
+        result[i] = sub[len(sub) // 2]
+
+    return result
+
+
+def get_filtered_channel_data(col_name):
+    """Возвращает отфильтрованные данные для канала с учетом текущего окна"""
+    raw_vals = cached_data.get(col_name, [])
+    window = channel_filters_ms.get(col_name, 1)
+    return apply_median_filter(raw_vals, window)
 
 
 def update_stats_panel():
-  """Вычисляет среднее, мин и макс с процентами отклонения и выводит над графиком"""
-  global stats_container, selected_channels, cached_data
-  if not stats_container:
-    return
+    """Вычисляет статистику (Avg, Max, Min с % отклонения) и строит окошко фильтра"""
+    global stats_container, selected_channels, cached_data, channel_filters_ms
+    if not stats_container:
+        return
 
-  stats_container.clear()
-  if not selected_channels:
-    return
+    stats_container.clear()
+    if not selected_channels:
+        return
 
-  with stats_container:
-    with ui.row().classes('w-full gap-2 items-center'):
-      for idx, col_name in enumerate(selected_channels):
-        if col_name in cached_data and cached_data[col_name]:
-          vals = cached_data[col_name]
-          color = SERIES_COLORS[idx % len(SERIES_COLORS)]
+    with stats_container:
+        with ui.row().classes('w-full gap-2 items-center'):
+            for idx, col_name in enumerate(selected_channels):
+                if col_name in cached_data and cached_data[col_name]:
+                    color = SERIES_COLORS[idx % len(SERIES_COLORS)]
+                    vals = get_filtered_channel_data(col_name)
 
-          v_avg = sum(vals) / len(vals)
-          v_max = max(vals)
-          v_min = min(vals)
+                    v_avg = sum(vals) / len(vals)
+                    v_max = max(vals)
+                    v_min = min(vals)
 
-          if abs(v_avg) > 1e-9:
-            dev_max_pct = ((v_max - v_avg) / abs(v_avg)) * 100.0
-            dev_min_pct = ((v_min - v_avg) / abs(v_avg)) * 100.0
-            str_dev_max = f'{dev_max_pct:+.1f}%'
-            str_dev_min = f'{dev_min_pct:+.1f}%'
-          else:
-            str_dev_max = '0.0%'
-            str_dev_min = '0.0%'
+                    if abs(v_avg) > 1e-9:
+                        dev_max_pct = ((v_max - v_avg) / abs(v_avg)) * 100.0
+                        dev_min_pct = ((v_min - v_avg) / abs(v_avg)) * 100.0
+                        str_dev_max = f'{dev_max_pct:+.1f}%'
+                        str_dev_min = f'{dev_min_pct:+.1f}%'
+                    else:
+                        str_dev_max = '0.0%'
+                        str_dev_min = '0.0%'
 
-          with ui.card().classes(
-              'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border'
-              ' border-slate-700/80 shadow-md flex flex-col justify-between'
-          ):
-            with ui.row().classes('w-full justify-between items-center mb-1'):
-              ui.label(col_name).style(f'color: {color};').classes(
-                  'text-xs font-bold leading-none truncate max-w-[200px]'
-              )
-              ui.label(f'Avg: {v_avg:.3f}').classes(
-                  'text-[11px] font-mono text-slate-200 font-semibold'
-              )
+                    # Карточка канала
+                    with ui.card().classes(
+                        'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border border-slate-700/80 shadow-md flex flex-col justify-between'
+                    ):
+                        # Шапка карточки: имя канала + среднее значение
+                        with ui.row().classes('w-full justify-between items-center mb-1'):
+                            ui.label(col_name).style(f'color: {color};').classes(
+                                'text-xs font-bold leading-none truncate max-w-[180px]'
+                            )
+                            ui.label(f'Avg: {v_avg:.3f}').classes(
+                                'text-[11px] font-mono text-slate-200 font-semibold'
+                            )
 
-            with ui.row().classes(
-                'w-full justify-between items-center text-[10px] font-mono'
-                ' leading-none'
-            ):
-              with ui.row().classes('items-center gap-1'):
-                ui.label('Max:').classes('text-slate-400')
-                ui.label(f'{v_max:.3f}').classes('text-emerald-400 font-bold')
-                ui.label(f'({str_dev_max})').classes(
-                    'text-emerald-500/80 text-[9px]'
-                )
+                        # Вторая строка: Max / Min с процентами
+                        with ui.row().classes(
+                            'w-full justify-between items-center text-[10px] font-mono leading-none mb-1'
+                        ):
+                            with ui.row().classes('items-center gap-1'):
+                                ui.label('Max:').classes('text-slate-400')
+                                ui.label(f'{v_max:.3f}').classes('text-emerald-400 font-bold')
+                                ui.label(f'({str_dev_max})').classes('text-emerald-500/80 text-[9px]')
 
-              with ui.row().classes('items-center gap-1'):
-                ui.label('Min:').classes('text-slate-400')
-                ui.label(f'{v_min:.3f}').classes('text-rose-400 font-bold')
-                ui.label(f'({str_dev_min})').classes(
-                    'text-rose-500/80 text-[9px]'
-                )
+                            with ui.row().classes('items-center gap-1'):
+                                ui.label('Min:').classes('text-slate-400')
+                                ui.label(f'{v_min:.3f}').classes('text-rose-400 font-bold')
+                                ui.label(f'({str_dev_min})').classes('text-rose-500/80 text-[9px]')
+
+                        # Третья строка: Окошко настройки медианного фильтра канала
+                        with ui.row().classes('w-full justify-between items-center pt-1 border-t border-slate-800'):
+                            ui.label('Медиана:').classes('text-[10px] text-slate-400 font-medium')
+
+                            def make_filter_handler(channel):
+                                def on_change(e):
+                                    try:
+                                        val = int(e.value)
+                                        val = max(1, min(101, val))
+                                        if val > 1 and val % 2 == 0:
+                                            val += 1
+                                        channel_filters_ms[channel] = val
+                                        e.sender.set_value(val)
+                                        render_chart()
+                                    except (ValueError, TypeError):
+                                        pass
+                                return on_change
+
+                            current_win = channel_filters_ms.get(col_name, 1)
+                            with ui.row().classes('items-center gap-1'):
+                                ui.number(
+                                    value=current_win,
+                                    min=1,
+                                    max=101,
+                                    step=2,
+                                    on_change=make_filter_handler(col_name),
+                                ).props('dark outlined dense input-class="text-center font-mono text-[10px] w-10 py-0"').classes('bg-slate-800 rounded')
+                                ui.label('мс').classes('text-[10px] text-slate-400')
 
 
 def render_chart():
-  """Перерисовывает график со своей независимой осью Y для каждого выбранного канала"""
-  global chart_container, selected_channels, cached_data, cached_timestamps
-  if not chart_container or not cached_timestamps:
-    return
+    """Перерисовывает график со своими независимыми осями Y и учетом фильтрации"""
+    global chart_container, selected_channels, cached_data, cached_timestamps
+    if not chart_container or not cached_timestamps:
+        return
 
-  update_stats_panel()
+    update_stats_panel()
 
-  series = []
-  legend = []
-  y_axes = []
+    series = []
+    legend = []
+    y_axes = []
 
-  axis_positions = [
-      {'position': 'left', 'offset': 0},
-      {'position': 'right', 'offset': 0},
-      {'position': 'left', 'offset': 55},
-      {'position': 'right', 'offset': 55},
-  ]
+    axis_positions = [
+        {'position': 'left', 'offset': 0},
+        {'position': 'right', 'offset': 0},
+        {'position': 'left', 'offset': 55},
+        {'position': 'right', 'offset': 55},
+    ]
 
-  for idx, col_name in enumerate(selected_channels):
-    if col_name in cached_data:
-      color = SERIES_COLORS[idx % len(SERIES_COLORS)]
-      pos_cfg = axis_positions[idx % len(axis_positions)]
-      legend.append(col_name)
+    for idx, col_name in enumerate(selected_channels):
+        if col_name in cached_data:
+            color = SERIES_COLORS[idx % len(SERIES_COLORS)]
+            pos_cfg = axis_positions[idx % len(axis_positions)]
+            legend.append(col_name)
 
-      # 1. Создаем персональную ось Y для этого канала
-      y_axes.append({
-          'type': 'value',
-          'scale': True,
-          'position': pos_cfg['position'],
-          'offset': pos_cfg['offset'],
-          'axisLine': {'show': True, 'lineStyle': {'color': color}},
-          'axisLabel': {'color': color, 'fontSize': 10},
-          'splitLine': {
-              'show': (idx == 0),
-              'lineStyle': {'color': '#334155'},
-          },
-      })
+            # Получаем отфильтрованные данные
+            filtered_vals = get_filtered_channel_data(col_name)
 
-      # 2. Привязываем линию к соответствующей оси Y
-      series.append({
-          'name': col_name,
-          'type': 'line',
-          'yAxisIndex': idx,
-          'data': cached_data[col_name],
-          'showSymbol': False,
-          'sampling': 'lttb',
-          'itemStyle': {'color': color},
-          'lineStyle': {'width': 1.5},
-      })
+            # Создаем персональную ось Y для канала
+            y_axes.append({
+                'type': 'value',
+                'scale': True,
+                'position': pos_cfg['position'],
+                'offset': pos_cfg['offset'],
+                'axisLine': {'show': True, 'lineStyle': {'color': color}},
+                'axisLabel': {'color': color, 'fontSize': 10},
+                'splitLine': {
+                    'show': (idx == 0),
+                    'lineStyle': {'color': '#334155'},
+                },
+            })
 
-  left_margin = '7%' if len(selected_channels) > 2 else '4%'
-  right_margin = '7%' if len(selected_channels) > 1 else '4%'
+            series.append({
+                'name': col_name,
+                'type': 'line',
+                'yAxisIndex': idx,
+                'data': filtered_vals,
+                'showSymbol': False,
+                'sampling': 'lttb',
+                'itemStyle': {'color': color},
+                'lineStyle': {'width': 1.5},
+            })
 
-  chart_options = {
-      'animation': False,
-      'tooltip': {'trigger': 'axis'},
-      'xAxis': {
-          'type': 'category',
-          'data': cached_timestamps,
-          'boundaryGap': False,
-      },
-      'yAxis': y_axes if y_axes else [{'type': 'value'}],
-      'series': series,
-      'legend': {'data': legend, 'textStyle': {'color': '#fff'}},
-      'grid': {
-          'left': left_margin,
-          'right': right_margin,
-          'bottom': '15%',
-          'top': '15%',
-          'containLabel': True,
-      },
-      'dataZoom': [
-          {'type': 'slider', 'xAxisIndex': 0, 'start': 0, 'end': 100},
-          {'type': 'inside', 'xAxisIndex': 0},
-      ],
-  }
+    left_margin = '7%' if len(selected_channels) > 2 else '4%'
+    right_margin = '7%' if len(selected_channels) > 1 else '4%'
 
-  chart_container.clear()
-  with chart_container:
-    ui.echart(chart_options).style('width: 100%; height: 340px;').classes(
-        'rounded bg-slate-900'
-    )
+    chart_options = {
+        'animation': False,
+        'tooltip': {'trigger': 'axis'},
+        'xAxis': {
+            'type': 'category',
+            'data': cached_timestamps,
+            'boundaryGap': False,
+        },
+        'yAxis': y_axes if y_axes else [{'type': 'value'}],
+        'series': series,
+        'legend': {'data': legend, 'textStyle': {'color': '#fff'}},
+        'grid': {
+            'left': left_margin,
+            'right': right_margin,
+            'bottom': '15%',
+            'top': '15%',
+            'containLabel': True,
+        },
+        'dataZoom': [
+            {'type': 'slider', 'xAxisIndex': 0, 'start': 0, 'end': 100},
+            {'type': 'inside', 'xAxisIndex': 0},
+        ],
+    }
+
+    chart_container.clear()
+    with chart_container:
+        ui.echart(chart_options).style('width: 100%; height: 340px;').classes(
+            'rounded bg-slate-900'
+        )
 
 
 def rebuild_channel_checkboxes(columns):
-  """Строит сетку чекбоксов для выбора каналов с понятными именами"""
-  global channels_container, selected_channels
-  if not channels_container:
-    return
+    """Строит сетку чекбоксов для выбора каналов"""
+    global channels_container, selected_channels
+    if not channels_container:
+        return
 
-  channels_container.clear()
-  with channels_container:
-    ui.label(
-        'Выберите каналы для графика (до 4 каналов с раздельными осями'
-        ' Y):'
-    ).classes('text-xs font-semibold text-yellow-300 col-span-full mb-1')
+    channels_container.clear()
+    with channels_container:
+        ui.label(
+            'Выберите каналы для графика (до 4 каналов с раздельными осями Y):'
+        ).classes('text-xs font-semibold text-yellow-300 col-span-full mb-1')
 
-    for col in columns:
-      is_default = col in selected_channels
+        for col in columns:
+            is_default = col in selected_channels
 
-      def make_handler(col_name):
+            def make_handler(col_name):
+                def on_change(e):
+                    global selected_channels
+                    if e.value:
+                        if len(selected_channels) >= 4:
+                            e.sender.set_value(False)
+                            ui.notify('Максимум 4 канала одновременно!', type='warning')
+                            return
+                        if col_name not in selected_channels:
+                            selected_channels.append(col_name)
+                    else:
+                        if col_name in selected_channels:
+                            selected_channels.remove(col_name)
+                    render_chart()
 
-        def on_change(e):
-          global selected_channels
-          if e.value:
-            if len(selected_channels) >= 4:
-              e.sender.set_value(False)
-              ui.notify('Максимум 4 канала одновременно!', type='warning')
-              return
-            if col_name not in selected_channels:
-              selected_channels.append(col_name)
-          else:
-            if col_name in selected_channels:
-              selected_channels.remove(col_name)
-          render_chart()
+                return on_change
 
-        return on_change
-
-      ui.checkbox(
-          col,
-          value=is_default,
-          on_change=make_handler(col),
-      ).classes('text-white text-xs')
+            ui.checkbox(
+                col,
+                value=is_default,
+                on_change=make_handler(col),
+            ).classes('text-white text-xs')
 
 
 def load_log_to_chart(file_path):
-  global cached_data, cached_timestamps, selected_channels, log_info_label
-  if not file_path or not os.path.exists(file_path):
-    ui.notify('Файл не выбран или не существует!', type='warning')
-    return
+    global cached_data, cached_timestamps, selected_channels, log_info_label, channel_filters_ms
+    if not file_path or not os.path.exists(file_path):
+        ui.notify('Файл не выбран или не существует!', type='warning')
+        return
 
-  ui.notify(f'Загрузка: {os.path.basename(file_path)}...', type='info')
+    ui.notify(f'Загрузка: {os.path.basename(file_path)}...', type='info')
 
-  cached_data = {}
-  cached_timestamps = []
-  mcu_ms_timestamps = []
+    cached_data = {}
+    cached_timestamps = []
+    mcu_ms_timestamps = []
 
-  try:
-    with open(file_path, 'r', encoding='utf-8') as f:
-      lines = f.readlines()
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
 
-    if not lines:
-      ui.notify('Файл пуст!', type='warning')
-      return
+        if not lines:
+            ui.notify('Файл пуст!', type='warning')
+            return
 
-    if lines[0].startswith('sep='):
-      lines = lines[1:]
+        if lines[0].startswith('sep='):
+            lines = lines[1:]
 
-    reader = csv.reader(lines, delimiter=';')
-    header = next(reader, None)
+        reader = csv.reader(lines, delimiter=';')
+        header = next(reader, None)
 
-    if not header:
-      ui.notify('Не удалось прочитать заголовок таблицы!', type='warning')
-      return
+        if not header:
+            ui.notify('Не удалось прочитать заголовок таблицы!', type='warning')
+            return
 
-    idx_time = 0
-    if 'Time' in header:
-      idx_time = header.index('Time')
-    elif 'Timestamp' in header:
-      idx_time = header.index('Timestamp')
+        idx_time = 0
+        if 'Time' in header:
+            idx_time = header.index('Time')
+        elif 'Timestamp' in header:
+            idx_time = header.index('Timestamp')
 
-    idx_mcu_ms = header.index('MCU_Time_ms') if 'MCU_Time_ms' in header else -1
+        idx_mcu_ms = header.index('MCU_Time_ms') if 'MCU_Time_ms' in header else -1
 
-    # Составляем список отображаемых колонок и связку с сырыми именами в CSV
-    data_cols = []
-    col_mapping = {}  # display_name -> raw_header_col
+        data_cols = []
+        col_mapping = {}
 
-    for col in header:
-      c_clean = col.strip()
-      if not c_clean or c_clean in ('Time', 'Timestamp', 'MCU_Time_ms'):
-        continue
-      display_name = COLUMN_RENAME_MAP.get(c_clean, c_clean)
-      data_cols.append(display_name)
-      col_mapping[display_name] = c_clean
+        for col in header:
+            c_clean = col.strip()
+            if not c_clean or c_clean in ('Time', 'Timestamp', 'MCU_Time_ms'):
+                continue
+            display_name = COLUMN_RENAME_MAP.get(c_clean, c_clean)
+            data_cols.append(display_name)
+            col_mapping[display_name] = c_clean
 
-    for col_disp in data_cols:
-      cached_data[col_disp] = []
+        for col_disp in data_cols:
+            cached_data[col_disp] = []
+            # Инициализация фильтра по умолчанию: 1 мс (выключен)
+            if col_disp not in channel_filters_ms:
+                channel_filters_ms[col_disp] = 1
 
-    for row_idx, row in enumerate(reader):
-      if not row or len(row) <= idx_time:
-        continue
+        for row_idx, row in enumerate(reader):
+            if not row or len(row) <= idx_time:
+                continue
 
-      t_str = row[idx_time].strip()
-      cached_timestamps.append(t_str)
+            t_str = row[idx_time].strip()
+            cached_timestamps.append(t_str)
 
-      if idx_mcu_ms != -1 and len(row) > idx_mcu_ms:
-        try:
-          mcu_ms_timestamps.append(int(row[idx_mcu_ms]))
-        except ValueError:
-          pass
+            if idx_mcu_ms != -1 and len(row) > idx_mcu_ms:
+                try:
+                    mcu_ms_timestamps.append(int(row[idx_mcu_ms]))
+                except ValueError:
+                    pass
 
-      for col_disp in data_cols:
-        raw_col = col_mapping[col_disp]
-        c_idx = header.index(raw_col)
-        if len(row) > c_idx:
-          try:
-            cached_data[col_disp].append(float(row[c_idx]))
-          except ValueError:
-            cached_data[col_disp].append(0.0)
-        else:
-          cached_data[col_disp].append(0.0)
+            for col_disp in data_cols:
+                raw_col = col_mapping[col_disp]
+                c_idx = header.index(raw_col)
+                if len(row) > c_idx:
+                    try:
+                        cached_data[col_disp].append(float(row[c_idx]))
+                    except ValueError:
+                        cached_data[col_disp].append(0.0)
+                else:
+                    cached_data[col_disp].append(0.0)
 
-    # Расчет длительности лога
-    duration_str = '00:00.000'
-    if mcu_ms_timestamps:
-      total_ms = mcu_ms_timestamps[-1] - mcu_ms_timestamps[0]
-      mins = (total_ms // 1000) // 60
-      secs = (total_ms // 1000) % 60
-      millis = total_ms % 1000
-      duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
-    elif cached_timestamps:
-      total_ms = len(cached_timestamps)
-      mins = total_ms // 60000
-      secs = (total_ms % 60000) // 1000
-      millis = total_ms % 1000
-      duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
+        duration_str = '00:00.000'
+        if mcu_ms_timestamps:
+            total_ms = mcu_ms_timestamps[-1] - mcu_ms_timestamps[0]
+            mins = (total_ms // 1000) // 60
+            secs = (total_ms // 1000) % 60
+            millis = total_ms % 1000
+            duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
+        elif cached_timestamps:
+            total_ms = len(cached_timestamps)
+            mins = total_ms // 60000
+            secs = (total_ms % 60000) // 1000
+            millis = total_ms % 1000
+            duration_str = f'{mins:02d}:{secs:02d}.{millis:03d}'
 
-    if log_info_label:
-      log_info_label.set_text(
-          f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}'
-      )
+        if log_info_label:
+            log_info_label.set_text(
+                f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}'
+            )
 
-    # По умолчанию выбираем AO_1 и AO_2
-    selected_channels = [c for c in ['AO_1', 'AO_2'] if c in data_cols]
-    if not selected_channels and data_cols:
-      selected_channels = data_cols[:2]
+        selected_channels = [c for c in ['AO_1', 'AO_2'] if c in data_cols]
+        if not selected_channels and data_cols:
+            selected_channels = data_cols[:2]
 
-    rebuild_channel_checkboxes(data_cols)
-    render_chart()
-    ui.notify(
-        f'Загружено {len(cached_timestamps)} точек ({duration_str})',
-        type='positive',
-    )
+        rebuild_channel_checkboxes(data_cols)
+        render_chart()
+        ui.notify(
+            f'Загружено {len(cached_timestamps)} точек ({duration_str})',
+            type='positive',
+        )
 
-  except Exception as e:
-    print(f'[ERROR] Ошибка загрузки лога: {e}')
-    ui.notify(f'Ошибка чтения файла: {e}', type='negative')
+    except Exception as e:
+        print(f'[ERROR] Ошибка загрузки лога: {e}')
+        ui.notify(f'Ошибка чтения файла: {e}', type='negative')
 
 
 def build_oscilloscope_panel():
-  global chart_container, channels_container, stats_container, refresh_logs_callback, log_info_label
+    global chart_container, channels_container, stats_container, refresh_logs_callback, log_info_label
 
-  with ui.card().classes('bg-slate-800 p-3 w-full'):
-    with ui.row().classes('w-full justify-between items-center mb-2'):
-      with ui.row().classes('items-center gap-2'):
-        ui.label('Офлайн-осциллограф (Анализ логов)').classes(
-            'text-sm font-bold text-sky-400'
-        )
-        log_info_label = ui.label('').classes(
-            'text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5'
-            ' rounded border border-slate-700'
-        )
+    with ui.card().classes('bg-slate-800 p-3 w-full'):
+        with ui.row().classes('w-full justify-between items-center mb-2'):
+            with ui.row().classes('items-center gap-2'):
+                ui.label('Офлайн-осциллограф (Анализ логов)').classes(
+                    'text-sm font-bold text-sky-400'
+                )
+                log_info_label = ui.label('').classes(
+                    'text-xs font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700'
+                )
 
-      with ui.row().classes('items-center gap-2'):
-        select_box = ui.row().classes('items-center')
-        current_select = {'widget': None}
+            with ui.row().classes('items-center gap-2'):
+                select_box = ui.row().classes('items-center')
+                current_select = {'widget': None}
 
-        def rebuild_select_element():
-          select_box.clear()
-          files = get_log_files()
+                def rebuild_select_element():
+                    select_box.clear()
+                    files = get_log_files()
 
-          with select_box:
-            opts = (
-                {f: os.path.basename(f) for f in files}
-                if files
-                else {'': 'Нет логов'}
+                    with select_box:
+                        opts = (
+                            {f: os.path.basename(f) for f in files}
+                            if files
+                            else {'': 'Нет логов'}
+                        )
+                        first_val = files[0] if files else None
+
+                        sel = ui.select(
+                            options=opts,
+                            value=first_val,
+                            label='Лог-файл',
+                        ).props('dark outlined dense').classes(
+                            'w-72 bg-slate-700 text-xs text-white rounded'
+                        )
+
+                        current_select['widget'] = sel
+
+                refresh_logs_callback = rebuild_select_element
+                rebuild_select_element()
+
+                def on_refresh_click():
+                    rebuild_select_element()
+                    files = get_log_files()
+                    ui.notify(f'Найдено файлов: {len(files)}', type='info')
+
+                ui.button('Обновить список', on_click=on_refresh_click).classes(
+                    'bg-slate-700 text-white text-xs py-1 px-2'
+                )
+
+                def on_open_click():
+                    sel_widget = current_select.get('widget')
+                    target_path = sel_widget.value if sel_widget else None
+                    if target_path and os.path.exists(target_path):
+                        load_log_to_chart(target_path)
+                    else:
+                        ui.notify('Выберите корректный лог-файл из списка!', type='warning')
+
+                ui.button(
+                    'Открыть график',
+                    on_click=on_open_click,
+                ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
+
+        # Панель статистических карточек над графиком (теперь с окошками медианы)
+        stats_container = ui.row().classes('w-full mb-1.5')
+
+        # Контейнер для графика
+        chart_container = ui.column().classes('w-full')
+        with chart_container:
+            ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
+                'text-xs text-slate-400 italic py-10 self-center'
             )
-            first_val = files[0] if files else None
 
-            sel = ui.select(
-                options=opts,
-                value=first_val,
-                label='Лог-файл',
-            ).props('dark outlined dense').classes(
-                'w-72 bg-slate-700 text-xs text-white rounded'
-            )
-
-            current_select['widget'] = sel
-
-        refresh_logs_callback = rebuild_select_element
-        rebuild_select_element()
-
-        def on_refresh_click():
-          rebuild_select_element()
-          files = get_log_files()
-          ui.notify(f'Найдено файлов: {len(files)}', type='info')
-
-        ui.button('Обновить список', on_click=on_refresh_click).classes(
-            'bg-slate-700 text-white text-xs py-1 px-2'
+        # Сетка чекбоксов каналов
+        channels_container = ui.grid(columns=4).classes(
+            'w-full gap-1.5 bg-slate-700/30 p-2.5 rounded mt-2'
         )
-
-        def on_open_click():
-          sel_widget = current_select.get('widget')
-          target_path = sel_widget.value if sel_widget else None
-          if target_path and os.path.exists(target_path):
-            load_log_to_chart(target_path)
-          else:
-            ui.notify('Выберите корректный лог-файл из списка!', type='warning')
-
-        ui.button(
-            'Открыть график',
-            on_click=on_open_click,
-        ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
-
-    # Панель статистических карточек над графиком
-    stats_container = ui.row().classes('w-full mb-1.5')
-
-    # Контейнер для графика
-    chart_container = ui.column().classes('w-full')
-    with chart_container:
-      ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
-          'text-xs text-slate-400 italic py-10 self-center'
-      )
-
-    # Сетка чекбоксов каналов (в 4 колонки для комфортного размещения длинных названий)
-    channels_container = ui.grid(columns=4).classes(
-        'w-full gap-1.5 bg-slate-700/30 p-2.5 rounded mt-2'
-    )
