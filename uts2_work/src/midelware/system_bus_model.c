@@ -43,7 +43,7 @@ static inline const struct system_bus_handler * _get_valid_handler(SYSTEM_BUS_ID
     const struct system_bus_handler *handler = cache[id];
 
     // 2. Проверка, что хендлер существует и у него задан валидный канал
-    if (handler == NULL || handler->channel == NULL)
+    if (handler == NULL)        
     {
         return NULL;
     }
@@ -96,12 +96,12 @@ int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val)
     {
         return -EINVAL;
     }          
-
-    struct k_msgq *target_queue = (struct k_msgq *)handler->channel->user_data;
-    if (target_queue == NULL) {
+    
+    if (handler->queue == NULL) 
+    {
         return -ENODEV; // У этого канала нет очереди (например, это чистый датчик)
     }
-
+    struct k_msgq *target_queue = (struct k_msgq *)handler->queue;
     system_can_message_t _request = *_val;
  
     return k_msgq_put(target_queue, &_request, K_MSEC(10));

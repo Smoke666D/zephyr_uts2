@@ -68,28 +68,6 @@ static void can2_tx_callback(const struct device *dev, int error, void *user_dat
 static void can3_tx_callback(const struct device *dev, int error, void *user_data);
 
 
-
-ZBUS_CHAN_DEFINE(can1_tx_chan,
-                 system_can_message_t,
-                 NULL, 
-                 &can1_tx_msgq, 
-                 ZBUS_OBSERVERS_EMPTY, 
-                 ZBUS_MSG_INIT(0) 
-);
-ZBUS_CHAN_DEFINE(can2_tx_chan, system_can_message_t,
-                 NULL, 
-                 &can2_tx_msgq, 
-                 ZBUS_OBSERVERS_EMPTY, 
-                 ZBUS_MSG_INIT(0) 
-);
-ZBUS_CHAN_DEFINE(can3_tx_chan,
-                 system_can_message_t,
-                 NULL, 
-                 &can3_tx_msgq, 
-                 ZBUS_OBSERVERS_EMPTY, 
-                 ZBUS_MSG_INIT(0) 
-);
-
 ZBUS_CHAN_DEFINE(can1_rx_chan,
                  system_can_message_t,
                  NULL, 
@@ -397,9 +375,13 @@ static int dev_can_init(void)
 
 SYS_INIT(dev_can_init, CAN_DEAMON_INIT_LEVEL , CAN_DEAMON_INIT_PRIOR);
 
-SERVER_IN_CHANNEL_DEFINE(CAN1_TX, &can1_tx_chan, 0, CAN_MSG_DATA);
-SERVER_IN_CHANNEL_DEFINE(CAN2_TX, &can2_tx_chan, 0, CAN_MSG_DATA);
-SERVER_IN_CHANNEL_DEFINE(CAN3_TX, &can3_tx_chan, 0, CAN_MSG_DATA);
+
+SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(CAN1_TX, &can1_tx_msgq, CAN_MSG_DATA);
+SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(CAN2_TX, &can2_tx_msgq, CAN_MSG_DATA);
+SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(CAN3_TX, &can3_tx_msgq, CAN_MSG_DATA);
+//SERVER_IN_CHANNEL_DEFINE(CAN1_TX, &can1_tx_chan, 0, CAN_MSG_DATA);
+//SERVER_IN_CHANNEL_DEFINE(CAN2_TX, &can2_tx_chan, 0, CAN_MSG_DATA);
+//SERVER_IN_CHANNEL_DEFINE(CAN3_TX, &can3_tx_chan, 0, CAN_MSG_DATA);
 SERVER_IN_CHANNEL_DEFINE(CAN1_RX, &can1_rx_chan, 0, CAN_MSG_DATA);
 SERVER_IN_CHANNEL_DEFINE(CAN2_RX, &can2_rx_chan, 0, CAN_MSG_DATA);
 SERVER_IN_CHANNEL_DEFINE(CAN3_RX, &can3_rx_chan, 0, CAN_MSG_DATA);

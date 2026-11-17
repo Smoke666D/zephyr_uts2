@@ -318,12 +318,12 @@ typedef struct server_request
         .queue = NULL, \
     }
 
-#define SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+#define SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(id, chan_ptr, chan_type) \
     const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
         .bus_id = id, \
         .channel = NULL, \
         .channel_type = chan_type, \
-        .system_index = index, \
+        .system_index = 0, \
         .queue = chan_ptr, \
     }
 
