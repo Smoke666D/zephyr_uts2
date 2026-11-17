@@ -1,0 +1,254 @@
+/*
+ * Copyright (c) 2020 Thomas Stranger
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <st/g0/stm32g0b1Xe.dtsi>
+#include <st/g0/stm32g0b1r(b-c-e)tx-pinctrl.dtsi>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+
+
+/ {
+	model = "STMicroelectronics STM32G0B1RE-NUCLEO board";
+	compatible = "st,stm32g0b1re-nucleo";
+
+	chosen {
+		zephyr,console = &usart2;
+		zephyr,shell-uart = &usart2;
+		zephyr,uart-mcumgr = &usart2;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,canbus = &fdcan1;
+	};
+
+	my_custom_inputs {
+		/* Вход 1: Статический GND (PC13) */
+		din_1 {
+			compatible = "zephyr,discrete-input";
+			gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;
+			input-type = "active-high";
+			param-id = "din1";
+			param-cfg-id = "din1_config";
+		};
+
+		/* Вход 2: Статический VDD (PC14) */
+		din_2 {
+			compatible = "zephyr,discrete-input";
+			gpios = <&gpioc 14 GPIO_ACTIVE_LOW>;
+			input-type = "active-high";
+			param-id = "din2";
+			param-cfg-id = "din2_config";
+		};
+
+		/* Вход 3: Динамический (PC15), управляемый пином PD3 */
+		din_3 {
+			compatible = "zephyr,discrete-input";
+			gpios = <&gpioc 15 0>;
+			input-type = "configurable-low";
+			ctrl-gpios = <&gpiod 3 GPIO_ACTIVE_LOW>;
+			param-id = "din3";
+			param-cfg-id = "din3_config";
+		};
+	};
+
+	my_custom_outputs {
+		dout_1 {
+			compatible = "zephyr,discrete-output";
+			gpios = <&gpiob 5 GPIO_ACTIVE_HIGH>;
+			param-id = "dout1";
+		};
+		dout_2 {
+			compatible = "zephyr,discrete-output";
+			gpios = <&gpiob 6 GPIO_ACTIVE_HIGH>;
+			param-id = "dout2";
+		};
+		dout_3 {
+			compatible = "zephyr,discrete-output";
+			gpios = <&gpiob 7 GPIO_ACTIVE_HIGH>;
+			param-id = "dout3";
+		};
+	};
+
+	/* Виртуальный шлюз-мост для CAN-каналов */
+	my_can_instances {
+		can_1 {
+			compatible = "zephyr,can-instance";
+			can-dev = <&fdcan1>;
+			stb-gpios = <&gpioa 15 GPIO_ACTIVE_LOW>;
+			param-tx-id = "can1_tx_frame";
+			param-rx-id = "can1_rx_frame";
+			param-status-id = "can1_status";
+			param-ctrl-id = "can1_ctrl";
+			param-filter-id = "can1_filter";
+			param-stb-id = "can1_stb";
+		};
+
+		can_2 {
+			compatible = "zephyr,can-instance";
+			can-dev = <&fdcan2>;
+			stb-gpios = <&gpiob 0 GPIO_ACTIVE_LOW>;
+			param-tx-id = "can2_tx_frame";
+			param-rx-id = "can2_rx_frame";
+			param-status-id = "can2_status";
+			param-ctrl-id = "can2_ctrl";
+			param-filter-id = "can2_filter";
+			param-stb-id = "can2_stb";
+		};
+	};
+};
+
+/* 1. Настройка внешнего кварца (HSE = 16 МГц) */
+&clk_hse {
+	clock-frequency = <DT_FREQ_M(16)>;
+	status = "okay";
+};
+
+/* 2. Конфигурация главного умножителя частоты (PLL) */
+&pll {
+	clocks = <&clk_hse>;
+	/* f(VCO) = 16 МГц / 2 * 16 = 128 МГц */
+	div-m = <2>;
+	mul-n = <16>;
+	div-r = <2>; /* PLLR (SYSCLK) = 128 / 2 = 64 МГц */
+	div-q = <2>; /* PLLQ (FDCAN)  = 128 / 2 = 64 МГц */
+	div-p = <2>; /* PLLP          = 128 / 2 = 64 МГц */
+	status = "okay";
+};
+
+/* 3. Конфигурация системных шин в блоке RCC */
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(64)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <1>;
+};
+
+/* 4. Включаем USART2 для консоли и шелла (проверьте ваши пины!) */
+&usart2 {
+	pinctrl-0 = <&usart2_tx_pa2 &usart2_rx_pa3>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	status = "okay";
+};
+
+&iwdg {
+	status = "okay";
+};
+
+&timers3 {
+	st,prescaler = <10000>;
+	status = "okay";
+
+	pwm3: pwm {
+		status = "okay";
+		pinctrl-0 = <&tim3_ch1_pb4>;
+		pinctrl-names = "default";
+	};
+};
+
+&timers15 {
+	st,prescaler = <10000>;
+	status = "okay";
+
+	pwm15: pwm {
+		status = "okay";
+		pinctrl-0 = <&tim15_ch1_pb14>;
+		pinctrl-names = "default";
+	};
+};
+
+&spi1 {
+	status = "okay";
+	/* SCK (PA1), MISO (PA6), MOSI (PA7), CS (PA4) */
+	pinctrl-0 = <&spi1_sck_pa1 &spi1_miso_pa6 &spi1_mosi_pa7>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
+
+	lis3dh: lis3dh@0 {
+		compatible = "st,lis2dh";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+		irq-gpios = <&gpiod 2 GPIO_ACTIVE_HIGH>;
+		label = "LIS3DH";
+	};
+};
+
+&adc1 {
+	status = "okay";
+	pinctrl-0 = <&adc1_in9_pb1>;
+	pinctrl-names = "default";
+};
+
+&die_temp {
+	status = "okay";
+};
+
+&fdcan1 {
+	status = "okay";
+	pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
+	pinctrl-names = "default";
+	bitrate = <500000>;
+	clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00001000>,
+		 <&rcc STM32_SRC_PLL_Q FDCAN_SEL(1)>;
+};
+
+&fdcan2 {
+	status = "okay";
+	pinctrl-0 = <&fdcan2_rx_pb12 &fdcan2_tx_pb13>;
+	pinctrl-names = "default";
+	bitrate = <500000>;
+	clocks = <&rcc STM32_CLOCK_BUS_APB1 0x00001000>,
+		 <&rcc STM32_SRC_PLL_Q FDCAN_SEL(1)>;
+};
+
+
+
+
+
+
+
+
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 DT_SIZE_K(48)>;
+			read-only;
+		};
+
+		slot0_partition: partition@c000 {
+			label = "image-0";
+			reg = <0x0000c000 DT_SIZE_K(200)>;
+		};
+
+		slot1_partition: partition@3e000 {
+			label = "image-1";
+			reg = <0x0003e000 DT_SIZE_K(200)>;
+		};
+
+		/* final 64KiB reserved for app storage partition */
+		storage_partition: partition@70000 {
+			label = "storage";
+			reg = <0x00070000 DT_SIZE_K(64)>;
+		};
+	};
+};
+
+
+
+&vref {
+	status = "okay";
+};
+
+&vbat {
+	status = "okay";
+};
+

@@ -1,0 +1,21 @@
+identifier: iglax_x2
+name: IGLAX X2
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+ram: 320
+flash: 1024
+supported:
+  - arduino_i2c
+  - arduino_gpio
+  - arduino_spi
+  - pwm
+  - i2c
+  - spi
+  - gpio
+  - usb_device
+  - usbd
+  - counter
+vendor: st

@@ -1,0 +1,6 @@
+board:
+  name: iglax_x2
+  full_name: IGLAX X2
+  vendor: others
+  socs:
+    - name: stm32f413xx

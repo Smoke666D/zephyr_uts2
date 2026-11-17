@@ -1,0 +1,18 @@
+CONFIG_ARM_MPU=y
+
+# GPIO Controller
+CONFIG_GPIO=y
+
+CONFIG_ADC=y
+
+CONFIG_CAN=y
+CONFIG_CAN_FD_MODE=y
+
+# Внутренние датчики МК (оставляем выключенными, если не нужны)
+CONFIG_STM32_TEMP=n
+CONFIG_STM32_VBAT=n
+CONFIG_STM32_VREF=n
+
+# Полностью отключаем UART консоль
+CONFIG_UART_CONSOLE=n
+CONFIG_SERIAL=n

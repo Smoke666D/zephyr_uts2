@@ -1,5 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 
+# ==============================================================================
+# 5. USB СТЕК (USBD Next & CDC ACM)
+# ==============================================================================
+CONFIG_USB_DEVICE_STACK_NEXT=y
+CONFIG_USBD_CDC_ACM_CLASS=y
+CONFIG_CDC_ACM_SERIAL_INITIALIZE_AT_BOOT=y
+
+CONFIG_SAMPLE_USBD_PID=0x0001
+CONFIG_SAMPLE_USBD_PRODUCT="USBD CDC ACM sample"
+CONFIG_UDC_BUF_POOL_SIZE=8192
+
 # Настройки MCU
 CONFIG_ARM_MPU=y
 CONFIG_HW_STACK_PROTECTION=y
@@ -47,3 +58,6 @@ CONFIG_RTIO_WORKQ_POOL_ITEMS=12
 
 # Управление выделением памяти
 CONFIG_HEAP_MEM_POOL_SIZE=16384
+
+# Поддержка вывода чисел с плавающей точкой (float/double) в консоль
+CONFIG_CBPRINTF_FP_SUPPORT=y

@@ -1,0 +1,76 @@
+CONFIG_ARM_MPU=y
+
+# GPIO Controller
+CONFIG_GPIO=y
+
+CONFIG_ADC=y
+
+CONFIG_CAN=y
+CONFIG_CAN_FD_MODE=y
+
+# Внутренние датчики МК (оставляем выключенными, если не нужны)
+CONFIG_STM32_TEMP=n
+CONFIG_STM32_VBAT=n
+CONFIG_STM32_VREF=n
+
+# Включаем USB стек и класс CDC ACM (Виртуальный COM-порт)
+CONFIG_USB_DEVICE_STACK_NEXT=y
+CONFIG_USBD_CDC_ACM_CLASS=y
+
+CONFIG_SHELL_BACKENDS=y
+CONFIG_SHELL_BACKEND_SERIAL_INIT_PRIORITY=51
+
+# Поддержка работы с UART/консолью по USB
+CONFIG_SERIAL=y
+CONFIG_UART_LINE_CTRL=y # Необходим для отслеживания подключения терминала (DTR)
+CONFIG_SHELL_BACKEND_SERIAL=y
+CONFIG_SHELL_PROMPT_UART="usb:~$ "  # Приглашение ввода для USB
+CONFIG_SHELL_BACKEND_SERIAL_CHECK_DTR=y
+
+
+
+
+
+
+# Включаем виртуальную файловую систему Zephyr и LittleFS
+CONFIG_FILE_SYSTEM=y
+CONFIG_FILE_SYSTEM_LITTLEFS=y
+
+# Включаем поддержку работы с Flash-памятью и разметкой разделов
+CONFIG_FLASH=y
+CONFIG_FLASH_MAP=y
+CONFIG_FLASH_PAGE_LAYOUT=y
+
+CONFIG_HEAP_MEM_POOL_SIZE=16384
+
+# (Если вы подключали флешку по QSPI, этот флаг у вас уже должен быть включен)
+CONFIG_FLASH_STM32_QSPI=y
+# (Если подключали по обычному SPI, то эти)
+# CONFIG_SPI=y
+# CONFIG_SPI_NOR=y
+
+
+# 1. Активируем сетевые драйверы и сотовую связь
+CONFIG_NET_DRIVERS=y
+CONFIG_MODEM=y
+CONFIG_MODEM_SIM7080=y
+CONFIG_MODEM_SIMCOM_SIM7080_APN="internet"
+
+# 2. Сетевой стек Zephyr
+CONFIG_NETWORKING=y
+CONFIG_NET_NATIVE=y
+CONFIG_NET_IPV4=y
+CONFIG_NET_UDP=y
+CONFIG_NET_TCP=y
+CONFIG_NET_SOCKETS=y
+CONFIG_NET_PPP=y
+CONFIG_NET_L2_PPP=y
+
+
+# 3. Включаем современный шелл AT-команд для ручной отправки AT
+# Включаем классический шелл, полностью совместимый с вашим драйвером sim7080.c
+CONFIG_MODEM_SHELL=y
+CONFIG_SHELL_CMDS=y
+
+CONFIG_TEST_RANDOM_GENERATOR=y
+
