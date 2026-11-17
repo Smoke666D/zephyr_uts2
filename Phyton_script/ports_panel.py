@@ -106,7 +106,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                                     raise ValueError('Порт не выбран!')
                                 # Скорость переведена на 250 000 бод
                                 shell_ref['ser'] = serial.Serial(
-                                    p_name, baudrate=250000, timeout=0.05
+                                    p_name, baudrate=115200, timeout=0.05
                                 )
                                 shell_btn.text = 'Закрыть'
                                 shell_btn.classes(remove='bg-emerald-600', add='bg-red-600')
@@ -177,7 +177,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                         # Поиск SCPI порта по запросу *IDN? на скорости 250 000 бод
                         if not found_shell:
                             try:
-                                s = serial.Serial(p_name, baudrate=250000, timeout=0.2)
+                                s = serial.Serial(p_name, baudrate=115200, timeout=0.2)
                                 s.reset_input_buffer()
                                 s.reset_output_buffer()
                                 s.write(b'*IDN?\r\n')
@@ -221,7 +221,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                                 pass
 
                         ui.notify(
-                            f'SCPI найден на {found_shell} (250 кбод, *RST)',
+                            f'SCPI найден на {found_shell} (115,2 кбод, *RST)',
                             type='positive',
                         )
 

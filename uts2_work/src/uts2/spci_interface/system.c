@@ -281,7 +281,20 @@ static int _read_hw_string_from_bus(int _unit, char *_out_str, size_t _max_len)
 /***************************************************************************************************
  *                                        PUBLIC FUNCTIONS
  **************************************************************************************************/
+#include <ctype.h>
 
+// Вспомогательная функция нечувствительного к регистру сравнения суффиксов
+static bool match_suffix(const char *s, const char *pattern)
+{
+    while (*s && *pattern) {
+        if (tolower((unsigned char)*s) != tolower((unsigned char)*pattern)) {
+            return false;
+        }
+        s++;
+        pattern++;
+    }
+    return (*s == '\0' && *pattern == '\0');
+}
 /**
  *  @brief      SCPI-команда системной задержки (SYSTem:WAIT)
  *  @details    Блокирует выполнение потока на заданное время (от 1 мс до 60 секунд).
@@ -290,36 +303,49 @@ static int _read_hw_string_from_bus(int _unit, char *_out_str, size_t _max_len)
  *
  *  @return     scpi_result_t - SCPI_RES_OK при успехе, SCPI_RES_ERR при ошибке
  */
-scpi_result_t cmd_system_wait(scpi_t *_context)
+scpi_result_t cmd_system_wait(scpi_t *context)
 {
-    scpi_number_t param;
+    const char *str;
+    size_t len;
 
-    // Передача NULL вместо scpi_special_numbers_def
-    if (!SCPI_ParamNumber(_context, NULL, &param, TRUE)) 
-    {
+    // Считываем аргумент как строку/токен
+    if (!SCPI_ParamCharacters(context, &str, &len, TRUE)) {
         return SCPI_RES_ERR;
     }
 
-    // Автоматический перевод значения с размерностью в секунды
-    double time_s = param.content.value;
+    char buf[16];
+    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    memcpy(buf, str, len);
+    buf[len] = '\0';
 
-    // Проверка диапазона (от 1 мс до 60 секунд)
-    if (false
-        || time_s < 0.001 
-        || time_s > 60.0
-       ) 
-    {
-        SCPI_ErrorPush(_context, -222); // -222 = Data out of range
+    char *endptr;
+    double val = strtod(buf, &endptr);
+    if (endptr == buf) {
+        SCPI_ErrorPush(context, SCPI_ERROR_ILLEGAL_PARAMETER_VALUE); // -224
         return SCPI_RES_ERR;
     }
 
-    uint32_t delay_ms = (uint32_t)(time_s * 1000.0);
+    uint32_t delay_ms = 0;
 
-    if (delay_ms > 0) 
-    {
-        k_msleep(delay_ms);
+    // Проверяем суффикс без учета регистра (ms / s / без суффикса)
+    if (match_suffix(endptr, "ms")) {
+        delay_ms = (uint32_t)val;
+    } else if (match_suffix(endptr, "s") || *endptr == '\0') {
+        delay_ms = (uint32_t)(val * 1000.0);
+    } else if (match_suffix(endptr, "us")) {
+        delay_ms = (uint32_t)(val / 1000.0);
+        if (delay_ms == 0 && val > 0) delay_ms = 1;
+    } else {
+        SCPI_ErrorPush(context, -131); // Invalid suffix
+        return SCPI_RES_ERR;
     }
 
+    if (delay_ms < 1 || delay_ms > 60000) {
+        SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE); // -222
+        return SCPI_RES_ERR;
+    }
+
+    k_msleep(delay_ms);
     return SCPI_RES_OK;
 }
 

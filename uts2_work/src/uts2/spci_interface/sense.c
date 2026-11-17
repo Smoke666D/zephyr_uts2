@@ -364,6 +364,32 @@ static const struct pmon_channel_map pmon_map[PMON_COUNT] = {
 /* ========================================================================= */
 /* 1. ИЗМЕРЕНИЕ ТОКА: SENSe:CURRent[:DC]? [<sensor1>[, <sensor2>, ...]]      */
 /* ========================================================================= */
+
+static void result_current_formatted(scpi_t *context, float current_val)
+{
+    char buf[24];
+    // Форматируем с точностью 6 знаков
+    int len = snprintf(buf, sizeof(buf), "%.6f", (double)current_val);
+
+    // (Опционально) Убираем хвостовые нули: 0.250000 -> 0.25
+    char *dot = strchr(buf, '.');
+    if (dot != NULL) {
+        char *end = buf + len - 1;
+        while (end > dot && *end == '0') {
+            *end-- = '\0';
+            len--;
+        }
+        if (end == dot) {
+            *end = '\0';
+            len--;
+        }
+    }
+
+    // SCPI_ResultCharacters сам добавит запятую, если это не первое число в строке!
+    SCPI_ResultCharacters(context, buf, len);
+}
+
+
 scpi_result_t cmd_sense_current_q(scpi_t *context)
 {
     int32_t sensor_idx;
@@ -373,7 +399,7 @@ scpi_result_t cmd_sense_current_q(scpi_t *context)
     // Вычитываем запрошенные сенсоры по очереди
     while (SCPI_ParamChoice(context, pmon_sensor_choices, &sensor_idx, FALSE)) {
         SYSTEM_BUS_GET(pmon_map[sensor_idx].current_id, &current_val);
-        SCPI_ResultFloat(context, current_val);
+        result_current_formatted(context, current_val);
         count++;
     }
 
@@ -381,7 +407,7 @@ scpi_result_t cmd_sense_current_q(scpi_t *context)
     if (count == 0) {
         for (int i = 0; i < PMON_COUNT; i++) {
             SYSTEM_BUS_GET(pmon_map[i].current_id, &current_val);
-            SCPI_ResultFloat(context, current_val);
+            result_current_formatted(context, current_val);
         }
     }
 
@@ -457,7 +483,7 @@ scpi_result_t cmd_sense_power_all_q(scpi_t *context)
 
     // Отдаем триплет: Напряжение (В), Ток (А), Мощность (Вт)
     SCPI_ResultFloat(context, v);
-    SCPI_ResultFloat(context, i);
+    result_current_formatted(context, i);
     SCPI_ResultFloat(context, p);
 
     return SCPI_RES_OK;

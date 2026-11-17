@@ -76,23 +76,6 @@ static size_t parse_space_separated_hex(const char *str, size_t str_len, uint8_t
 
     return count;
 }
-/* Парсинг длинных HEX-строк (до 64 байт / 128 символов) */
-static size_t hex_to_bytes(const char *hex, uint8_t *out, size_t max_len)
-{
-    size_t hex_len = strlen(hex);
-    size_t byte_count = hex_len / 2;
-    if (byte_count > max_len) byte_count = max_len;
-
-    for (size_t i = 0; i < byte_count; i++) {
-        unsigned int byte_val;
-        if (sscanf(&hex[i * 2], "%02x", &byte_val) != 1) {
-            return 0;
-        }
-        out[i] = (uint8_t)byte_val;
-    }
-    return byte_count;
-}
-
 
 
 /* ========================================================================= */

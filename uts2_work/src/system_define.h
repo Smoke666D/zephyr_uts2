@@ -41,7 +41,8 @@
 
 
 /**************WORKER*********************************/
-#define SCPI_MONITOR_K_WORK             APPLICATION_WORKER
+#define SCPI_MONITOR_K_WORK             COMMON_WORKER
+//APPLICATION_WORKER
 #define LIN_K_WORK                      REAL_TIME_WORKER
 #define CAN_K_WORK                      REAL_TIME_WORKER
 #define UART_DETECT_K_WORK              COMMON_WORKER
