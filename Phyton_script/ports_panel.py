@@ -162,7 +162,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                 is_tel = False
                 while (asyncio.get_event_loop().time() - start_t) < 0.6:
                   if s.in_waiting > 0:
-                    if b'\xbe' in s.read(s.in_waiting):
+                    if b'\xaa\x55\xbe\xef' in s.read(s.in_waiting):
                       is_tel = True
                       break
                   await asyncio.sleep(0.04)

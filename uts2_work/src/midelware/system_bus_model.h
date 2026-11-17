@@ -345,8 +345,8 @@ typedef struct server_request
     )
 
 
-
-
+int server_get_real_fast(SYSTEM_BUS_ID id, float * _val);
+int server_get_real_fast_array(SYSTEM_BUS_ID id, float * _val, uint8_t size);
 
 int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
 int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
@@ -397,6 +397,7 @@ int bus_set_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);
 #define SYSTEM_BUS_SET_P(id, val) _Generic(*(val), \
     system_can_message_t: bus_set_can              \
 )((id), (val))
+
 
 
 int bus_get_can(SYSTEM_BUS_ID id,  system_can_message_t * _val);

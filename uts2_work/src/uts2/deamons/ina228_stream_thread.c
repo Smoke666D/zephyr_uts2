@@ -170,7 +170,7 @@ RTIO_DEFINE_WITH_MEMPOOL(ina_rtio,
                          sizeof(void *));
 
 // Объявление стека в секции DTCM
-K_THREAD_STACK_DEFINE(rti_poller_stack, INA228_THREAD_STACK_SIZE) __attribute__((section(".dtcm_noinit")));
+K_THREAD_STACK_DEFINE(rti_poller_stack, INA228_THREAD_STACK_SIZE);
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
@@ -283,14 +283,14 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
     {
         if (!device_is_ready(devices[i])) 
         {
-            LOG_ERR("Устройство %s не готово", devices[i]->name);
+            LOG_ERR("Devise %s not ready", devices[i]->name);
             return;
         }
     }
     k_sem_reset(&new_cur_sens_run);
     k_timer_start(&cur_sens_timer, K_MSEC(1), K_MSEC(1));
 
-    LOG_INF("Все датчики INA228 готовы. Запуск гибридного цикла RTIO/ZBUS.");
+    LOG_INF("Current sens deamon init done!");
 
     ina_batch_msg_t batch;
     memset(&batch, 0, sizeof(batch)); 
@@ -314,7 +314,7 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
 // Запуск потока с использованием стека в DTCM
 K_THREAD_DEFINE(ina_thread_id, INA228_THREAD_STACK_SIZE, _rti_poller_thread, 
                NULL, NULL, NULL, 
-                INA228_THREAD_PRIORITY, 0, 0);
+              INA228_THREAD_PRIORITY, 0, 0);
 
 // Регистрация путей шины параметров для Токов и Напряжений
 SERVER_IN_CHANNEL_DEFINE(SENS_BRD_LOW_CURRENT,   &ina_batch_chan, BRD_LOW_CUR_CH,  FLOAT_DATA);

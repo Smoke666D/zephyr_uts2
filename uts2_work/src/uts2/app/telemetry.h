@@ -1,12 +1,12 @@
 #include <math.h> // для isnan (если нужно)
 
-#define TELEMETRY_MAGIC_BYTE 0xBE
+#define TELEMETRY_MAGIC_BYTE 0xEFBE55AAU
 #define CAN_MAGIC_BYTE       0xCB
 
 // 1. Описываем структуру пакета телеметрии (выравнивание по байтам __packed)
 struct telemetry_packet {
-    uint8_t  magic;          // Байт синхронизации, например 0xBE (Binary End)
-    uint32_t timestamp_ms;   // Аппаратный таймстамп ядра (k_uptime_get_32())
+    uint32_t  magic;          // Байт синхронизации, например 0xBE (Binary End)
+    uint32_t  timestamp_ms;   // Аппаратный таймстамп ядра (k_uptime_get_32())
     
     // ADS1115
     float    rf_power;
@@ -35,13 +35,6 @@ struct telemetry_packet {
         // --- Напряжения LIN интерфейсов (4 шт) ---
     // lin_voltages[0] -> LIN 1, lin_voltages[1] -> LIN 2, и т.д.
     float    lin_voltages[4];
-} __packed;
+};
 
 
-struct can_rx_bin_packet {
-    uint8_t  magic;      // 0xCB
-    uint8_t  can_num;    // Номер интерфейса (1, 2 или 3)
-    uint32_t id;         // CAN ID
-    uint8_t  dlc;        // Длина данных (0-64)
-    uint8_t  data[64];   // Полезная нагрузка
-} __packed;

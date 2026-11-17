@@ -539,6 +539,57 @@ int bus_get_real(SYSTEM_BUS_ID id, float * _val)
 }
 
 
+int server_get_real_fast(SYSTEM_BUS_ID id, float * _val)
+{      
+    // Проверяем что декспритор канала существует и канал нужного типа
+    const struct system_bus_handler *handler = cache[id];
+        
+    // Захватываем данные канала Zbus с таймаутом
+    if (zbus_chan_claim(handler->channel, K_MSEC(1)) != 0) 
+    {
+        return false;
+    }
+    
+    const float *msg = zbus_chan_msg(handler->channel);    
+
+    // Читаем данные
+ 
+    *_val = msg[handler->system_index];
+
+    // Освобождаем канал
+    zbus_chan_finish(handler->channel);
+    return 0;
+}
+
+int server_get_real_fast_array(SYSTEM_BUS_ID id, float * _val, uint8_t size)
+{      
+    // Проверяем что декспритор канала существует и канал нужного типа
+    const struct system_bus_handler *handler = cache[id];
+        
+    // Захватываем данные канала Zbus с таймаутом
+    if (zbus_chan_claim(handler->channel, K_MSEC(1)) != 0) 
+    {
+        return false;
+    }
+    
+
+    const float *msg = zbus_chan_msg(handler->channel);    
+    size_t msg_size = zbus_chan_msg_size(handler->channel);
+    if (msg_size >= size)
+    {
+    // Читаем данные
+        for (int i =0; i<size;i++)
+        {
+            _val[i] = msg[i];
+        }
+
+    }
+    // Освобождаем канал
+    zbus_chan_finish(handler->channel);
+    return 0;
+}
+
+
 float server_get_float(SYSTEM_BUS_ID id )
 {
     float _data = NAN;
