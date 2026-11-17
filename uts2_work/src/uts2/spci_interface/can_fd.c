@@ -44,7 +44,7 @@ K_MSGQ_DEFINE(canfd3_rx_msgq, sizeof(system_can_message_t), CAN_RX_MSGQ_DEPTH, 4
 };
 
 /* Парсинг длинных HEX-строк (до 64 байт / 128 символов) */
-/*static size_t hex_to_bytes(const char *hex, uint8_t *out, size_t max_len)
+static size_t hex_to_bytes(const char *hex, uint8_t *out, size_t max_len)
 {
     size_t hex_len = strlen(hex);
     size_t byte_count = hex_len / 2;
@@ -237,16 +237,12 @@ scpi_result_t cmd_can_transmit(scpi_t *context)
     // can_bytes_to_dlc сам правильно кодирует длины CAN FD (0..8, 12, 16, 20, 24, 32, 48, 64)
     frame.dlc = can_bytes_to_dlc(byte_len);
 
-    const struct device *dev = can_devs[ch - 1];
-    if (dev == NULL || !device_is_ready(dev)) {
-        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
-        return SCPI_RES_ERR;
-    }
+   
 
-    if (can_send(dev, &frame, K_MSEC(100), NULL, NULL) != 0) {
-        SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
-        return SCPI_RES_ERR;
-    }
+   // if (can_send(dev, &frame, K_MSEC(100), NULL, NULL) != 0) {
+      //  SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
+      //  return SCPI_RES_ERR;
+    //}
     return SCPI_RES_OK;
 }
 
