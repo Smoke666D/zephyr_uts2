@@ -36,7 +36,6 @@
  **************************************************************************************************/
 LOG_MODULE_REGISTER(out_and_power, LOG_LEVEL_INF);
 
-
 #define LOW_CUR_DRIVER_COUNT 18
 #define LIN_CONTROL_CNT  4
 #define CHANNEL_DATA_SIZE (LOW_CUR_DRIVER_COUNT + LIN_CONTROL_CNT)
@@ -59,8 +58,6 @@ static int  _out_manager_system_init(void);
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-
-
 static struct k_work_poll  hc595_ctl_task                         __attribute__((section("DTCM")));
 static struct k_poll_event hc595_ctl_poll_events[1]               __attribute__((section("DTCM")));
 static struct hc595_channels_msg cache_hc595_state                __attribute__((section("DTCM"))) = {0};
@@ -77,28 +74,11 @@ ZBUS_CHAN_DEFINE(hc595_chan,
                  {0}
 );
 
-
 static const struct device *const hc595_dev = DEVICE_DT_GET(DT_NODELABEL(hc595_chain));      
-
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
  **************************************************************************************************/
-
-/**
- *  @brief      Коллбэк слушателя ZBUS для канала hc595_chan
- *  @details    Вызывается при публикации сообщений в канале hc595_chan,
- *              планируя выполнение задачи обновления регистров.
- *
- *  @param      _chan - Указатель на канал ZBUS
- */
-//static void _out_zbus_listener_callback(const struct zbus_channel *_chan)
-//{
-//    ARG_UNUSED(_chan);
- //   app_worker_submit(&out_task, REAL_TIME_WORKER);/
-//}
-
-
 
 /**
  *  @brief      Расчет маски для сдвигового регистра HC595

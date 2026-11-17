@@ -56,92 +56,71 @@ static struct can_tx_context can_contexts[] = {
     { .can_dev = NULL, .tx_msgq = &can3_tx_msgq, .rx_msgq = &can3_rx_msgq, .bus_id = FD_CAN3 },
 };
 
-static struct k_work can_rx_task; 
-static struct k_work can_task; 
+static struct k_work can_rx_task                    __attribute__((section("DTCM"))); 
+static struct k_poll_event can_tx_poll_events[3]    __attribute__((section("DTCM")));
+static struct k_work_poll can_task                  __attribute__((section("DTCM"))); 
 
 /* Прототипы функций теперь видят структуру правильно */
-static void _can_tx_listener_cb(const struct zbus_channel *_chan);
 static void _can_tx_handler(struct k_work *_work);
-static int _send_next_packet_from_q(struct can_tx_context *ctx);
-static void my_tx_callback(const struct device *dev, int error, void *user_data);
 
-ZBUS_LISTENER_DEFINE(can_tx_listener, _can_tx_listener_cb);
+static void can1_tx_callback(const struct device *dev, int error, void *user_data);
+static void can2_tx_callback(const struct device *dev, int error, void *user_data);
+static void can3_tx_callback(const struct device *dev, int error, void *user_data);
+
+
 
 ZBUS_CHAN_DEFINE(can1_tx_chan,
                  system_can_message_t,
                  NULL, 
-                 (void*)FD_CAN1, 
-                 ZBUS_OBSERVERS(can_tx_listener), 
+                 &can1_tx_msgq, 
+                 ZBUS_OBSERVERS_EMPTY, 
                  ZBUS_MSG_INIT(0) 
 );
 ZBUS_CHAN_DEFINE(can2_tx_chan, system_can_message_t,
                  NULL, 
-                 (void*)FD_CAN2, 
-                 ZBUS_OBSERVERS(can_tx_listener), 
+                 &can2_tx_msgq, 
+                 ZBUS_OBSERVERS_EMPTY, 
                  ZBUS_MSG_INIT(0) 
 );
 ZBUS_CHAN_DEFINE(can3_tx_chan,
                  system_can_message_t,
                  NULL, 
-                 (void*)FD_CAN3, 
-                 ZBUS_OBSERVERS(can_tx_listener), 
+                 &can3_tx_msgq, 
+                 ZBUS_OBSERVERS_EMPTY, 
                  ZBUS_MSG_INIT(0) 
 );
 
 ZBUS_CHAN_DEFINE(can1_rx_chan,
                  system_can_message_t,
                  NULL, 
-                 (void*)FD_CAN1, 
-                 ZBUS_OBSERVERS(), 
+                 NULL, 
+                 ZBUS_OBSERVERS_EMPTY, 
                  ZBUS_MSG_INIT(0) 
 );
 ZBUS_CHAN_DEFINE(can2_rx_chan,
                  system_can_message_t,
                  NULL, 
-                 (void*)FD_CAN2, 
-                 ZBUS_OBSERVERS(), 
+                 NULL, 
+                 ZBUS_OBSERVERS_EMPTY, 
                  ZBUS_MSG_INIT(0) 
 );
 ZBUS_CHAN_DEFINE(can3_rx_chan,
                  system_can_message_t,
                  NULL, 
-                 (void*)FD_CAN3, 
-                 ZBUS_OBSERVERS(), 
+                 NULL, 
+                 ZBUS_OBSERVERS_EMPTY, 
                  ZBUS_MSG_INIT(0) 
 );
 
-/* Zbus Листенер: срабатывает при публикации в любой из CAN каналов */
-static void _can_tx_listener_cb(const struct zbus_channel *_chan)
-{
-    CAN_SYSTEM_BUS_ID bus_id = (CAN_SYSTEM_BUS_ID)zbus_chan_user_data(_chan); 
-    const system_can_message_t *msg = zbus_chan_msg(_chan);
 
-    switch (bus_id)
-    {
-        case FD_CAN1:
-            k_msgq_put(&can1_tx_msgq, msg, K_NO_WAIT);
-            break;
-        case FD_CAN2:
-            k_msgq_put(&can2_tx_msgq, msg, K_NO_WAIT);
-            break;
-        case FD_CAN3:
-            k_msgq_put(&can3_tx_msgq, msg, K_NO_WAIT);
-            break;
-    }
-    
-    // Передаем задачу на исполнение в защищенный workqueue
-    app_worker_submit(&can_task, CAN_K_WORK);
-}
-
-/* Функция отправки следующего пакета из программной очереди в железо */
-static int _send_next_packet_from_q(struct can_tx_context *ctx)
+/* TX Callback от CAN драйвера: вызывается, когда фрейм успешно ушел в шину */
+static void can1_tx_callback(const struct device *dev, int error, void *user_data)
 {
     system_can_message_t msg;
-
-    // Пытаемся забрать сообщение из очереди без блокировки
-    if (k_msgq_get(ctx->tx_msgq, &msg, K_NO_WAIT) == 0) {
-        
-        struct can_frame frame = {
+    if (k_msgq_get(&can1_tx_msgq, &msg, K_NO_WAIT) == 0) 
+    {        
+        struct can_frame frame = 
+        {
             .id = msg.id,
             .flags = msg.flags,
             .dlc = msg.dlc,
@@ -149,36 +128,120 @@ static int _send_next_packet_from_q(struct can_tx_context *ctx)
         memcpy(frame.data, msg.data, sizeof(frame.data));
 
         // Отправляем в CAN контроллер. Передаем ctx в качестве user_data для callback.
-        int ret = can_send(ctx->can_dev, &frame, K_NO_WAIT, my_tx_callback, (void *)ctx);
-        if (ret != 0) {
-            // Если аппаратный буфер забит, возвращаем сообщение обратно в очередь
-            k_msgq_put(ctx->tx_msgq, &msg, K_NO_WAIT);
-            return ret;
-        }
+        can_send(can_contexts[0].can_dev, &frame, K_NO_WAIT, can1_tx_callback, 0 );     
     }
-    return 0;
 }
 
-/* TX Callback от CAN драйвера: вызывается, когда фрейм успешно ушел в шину */
-static void my_tx_callback(const struct device *dev, int error, void *user_data)
+static void can2_tx_callback(const struct device *dev, int error, void *user_data)
 {
-    struct can_tx_context *ctx = (struct can_tx_context *)user_data;
+    system_can_message_t msg;
+    if (k_msgq_get(&can2_tx_msgq, &msg, K_NO_WAIT) == 0) 
+    {        
+        struct can_frame frame = 
+        {
+            .id = msg.id,
+            .flags = msg.flags,
+            .dlc = msg.dlc,
+        };
+        memcpy(frame.data, msg.data, sizeof(frame.data));
 
-    if (error != 0) {
-        LOG_ERR("Ошибка отправки фрейма на устройстве %s: err = %d", dev->name, error);
+        // Отправляем в CAN контроллер. Передаем ctx в качестве user_data для callback.
+        can_send(can_contexts[1].can_dev, &frame, K_NO_WAIT, can2_tx_callback, 0 );     
     }
+}
 
-    // Драйвер освободил почтовый ящик — проверяем очередь и досылаем следующее сообщение, если есть
-    _send_next_packet_from_q(ctx);
+static void can3_tx_callback(const struct device *dev, int error, void *user_data)
+{
+    system_can_message_t msg;
+    if (k_msgq_get(&can3_tx_msgq, &msg, K_NO_WAIT) == 0) 
+    {        
+        struct can_frame frame = 
+        {
+            .id = msg.id,
+            .flags = msg.flags,
+            .dlc = msg.dlc,
+        };
+        memcpy(frame.data, msg.data, sizeof(frame.data));
+
+        // Отправляем в CAN контроллер. Передаем ctx в качестве user_data для callback.
+        can_send(can_contexts[2].can_dev, &frame, K_NO_WAIT, can3_tx_callback, 0 );     
+    }
 }
 
 /* Обработчик Workqueue: проверяет очереди всех каналов */
 static void _can_tx_handler(struct k_work *_work)
 {    
-    for (int i = 0; i < NUM_CAN_CHANNELS; i++) {
-        _send_next_packet_from_q(&can_contexts[i]);
+    system_can_message_t msg;
+    if (can_tx_poll_events[0].state != K_POLL_STATE_NOT_READY)
+    {
+        if (k_msgq_get(&can1_tx_msgq, &msg, K_NO_WAIT) == 0) 
+        {
+        
+            struct can_frame frame = {
+            .id = msg.id,
+            .flags = msg.flags,
+            .dlc = msg.dlc,
+            };
+            memcpy(frame.data, msg.data, sizeof(frame.data));
+
+            // Отправляем в CAN контроллер. Передаем ctx в качестве user_data для callback.
+            int ret = can_send(can_contexts[0].can_dev, &frame, K_NO_WAIT, can1_tx_callback, 0 );
+            if (ret != 0) 
+            {            
+                k_msgq_put(&can1_tx_msgq, &msg, K_NO_WAIT);            
+            }
+        }
+        can_tx_poll_events[0].state = K_POLL_STATE_NOT_READY;
+    } 
+    else if (can_tx_poll_events[1].state != K_POLL_STATE_NOT_READY)
+    {
+        if (k_msgq_get(&can2_tx_msgq, &msg, K_NO_WAIT) == 0) 
+        {
+        
+            struct can_frame frame = {
+            .id = msg.id,
+            .flags = msg.flags,
+            .dlc = msg.dlc,
+            };
+            memcpy(frame.data, msg.data, sizeof(frame.data));
+
+            // Отправляем в CAN контроллер. Передаем ctx в качестве user_data для callback.
+            int ret = can_send(can_contexts[1].can_dev, &frame, K_NO_WAIT, can2_tx_callback, 0 );
+            if (ret != 0) 
+            {            
+                k_msgq_put(&can1_tx_msgq, &msg, K_NO_WAIT);            
+            }
+        }
+        can_tx_poll_events[1].state = K_POLL_STATE_NOT_READY;
+    } 
+    else if (can_tx_poll_events[2].state != K_POLL_STATE_NOT_READY)
+    {
+        if (k_msgq_get(&can3_tx_msgq, &msg, K_NO_WAIT) == 0) 
+        {
+        
+            struct can_frame frame = {
+            .id = msg.id,
+            .flags = msg.flags,
+            .dlc = msg.dlc,
+            };
+            memcpy(frame.data, msg.data, sizeof(frame.data));
+
+            // Отправляем в CAN контроллер. Передаем ctx в качестве user_data для callback.
+            int ret = can_send(can_contexts[2].can_dev, &frame, K_NO_WAIT, can3_tx_callback, 0 );
+            if (ret != 0) 
+            {            
+                k_msgq_put(&can1_tx_msgq, &msg, K_NO_WAIT);            
+            }
+        }
+        can_tx_poll_events[2].state = K_POLL_STATE_NOT_READY;
     }
+
+  app_worker_poll_submit(&can_task, can_tx_poll_events,ARRAY_SIZE(can_tx_poll_events), CAN_K_WORK);
+    
 }
+
+
+
 
 static void _can_rx_handler(struct k_work *_work)
 {
@@ -224,11 +287,16 @@ static void can_rx_callback(const struct device *dev, struct can_frame *frame, v
     }
 
     // Кладываем сырой фрейм в софтовую очередь приема (безопасно для ISR благодаря K_NO_WAIT)
-    if (ctx == &can_contexts[0]) {
+    if (ctx == &can_contexts[0]) 
+    {
         k_msgq_put(&can1_rx_msgq, frame, K_NO_WAIT);
-    } else if (ctx == &can_contexts[1]) {
+    } 
+    else if (ctx == &can_contexts[1]) 
+    {
         k_msgq_put(&can2_rx_msgq, frame, K_NO_WAIT);
-    } else if (ctx == &can_contexts[2]) {
+    } 
+    else if (ctx == &can_contexts[2]) 
+    {
         k_msgq_put(&can3_rx_msgq, frame, K_NO_WAIT);
     }
 
@@ -308,7 +376,21 @@ static int dev_can_init(void)
         LOG_INF("CAN device %s successfully initialized and started.", cfg->can_device->name);
     }    
 
-    k_work_init(&can_task, _can_tx_handler);
+    k_poll_event_init(&can_tx_poll_events[0],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
+                      K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
+                      &can1_tx_msgq); 
+    k_poll_event_init(&can_tx_poll_events[1],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
+                      K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
+                      &can2_tx_msgq);
+    k_poll_event_init(&can_tx_poll_events[2],
+                      K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
+                      K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
+                      &can3_tx_msgq);
+
+    k_work_poll_init(&can_task, _can_tx_handler);
+    app_worker_poll_submit(&can_task, can_tx_poll_events,ARRAY_SIZE(can_tx_poll_events), CAN_K_WORK);
     k_work_init(&can_rx_task, _can_rx_handler);
     return 0;
 }

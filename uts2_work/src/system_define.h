@@ -27,6 +27,9 @@
 #define MCP_CTL_DEAMON_INIT_PRIOR       70
 #define SPCI_CAN_INIT_LEVEL             APPLICATION
 #define SPCI_CAN_INIT_PRIOR             51
+#define SERVER_INIT_LEVEL               POST_KERNEL
+#define SERVER_INIT_PRIOR               90
+
 
 #define TELEMETRY_THREAD_PRIORITY       0    
 #define INA228_THREAD_PRIORITY          4

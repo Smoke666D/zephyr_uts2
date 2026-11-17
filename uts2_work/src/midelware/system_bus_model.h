@@ -260,12 +260,14 @@ typedef struct {
 
 
 
+
 struct system_bus_handler
 {
     SYSTEM_BUS_ID         bus_id;  //ID параметра
     const struct zbus_channel   *channel; // Ссылка на канал
     SYSTEM_BUS_DATA_TYPE  channel_type;    
     uint32_t              system_index;
+    const struct k_msgq   *queue;
 };
 
 typedef union erver_data
@@ -294,6 +296,7 @@ typedef struct server_request
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
+        .queue = NULL, \
     }
 
 #define SERVER_IN_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
@@ -302,21 +305,8 @@ typedef struct server_request
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
+        .queue = NULL, \
     }
-
-    
- int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
- int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
- int bus_set_real(SYSTEM_BUS_ID id, float _val);
-
-
-
-#define SYSTEM_BUS_SET(id, val) _Generic((val), \
-        bool:       bus_set_bool(id, val), \
-        int:        bus_set_u32(id, val),  \
-        unsigned:   bus_set_u32(id, val),  \
-        float:      bus_set_real(id, val) \
-    )
 
 
 #define SERVER_OUT_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
@@ -325,6 +315,16 @@ typedef struct server_request
         .channel = chan_ptr, \
         .channel_type = chan_type, \
         .system_index = index, \
+        .queue = NULL, \
+    }
+
+#define SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = NULL, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+        .queue = chan_ptr, \
     }
 
  int serever_set_bool(SYSTEM_BUS_ID id, bool _val,     struct k_sem * sync, uint8_t * ret);
@@ -346,13 +346,13 @@ typedef struct server_request
 
 
 int server_get_real_fast(SYSTEM_BUS_ID id, float * _val);
-int server_get_real_fast_array(SYSTEM_BUS_ID id, float * _val, uint8_t size);
+
 
 int bus_get_bool(SYSTEM_BUS_ID id, bool * _val);
 int bus_get_u32(SYSTEM_BUS_ID id,  uint32_t * _val);
 int bus_get_real(SYSTEM_BUS_ID id, float * _val);
 
-float server_get_float(SYSTEM_BUS_ID id );
+
 
 // 2. Пишем макрос, который смотрит на тип указателя `val`
 #define SYSTEM_BUS_GET(id, val) _Generic(*(val), \

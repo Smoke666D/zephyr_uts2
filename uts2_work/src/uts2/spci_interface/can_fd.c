@@ -42,7 +42,40 @@ K_MSGQ_DEFINE(canfd3_rx_msgq, sizeof(system_can_message_t), CAN_RX_MSGQ_DEPTH, 4
     {"CLASSIC",  CAN_MODE_NORMAL},
     SCPI_CHOICE_LIST_END
 };
+*/
 
+
+static size_t parse_space_separated_hex(const char *str, size_t str_len, uint8_t *out, size_t max_bytes)
+{
+    size_t count = 0;
+    const char *p = str;
+    const char *end = str + str_len;
+
+    while (p < end && count < max_bytes) 
+    {
+        // Пропускаем ведущие пробелы и символы табуляции
+        while (p < end && (*p == ' ' || *p == '\t')) {
+            p++;
+        }
+        if (p >= end) {
+            break;
+        }
+
+        // Считываем 1 байт в шестнадцатеричном виде
+        char *next_ptr;
+        unsigned long val = strtoul(p, &next_ptr, 16);
+
+        // Если символ не был числом или значение больше 1 байта (0xFF)
+        if (next_ptr == p || val > 0xFF) {
+            return 0; // Ошибка синтаксиса
+        }
+
+        out[count++] = (uint8_t)val;
+        p = next_ptr;
+    }
+
+    return count;
+}
 /* Парсинг длинных HEX-строк (до 64 байт / 128 символов) */
 static size_t hex_to_bytes(const char *hex, uint8_t *out, size_t max_len)
 {
@@ -194,10 +227,10 @@ scpi_result_t cmd_can_transmit(scpi_t *context)
 {
     int32_t ch;
     uint32_t can_id;
-    const char *hex_str;
-    size_t hex_len;
+    const char *data_str;
+    size_t str_len;
     scpi_bool_t brs = TRUE; // По умолчанию BRS включен
-    struct can_frame frame = {0};
+    
 
     // 1. Канал (1..3)
     if (!SCPI_ParamInt32(context, &ch, TRUE)) return SCPI_RES_ERR;
@@ -210,39 +243,51 @@ scpi_result_t cmd_can_transmit(scpi_t *context)
     // 2. CAN ID
     if (!SCPI_ParamUInt32(context, &can_id, TRUE)) return SCPI_RES_ERR;
 
-    // 3. HEX данные (до 64 байт = 128 HEX символов)
-    if (!SCPI_ParamCharacters(context, &hex_str, &hex_len, TRUE)) return SCPI_RES_ERR;
-
-    // 4. Опциональный флаг BRS (Bit Rate Switch)
-    SCPI_ParamBool(context, &brs, FALSE);
-
-    char hex_buf[130];
-    if (hex_len > 128) hex_len = 128;
-    memcpy(hex_buf, hex_str, hex_len);
-    hex_buf[hex_len] = '\0';
-
-    size_t byte_len = hex_to_bytes(hex_buf, frame.data, sizeof(frame.data));
-
-    // Флаги CAN FD
-    frame.flags = CAN_FRAME_FDF; // Флаг формата CAN FD
-    if (brs) {
-        frame.flags |= CAN_FRAME_BRS; // Ускорение передачи данных
-    }
-    if (can_id > 0x7FF) 
+// 3. Данные через пробел: "11 22 33 44 ..."    
+    if (!SCPI_ParamCharacters(context, &data_str, &str_len, TRUE)) 
     {
-        frame.flags |= CAN_FRAME_IDE; // 29-битный расширенный ID
+        return SCPI_RES_ERR;                    
     }
 
-    frame.id = can_id;
-    // can_bytes_to_dlc сам правильно кодирует длины CAN FD (0..8, 12, 16, 20, 24, 32, 48, 64)
-    frame.dlc = can_bytes_to_dlc(byte_len);
+     char raw_buf[256];
+    if (str_len >= sizeof(raw_buf)) {
+        SCPI_ErrorPush(context, SCPI_ERROR_TOO_MUCH_DATA); // -223
+        return SCPI_RES_ERR;
+    }
+    memcpy(raw_buf, data_str, str_len);
+    raw_buf[str_len] = '\0';
+    system_can_message_t msg;
+    // Разбираем строку байтов
+    size_t byte_count = parse_space_separated_hex(raw_buf, str_len, msg.data, sizeof(msg.data));
 
    
+   
 
-   // if (can_send(dev, &frame, K_MSEC(100), NULL, NULL) != 0) {
-      //  SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
-      //  return SCPI_RES_ERR;
-    //}
+
+
+    // Флаги CAN FD
+    msg.flags = 0;
+    
+    if (can_id > 0x7FF) 
+    {
+        msg.flags |= CAN_FRAME_IDE; // 29-битный расширенный ID
+    }
+
+    msg.id = can_id;    
+    msg.dlc = byte_count;
+
+    if  (ch == 1)
+    {
+        SYSTEM_BUS_SET_P(CAN1_TX,&msg);
+    }
+    else if (ch == 2)
+    {
+        SYSTEM_BUS_SET_P(CAN2_TX,&msg);
+    }
+    else
+    {
+        SYSTEM_BUS_SET_P(CAN3_TX,&msg);
+    }   
     return SCPI_RES_OK;
 }
 
