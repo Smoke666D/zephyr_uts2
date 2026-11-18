@@ -340,7 +340,14 @@
 /* Точные тайминги для реально измеренной частоты шины 96 МГц */
     timings = <96000000 I2C_BITRATE_STANDARD  0x20D09BEE>,
               <96000000 I2C_BITRATE_FAST      0x00A0329E>,
-              <96000000 I2C_BITRATE_FAST_PLUS 0x00501043>;
+              <96000000 I2C_BITRATE_FAST_PLUS 0x00501043>,
+              <120000000 I2C_BITRATE_STANDARD  0x20F091E5>,
+              <120000000 I2C_BITRATE_FAST      0x00C03DC6>,
+              <120000000 I2C_BITRATE_FAST_PLUS 0x00601453>,
+              <137500000 I2C_BITRATE_STANDARD  0x30C082CE>,
+              <137500000 I2C_BITRATE_FAST      0x00E047E3>,
+              <137500000 I2C_BITRATE_FAST_PLUS 0x00701760>;
+
 
     CUR_SENS_BRD_LOW: ina228@40 {
         compatible = "ti,ina228";
