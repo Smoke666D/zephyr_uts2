@@ -1,4 +1,5 @@
 #include <math.h> // для isnan (если нужно)
+#include <zephyr/sys/crc.h> // Стандартный CRC-32 IEEE 802.3
 
 #define TELEMETRY_MAGIC_BYTE 0xEFBE55AAU
 #define CAN_MAGIC_BYTE       0xCB
@@ -35,6 +36,7 @@ struct telemetry_packet {
         // --- Напряжения LIN интерфейсов (4 шт) ---
     // lin_voltages[0] -> LIN 1, lin_voltages[1] -> LIN 2, и т.д.
     float    lin_voltages[4];
+    uint32_t crc32; 
 };
 
 

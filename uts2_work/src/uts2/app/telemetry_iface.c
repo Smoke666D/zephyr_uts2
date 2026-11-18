@@ -43,7 +43,6 @@ void send_binary_telemetry(const struct device *uart_dev) {
 
     pkt.timestamp_ms = k_uptime_get_32();
 
-
     server_get_real_fast(RF_POWER, &pkt.rf_power);
     server_get_real_fast(NTC, &pkt.ntc);
     server_get_real_fast(EXT_VSENSE, &pkt.ext_vsense);
@@ -53,8 +52,6 @@ void send_binary_telemetry(const struct device *uart_dev) {
     server_get_real_fast(I2C1_TEMP2, &pkt.temp_vdd);
     server_get_real_fast(I2C1_LUX1, &pkt.light_gnd);
     server_get_real_fast(I2C1_LUX2, &pkt.light_vdd);
-
-
   
     // AO 1-6, 7-12, 13-18
     server_get_real_fast(AIN_AO1, &pkt.ao[0]);
@@ -131,6 +128,8 @@ void send_binary_telemetry(const struct device *uart_dev) {
     server_get_real_fast(LIN_AO3,       &pkt.lin_voltages[2]);
     server_get_real_fast(LIN_AO4,       &pkt.lin_voltages[3]);
 
+    pkt.crc32 = crc32_ieee((const uint8_t *)&pkt, sizeof(struct telemetry_packet) - sizeof(uint32_t));
+
     k_msgq_put(&telemetry_queue,&pkt,K_NO_WAIT);
 
 }
@@ -160,10 +159,29 @@ static void     _telemetry_thread_entry(void *p1, void *p2, void *p3)
 	{                   
         if (k_msgq_get(&telemetry_queue,&_packet_to_send, K_FOREVER)==0)
         {            
-            uint8_t *ptr = (uint8_t *)&_packet_to_send;
-            for (size_t i = 0; i < sizeof(_packet_to_send); i++) 
+           const uint8_t *ptr = (const uint8_t *)&_packet_to_send;
+            size_t rem = sizeof(_packet_to_send);
+            int retry_cnt = 0;
+
+            while (rem > 0) 
             {
-                uart_poll_out(telemetry_uart , ptr[i]);
+                int sent = uart_fifo_fill(telemetry_uart, ptr, rem);
+                if (sent > 0) {
+                    ptr += sent;
+                    rem -= (size_t)sent;
+                    retry_cnt = 0;
+                } 
+                else 
+                {
+                    // Буфер USB временно полон — ждём 100 мкс, пока уйдёт USB IN фрейм
+                    retry_cnt++;
+                    if (retry_cnt > 200) 
+                    {
+                        // Если ПК вообще закрыл порт (> 20 мс простоя) — сбрасываем, чтобы не висеть
+                        break;
+                    }
+                    k_usleep(100);
+                }
             }
         }      
     }
