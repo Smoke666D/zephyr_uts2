@@ -204,10 +204,8 @@ def render_chart():
             pos_cfg = axis_positions[idx % len(axis_positions)]
             legend.append(col_name)
 
-            # Получаем отфильтрованные данные
             filtered_vals = get_filtered_channel_data(col_name)
 
-            # Создаем персональную ось Y для канала
             y_axes.append({
                 'type': 'value',
                 'scale': True,
@@ -356,7 +354,6 @@ def load_log_to_chart(file_path):
 
         for col_disp in data_cols:
             cached_data[col_disp] = []
-            # Инициализация фильтра по умолчанию: 1 мс (выключен)
             if col_disp not in channel_filters_ms:
                 channel_filters_ms[col_disp] = 1
 
@@ -403,7 +400,12 @@ def load_log_to_chart(file_path):
                 f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}'
             )
 
-        selected_channels = [c for c in ['AO_1', 'AO_2'] if c in data_cols]
+        # По умолчанию выбираем напряжение и ток питания тестируемого узла
+        default_targets = [
+            'Питание тестируемого узла V',
+            'Питание тестируемого узла I',
+        ]
+        selected_channels = [c for c in default_targets if c in data_cols]
         if not selected_channels and data_cols:
             selected_channels = data_cols[:2]
 
@@ -483,7 +485,7 @@ def build_oscilloscope_panel():
                     on_click=on_open_click,
                 ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
 
-        # Панель статистических карточек над графиком (теперь с окошками медианы)
+        # Панель статистических карточек над графиком
         stats_container = ui.row().classes('w-full mb-1.5')
 
         # Контейнер для графика

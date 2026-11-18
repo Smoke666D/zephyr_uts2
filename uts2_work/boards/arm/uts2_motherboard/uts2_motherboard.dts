@@ -7,7 +7,6 @@
 #include <st/h7/stm32h723Xg.dtsi>
 #include <st/h7/stm32h723vgtx-pinctrl.dtsi>
 
-
 /*
  * WARNING:
  * JP6 and SB72 must be ON when using Ethernet.
@@ -15,71 +14,28 @@
 
 / {
 	model = "UTS2 Motherboard (STM32H723VG)";
-        compatible = "st,uts2-motherboard";
+	compatible = "st,uts2-motherboard";
 
 	chosen {
 		zephyr,console = &usart1;
-		/*zephyr,shell-uart = &usart1;*/
+		/* zephyr,shell-uart = &usart1; */
 		zephyr,dtcm = &dtcm;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;	
-	    zephyr,code-partition = &flash0;
+		zephyr,code-partition = &flash0;
 	};
-    
-     scan_adc: scan_adc {
-        compatible = "custom,scan-cont-adc";
-        
-        /* 
-         * Передаем ссылки на аппаратные блоки таймера и АЦП.
-         * Это избавляет наш Си-код драйвера от хардкода.
-         */
-        adc-dev = <&adc2>;
-        timer-dev = <&timers4>;
 
-        channel-count = <8>;
-        dmas = 
-               <&dmamux1 2 10 0>;              
-        dma-names = "adc_dma";
+	aliases {
+		led0 = &green_led;
+		led1 = &yellow_led;
+		led2 = &red_led;
+		uart-detect = &usart2;
+		fram0 = &fram_chip;
+		dac-timer = &timers6;
+		adsint = &ads_int_pin;
+	};
 
-        /* Ссылка на аппаратный pinctrl управляющих пинов */
-
-        adc-duration-us = <1000>;     /* T1: время АЦП */
-
-
-        status = "okay";
-    };   
-
-    my_sequencer: my_sequencer {
-        compatible = "custom,seq-mux-adc";
-        
-        /* 
-         * Передаем ссылки на аппаратные блоки таймера и АЦП.
-         * Это избавляет наш Си-код драйвера от хардкода.
-         */
-        adc-dev = <&adc1>;
-        timer-dev = <&timers3>;
-
-        /* 
-         * Настройка каналов DMA:
-         * 1. DMA1 Stream 0: Переключение пинов мультиплексора (Слот 27, TIM3_UP)
-         * 2. DMA1 Stream 1: Опрос АЦП3 в циклическом режиме по кругу (Слот 115, ADC3)
-         */
-        dmas = <&dmamux1 0 23 0>,
-               <&dmamux1 1 9  0>;              
-        dma-names = "seq_dma", "adc_dma";
-
-        /* Ссылка на аппаратный pinctrl управляющих пинов */
-        mux-gpios = <&gpioe 12 GPIO_ACTIVE_HIGH>,
-                    <&gpioe 13 GPIO_ACTIVE_HIGH>,
-                    <&gpioe 14 GPIO_ACTIVE_HIGH>;
-
-        adc-duration-us = <60>;     /* T1: время АЦП */
-        switch-duration-us = <60>;  /* T2: время переключения */ 
-
-        status = "okay";
-    };
-
-
+	/* Светодиоды индикации платы */
 	leds: leds {
 		compatible = "gpio-leds";
 
@@ -99,111 +55,105 @@
 		};
 	};
 
-		
-	aliases {
-		led0 = &green_led;
-		led1 = &yellow_led;
-		led2 = &red_led;	
-        uart-detect = &usart2;	
+	/* Управление ключами питания нагрузки и интерфейсов */
+	enable_control_switch: enable_control_switch {
+		compatible = "gpio-leds";
+
+		/* Пин включения питания метки №1 */
+		en_dut2: en_1 {
+			gpios = <&gpioe 3 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин включения питания метки №2 */
+		en_dut3: en_2 {
+			gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин включения питания +12В */
+		en_p12v: en_3 {
+			gpios = <&gpiod 3 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин включения питания +24В */
+		en_p24v: en_4 {
+			gpios = <&gpiod 7 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин питания аналоговых буферов */
+		en_va: en_5 {
+			gpios = <&gpiod 4 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин питания интерфейсной платы USB */
+		en_usb_out: en_6 {
+			gpios = <&gpiod 10 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин питания верхней части разъема USB */
+		en_usb_boot: en_7 {
+			gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин питания нижней части разъема USB */
+		en_usb_top: en_8 {
+			gpios = <&gpioc 6 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	/* Пин перевода трансиверов LIN в рабочий режим (Wakeup) */
+	lin_slp_control {
+		compatible = "zephyr,user";
+		slp-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
+	};
+
+	/* Внешнее прерывание RDY от АЦП ADS1115 */
+	ads_interrupt_node {
+		compatible = "gpio-keys";
+		ads_int_pin: ads_int_pin {
+			gpios = <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "ADS1115 INT/RDY";
+		};
+	};
+
+	/* Кастомный драйвер фонового сбора АЦП2 через таймер TIM4 */
+	scan_adc: scan_adc {
+		compatible = "custom,scan-cont-adc";
+		adc-dev = <&adc2>;
+		timer-dev = <&timers4>;
+		channel-count = <8>;
+		dmas = <&dmamux1 2 10 0>;
+		dma-names = "adc_dma";
+		adc-duration-us = <1000>;
+		status = "okay";
+	};
+
+	/* Кастомный драйвер секвенсора мультиплексора на АЦП1 через таймер TIM3 */
+	my_sequencer: my_sequencer {
+		compatible = "custom,seq-mux-adc";
+		adc-dev = <&adc1>;
+		timer-dev = <&timers3>;
+		dmas = <&dmamux1 0 23 0>,
+		       <&dmamux1 1 9  0>;
+		dma-names = "seq_dma", "adc_dma";
+		mux-gpios = <&gpioe 12 GPIO_ACTIVE_HIGH>,
+		            <&gpioe 13 GPIO_ACTIVE_HIGH>,
+		            <&gpioe 14 GPIO_ACTIVE_HIGH>;
+		adc-duration-us = <60>;
+		switch-duration-us = <60>;
+		status = "okay";
 	};
 };
 
-&timers4 {
-    status = "okay";
-    st,prescaler = <10000>;    
-    counter {
-        status = "okay";
-    };
-};
+/* ====================================================================
+ *  ПИТАНИЕ И ТАКТИРОВАНИЕ (384 МГц от HSE 32 МГц)
+ * ==================================================================== */
 
-/ {
-    aliases {
-        /* Привязываем алиас dac-timer к таймеру TIM6 */
-        dac-timer = &timers6;
-    };
-};
-
-&timers6 {
-    status = "okay";
-};
-
-&backup_sram {
+&pwr {
+	power-supply = "ldo";
 	status = "okay";
 };
 
-&pinctrl {
-    /* Создаем отдельный узел для каждого пина */
-    mux1_adc_vsense: mux1_adc_vsense {
-        pinmux = <STM32_PINMUX('A', 0, ANALOG)>;
-    };
-    mux2_adc_vsense: mux2_adc_vsense {
-        pinmux = <STM32_PINMUX('A', 1, ANALOG)>;
-    };
-    mux3_adc_vsense: mux3_adc_vsense {
-        pinmux = <STM32_PINMUX('A', 2, ANALOG)>;
-    };
-    mux4_adc_vsense: mux4_adc_vsense {
-        pinmux = <STM32_PINMUX('A', 3, ANALOG)>;
-    };
-    mux5_adc_vsense: mux5_adc_vsense {
-        pinmux = <STM32_PINMUX('A', 4, ANALOG)>;
-    };
-};
-
-/* Ссылка на таймер и его дочерний счетчик раскрывается автоматически */
-&timers3 {
-    status = "okay";
-    st,prescaler = <10000>; 
-    counter {
-        status = "okay";
-    };
-};
-
-
-
-&gpioa {
-    status = "okay";
-};
-
-&gpiob {
-    status = "okay";
-};
-
-&gpioc {
-    status = "okay";
-};
-/* Включаем АЦП3 в дереве устройств */
-
-
-&dma1 {
-    status = "okay";
-};
-
-
-&dmamux1 {
-    status = "okay";
-};
-
-&sram4  {
-    status = "okay";
-};
-
-&pwr {
-    status = "okay";
-};
-
-&clk_lse {
-    status = "disabled";
-};
-
 &clk_hse {
-    status ="okay";
-    clock-frequency = <32000000>; /* 32 MHz */
-    /* Если у вас по схеме подан генератор (меандр), а не пассивный кварц, раскомментируйте строчку ниже: */
-    /* hse-bypass; */
+	clock-frequency = <32000000>; /* 32 MHz */
+	status = "okay";
+	/* hse-bypass; */
 };
 
-&clk_lsi {
+&clk_hsi {
+	hsi-div = <1>;
 	status = "okay";
 };
 
@@ -211,11 +161,13 @@
 	status = "okay";
 };
 
-&clk_hsi {
-    hsi-div = <1>;
-    status = "okay";
-}; 
+&clk_lsi {
+	status = "okay";
+};
 
+&clk_lse {
+	status = "disabled";
+};
 
 &pll {
 	div-m = <2>;
@@ -223,7 +175,7 @@
 	div-p = <2>;
 	div-q = <8>;
 	div-r = <2>;
-	fracn = <0>; 
+	fracn = <0>;
 	clocks = <&clk_hse>;
 	status = "okay";
 };
@@ -241,459 +193,418 @@
 &rcc {
 	clocks = <&pll>;
 	clock-frequency = <384000000>;
-	d1cpre = <1>;
-	hpre = <2>;    /* HCLK: 275   MHz */
-	d1ppre = <2>;  /* APB1: 137.5 MHz */
-	d2ppre1 = <2>; /* APB2: 137.5 MHz */
-	d2ppre2 = <2>; /* APB3: 137.5 MHz */
-	d3ppre = <2>;  /* APB4: 137.5 MHz */
-	
+	d1cpre = <1>;  /* CPU:  384 MHz */
+	hpre = <2>;    /* HCLK: 192 MHz */
+	d1ppre = <2>;  /* APB3: 96 MHz */
+	d2ppre1 = <2>; /* APB1: 96 MHz */
+	d2ppre2 = <2>; /* APB2: 96 MHz */
+	d3ppre = <2>;  /* APB4: 96 MHz */
 };
 
-&pwr {
-	power-supply = "ldo";
-};
+/* ====================================================================
+ *  ПОРТЫ GPIO, ПАМЯТЬ И СИСТЕМНЫЙ DMA
+ * ==================================================================== */
 
+&gpioa { status = "okay"; };
+&gpiob { status = "okay"; };
+&gpioc { status = "okay"; };
+&gpiod { status = "okay"; };
+&gpioe { status = "okay"; };
+
+&dma1        { status = "okay"; };
+&dmamux1     { status = "okay"; };
+&sram4       { status = "okay"; };
+&backup_sram { status = "okay"; };
+
+/* ====================================================================
+ *  АППАРАТНЫЙ PINCTRL ДЛЯ ПЕРИФЕРИИ
+ * ==================================================================== */
 
 &pinctrl {
-    usart1_tx_pa9: usart1_tx_pa9 {
-        pinmux = <STM32_PINMUX('A', 9, AF7)>;
-        bias-pull-up;
-    };
+	/* Аналоговые входы мультиплексора */
+	mux1_adc_vsense: mux1_adc_vsense {
+		pinmux = <STM32_PINMUX('A', 0, ANALOG)>;
+	};
+	mux2_adc_vsense: mux2_adc_vsense {
+		pinmux = <STM32_PINMUX('A', 1, ANALOG)>;
+	};
+	mux3_adc_vsense: mux3_adc_vsense {
+		pinmux = <STM32_PINMUX('A', 2, ANALOG)>;
+	};
+	mux4_adc_vsense: mux4_adc_vsense {
+		pinmux = <STM32_PINMUX('A', 3, ANALOG)>;
+	};
+	mux5_adc_vsense: mux5_adc_vsense {
+		pinmux = <STM32_PINMUX('A', 4, ANALOG)>;
+	};
 
-    usart1_rx_pa10: usart1_rx_pa10 {
-        pinmux = <STM32_PINMUX('A', 10, AF7)>;
-    };
+	/* USART1 (Консоль отладки) */
+	usart1_tx_pa9: usart1_tx_pa9 {
+		pinmux = <STM32_PINMUX('A', 9, AF7)>;
+		bias-pull-up;
+	};
+	usart1_rx_pa10: usart1_rx_pa10 {
+		pinmux = <STM32_PINMUX('A', 10, AF7)>;
+	};
+
+	/* SPI4 (Память FRAM на порту E) */
+	spi4_sck_pe2: spi4_sck_pe2 {
+		pinmux = <STM32_PINMUX('E', 2, AF5)>;
+		bias-pull-down;
+	};
+	spi4_miso_pe5: spi4_miso_pe5 {
+		pinmux = <STM32_PINMUX('E', 5, AF5)>;
+		bias-pull-down;
+	};
+	spi4_mosi_pe6: spi4_mosi_pe6 {
+		pinmux = <STM32_PINMUX('E', 6, AF5)>;
+		bias-pull-down;
+	};
 };
+
+/* Подтягивающие резисторы для шин I2C */
+&i2c1_scl_pb8  { drive-open-drain; bias-pull-up; };
+&i2c1_sda_pb7  { drive-open-drain; bias-pull-up; };
+&i2c2_scl_pb10 { drive-open-drain; bias-pull-up; };
+&i2c2_sda_pb11 { drive-open-drain; bias-pull-up; };
+
+/* ====================================================================
+ *  ИНТЕРФЕЙСЫ СВЯЗИ: UART
+ * ==================================================================== */
 
 &usart1 {
-    pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
-    pinctrl-names = "default";
-    current-speed = <115200>;
+	pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
 	tx-rx-swap;
-    status = "okay";
-};
-
-/ {
-    aliases {
-        fram0 = &fram_chip;
-    };
-};
-
-/* Перенаправляем пины для SPI4 на порт E */
-&pinctrl {
-    spi4_sck_pe2: spi4_sck_pe2 {
-        pinmux = <STM32_PINMUX('E', 2, AF5)>; /* AF5 для SPI4 на STM32H7 */
-        bias-pull-down;
-    };
-
-    spi4_miso_pe5: spi4_miso_pe5 {
-        pinmux = <STM32_PINMUX('E', 5, AF5)>;
-        bias-pull-down;
-    };
-
-    spi4_mosi_pe6: spi4_mosi_pe6 {
-        pinmux = <STM32_PINMUX('E', 6, AF5)>;
-        bias-pull-down;
-    };
-};
-
-/* Включаем и настраиваем SPI4 */
-&spi4 {
-    status = "okay";
-    pinctrl-0 = <&spi4_sck_pe2 &spi4_miso_pe5 &spi4_mosi_pe6>;
-    pinctrl-names = "default";
-    cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
-
-    fram_chip: mb85rs64@0 {
-        compatible = "atmel,at25"; /* <-- СТРОГО atmel,at25 */
-        reg = <0>;
-        spi-max-frequency = <8000000>;
-        size = <8192>;
-        pagesize = <1>;
-        address-width = <16>;
-        timeout = <5>;
-    };
-};
-
-
-/* 1. Переопределяем настройки пинов PB10 (SCL) и PB11 (SDA) для I2C2 */
-&i2c2_scl_pb10 {
-    drive-open-drain;
-    bias-pull-up;
-};
-
-&i2c2_sda_pb11 {
-    drive-open-drain;
-    bias-pull-up;
-};
-
-&i2c2 {
-     status = "okay";
-    pinctrl-0 = <&i2c2_scl_pb10 &i2c2_sda_pb11>;
-    pinctrl-names = "default";
-
-    /* Включаем аппаратное восстановление шины Zephyr (Bus Recovery) */
-    scl-gpios = <&gpiob 10 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-    sda-gpios = <&gpiob 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-    clock-frequency = <I2C_BITRATE_FAST_PLUS>; /* 1 MHz  */
-/* Точные тайминги для реально измеренной частоты шины 96 МГц */
-    timings = <96000000 I2C_BITRATE_STANDARD  0x20D09BEE>,
-              <96000000 I2C_BITRATE_FAST      0x00A0329E>,
-              <96000000 I2C_BITRATE_FAST_PLUS 0x00501043>,
-              <120000000 I2C_BITRATE_STANDARD  0x20F091E5>,
-              <120000000 I2C_BITRATE_FAST      0x00C03DC6>,
-              <120000000 I2C_BITRATE_FAST_PLUS 0x00601453>,
-              <137500000 I2C_BITRATE_STANDARD  0x30C082CE>,
-              <137500000 I2C_BITRATE_FAST      0x00E047E3>,
-              <137500000 I2C_BITRATE_FAST_PLUS 0x00701760>;
-
-
-    CUR_SENS_BRD_LOW: ina228@40 {
-        compatible = "ti,ina228";
-        reg = <0x40>;
-        current-lsb-microamps = <10>;
-        rshunt-micro-ohms = <50000>;      /* Закрыто корректно: <50000> */
-        adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        status = "okay";
-    };
-
-    CUR_SENS_BRD_HIGH: ina228@41 {
-        compatible = "ti,ina228";
-        reg = <0x41>;
-        current-lsb-microamps = <10>;
-        rshunt-micro-ohms = <50000>;
-                adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        status = "okay";
-    };
-
-    CUR_SENS_VDUT2: ina228@42 {
-        compatible = "ti,ina228";
-        reg = <0x42>;
-        rshunt-micro-ohms = <500000>;
-                adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        current-lsb-microamps = <1>;
-        status = "okay";
-    };
-
-    CUR_SENS_VDUT3: ina228@43 {
-        compatible = "ti,ina228";
-        reg = <0x43>;
-        rshunt-micro-ohms = <500000>;
-                adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        current-lsb-microamps = <1>;
-        status = "okay";
-    };
-
-    CUR_SENS_VIN: ina228@44 {
-        compatible = "ti,ina228";
-        reg = <0x44>;
-        current-lsb-microamps = <10>;
-                adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        rshunt-micro-ohms = <50000>;
-        status = "okay";
-    };
-
-    CUR_SENS_3_3_DCDC: ina228@45 {
-        compatible = "ti,ina228";
-        reg = <0x45>;
-        current-lsb-microamps = <1>;
-        adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        rshunt-micro-ohms = <50000>;
-        status = "okay";
-    };
-
-    CUR_SENS_VDOUT_PWR: ina228@46 {
-        compatible = "ti,ina228";
-        reg = <0x46>;                     /* Исправлено совпадение адресов (было 0x45) */
-        current-lsb-microamps = <10>;
-        adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        rshunt-micro-ohms = <50000>;
-        status = "okay";
-    };
-
-    CUR_SENS_5VD: ina228@47 {
-        compatible = "ti,ina228";
-        reg = <0x47>;
-        current-lsb-microamps = <10>;
-                adc-mode = "Bus and shunt voltage continuous";
-        vbus-conversion-time-us = <280>;   /* 280 мкс */
-        vshunt-conversion-time-us = <280>; /* 280 мкс */
-        avg-count = <1>;                   /* 1 выборка без задержек усреднения */
-        rshunt-micro-ohms = <50000>;
-        status = "okay";
-    };
-};
-
-zephyr_udc0: &usbotg_hs {
-    pinctrl-0 = <&usb_otg_hs_dm_pa11 &usb_otg_hs_dp_pa12>;
-    pinctrl-names = "default";
-    status = "okay";
-
-	/delete-property/ vbus-gpios;
-    /* Дочерний узел виртуального COM-порта (CDC ACM) */
-    cdc_acm_uart0: cdc_acm_uart0 {
-        compatible = "zephyr,cdc-acm-uart";
-    };
-};
-
-&gpiod {
-    status = "okay";
-};
-
-/{
-    aliases {
-        adsint = &ads_int_pin;
-    };
-
-    ads_interrupt_node {
-        compatible = "gpio-keys";
-        ads_int_pin: ads_int_pin {
-            /* Указываем порт D, пин 11, с подтяжкой к питанию и активным низким уровнем */
-            gpios = <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-            label = "ADS1115 INT/RDY";
-        };
-    };
-};
-
-
-/* 1. Переопределяем настройки пинов PB10 (SCL) и PB11 (SDA) для I2C2 */
-&i2c1_scl_pb8 {
-    drive-open-drain;
-    bias-pull-up;
-};
-
-&i2c1_sda_pb7 {
-    drive-open-drain;
-    bias-pull-up;
-};
-
-&i2c1 {
-    status = "okay";
-    pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb7>; /* Проверь точные имена pinctrl для твоей платы, но логика такая */
-    scl-gpios = <&gpiob 8 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-    sda-gpios = <&gpiob 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-    pinctrl-names = "default";
-    clock-frequency = <I2C_BITRATE_STANDARD>; /* 400 kHz */
-
-
- 	eeprom_1: eeprom@51 {
-        compatible = "atmel,at24";
-        reg = <0x51>;
-        size = <256>;          /* 2 Кбит = 256 байт */
-        pagesize = <16>;       /* Размер страницы записи 16 байт */
-        address-width = <8>;   /* 8-битная адресация внутри чипа */
-        timeout = <10>;
-        status = "okay";
-    };
-
-    /* Вторая EEPROM (адрес 0x52, A1=VDD, A0=GND) */
-    eeprom_2: eeprom@52 {
-        compatible = "atmel,at24";
-        reg = <0x52>;
-        size = <256>;
-        pagesize = <16>;
-        address-width = <8>;
-        timeout = <10>;
-        status = "okay";
-    };
-
-
-    mcp23017: mcp23017@20 {
-        compatible = "microchip,mcp23017";
-        status = "okay";
-        reg = <0x20>;
-        gpio-controller;
-        #gpio-cells = <2>;
-        ngpios = <16>;
-    };
-
-	tmp112_gnd: tmp112@48 {
-        compatible = "ti,tmp112";
-        reg = <0x48>;
-        status = "okay";
-    };
-
-    /* Второй TMP112A (ADD0 = VDD) -> адрес 0x49 */
-    tmp112_vdd: tmp112@49 {
-        compatible = "ti,tmp112";
-        reg = <0x49>;
-        status = "okay";
-    };
-	    /* Первый BH1750 (ADDR = GND) -> адрес 0x23 */
-    bh1750_gnd: bh1750@23 {
-        compatible = "rohm,bh1750";
-        reg = <0x23>;
-        status = "okay";
-    };
-
-    /* Второй BH1750 (ADDR = VDD) -> адрес 0x5C (или 0x38, если уточнишь по сканеру) */
-    bh1750_vdd: bh1750@5c {
-        compatible = "rohm,bh1750";
-        reg = <0x5c>;
-        status = "okay";
-    };
-	  
-  ads1115_custom: ads1115@4b {
-        compatible = "vnd,ads1115";
-        reg = <0x4b>;
-        status = "okay";
-        
-        /* Обязательные параметры по нашей схеме */
-        ads-sps = <16>;
-        ads-rdy = <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-    };
-};
-
-&spi2 {
-    status = "okay";
-    pinctrl-0 = <&spi2_sck_pb13 &spi2_mosi_pb15>;
-    pinctrl-names = "default";
-    cs-gpios = <&gpiob 9 GPIO_ACTIVE_LOW>;      // Пин защелки Latch (ST_CP)
-
-    hc595_chain: hc595-chain@0 {
-        compatible = "custom,hc595-chain";
-        reg = <0>;
-        spi-max-frequency = <400000>;
-        chain-length = <5>;
-        oe-gpios = <&gpiob 14 GPIO_ACTIVE_LOW>;  // Пин разрешения выходов OE (активный 0)
-    };
-};
-
-/ {
-    /* Создаем логическую группу выходов */
-    enbale_control_switch {
-        compatible = "gpio-leds";
-
-        /* Пин включения питания метки №1 */
-        en_dut2: en_1 {
-            gpios = <&gpioe 3 GPIO_ACTIVE_HIGH>;            
-        };
-        /* Пин включения питания метки №2 */
-        en_dut3: en_2 {
-            gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;            
-        };
-        /* Пин включения питания +12В */
-        en_p12v: en_3 {
-            gpios = <&gpiod 3 GPIO_ACTIVE_HIGH>;            
-        };
-         /* Пин включения питания +12В */
-        en_p24v: en_4 {
-            gpios = <&gpiod 7 GPIO_ACTIVE_HIGH>;            
-        };
-        /* Пин  питания аналоговых буфферов */
-        en_va: en_5 {
-            gpios = <&gpiod 4 GPIO_ACTIVE_HIGH>;            
-        };
-        /* Пин  питания usb интрефенйсной платы */
-        en_usb_out: en_6 {
-            gpios = <&gpiod 10 GPIO_ACTIVE_HIGH>;            
-        };
-        /* Пин  питания usb верхней части двойнгого разъема  */
-        en_usb_boot: en_7 {
-            gpios = <&gpioc 2 GPIO_ACTIVE_HIGH>;            
-        };
-        /* Пин  питания usb нижней части двойного платы */
-        en_usb_top: en_8 {
-            gpios = <&gpioc 6 GPIO_ACTIVE_HIGH>;            
-        };
-    };
-};
-
-&dac1 {
-    status = "okay";
-    pinctrl-0 = <&dac1_out2_pa5>; /* Переводит PA5 в режим аналогового выхода ЦАП */
-    pinctrl-names = "default";
-};
-
-&fdcan1 {
-    status = "okay";
-    /* Настраиваем RX на PD0 и TX на PD1 */
-    pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
-    pinctrl-names = "default";
-    bitrate = <500000>;
-};
-
-&fdcan2 {
-    status = "okay";
-    /* Настраиваем RX на PB12 и TX на PB13 */
-    pinctrl-0 = <&fdcan2_rx_pb5 &fdcan2_tx_pb6>;
-    pinctrl-names = "default";
-    bitrate = <500000>;
-};
-
-&fdcan3 {
-    status = "okay";
-    /* Настраиваем RX на PB12 и TX на PB13 */
-    pinctrl-0 = <&fdcan3_rx_pd12 &fdcan3_tx_pd13>;
-    pinctrl-names = "default";
-    bitrate = <500000>;
-};
-
-
-/ {
-    lin_slp_control {
-        compatible = "zephyr,user";
-        slp-gpios = <&gpioc 3 GPIO_ACTIVE_HIGH>;
-    };
-};
-&gpioc { status = "okay"; };
-/* Настраиваем пины и включаем нужные UART-контроллеры */
-/* Примечание: имена узлов (&usart1, &uart4 и т.д.) зависят от твоего камня STM32. 
-   Здесь показан пример для четырех независимых портов. */
-
-&uart8 {
-    current-speed = <19200>;
-    pinctrl-0 = <&uart8_tx_pe1 &uart8_rx_pe0>; // Пример для PE0/PE1
-    pinctrl-names = "default";
-    status = "okay";
-};
-
-&uart9 {
-    current-speed = <19200>;
-    pinctrl-0 = <&uart9_tx_pd15 &uart9_rx_pd14>; // Пример для PD14/PD15
-    pinctrl-names = "default";
-    status = "okay";
-};
-
-&uart7 {
-    current-speed = <19200>;
-    pinctrl-0 = <&uart7_tx_pe8 &uart7_rx_pe7>; // Пример для PE7/PE8
-    pinctrl-names = "default";
-    status = "okay";
-};
-
-&uart5 {
-    current-speed = <19200>;
-    pinctrl-0 = <&uart5_tx_pc12 &uart5_rx_pd2>; // Пример для PD2/PC12
-    pinctrl-names = "default";
-    status = "okay";
+	status = "okay";
 };
 
 uart_detect: &usart2 {
-    pinctrl-0 = <&usart2_tx_pd5 &usart2_rx_pd6>;
-    pinctrl-names = "default";
-    current-speed = <115200>;
-    status = "okay";
+	pinctrl-0 = <&usart2_tx_pd5 &usart2_rx_pd6>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	status = "okay";
+};
+
+&uart5 {
+	current-speed = <19200>;
+	pinctrl-0 = <&uart5_tx_pc12 &uart5_rx_pd2>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&uart7 {
+	current-speed = <19200>;
+	pinctrl-0 = <&uart7_tx_pe8 &uart7_rx_pe7>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&uart8 {
+	current-speed = <19200>;
+	pinctrl-0 = <&uart8_tx_pe1 &uart8_rx_pe0>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&uart9 {
+	current-speed = <19200>;
+	pinctrl-0 = <&uart9_tx_pd15 &uart9_rx_pd14>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+/* ====================================================================
+ *  ИНТЕРФЕЙСЫ СВЯЗИ: FDCAN
+ * ==================================================================== */
+
+&fdcan1 {
+	pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
+	pinctrl-names = "default";
+	bitrate = <500000>;
+	status = "okay";
+};
+
+&fdcan2 {
+	pinctrl-0 = <&fdcan2_rx_pb5 &fdcan2_tx_pb6>;
+	pinctrl-names = "default";
+	bitrate = <500000>;
+	status = "okay";
+};
+
+&fdcan3 {
+	pinctrl-0 = <&fdcan3_rx_pd12 &fdcan3_tx_pd13>;
+	pinctrl-names = "default";
+	bitrate = <500000>;
+	status = "okay";
+};
+
+/* ====================================================================
+ *  ИНТЕРФЕЙС USB (CDC ACM)
+ * ==================================================================== */
+
+zephyr_udc0: &usbotg_hs {
+	pinctrl-0 = <&usb_otg_hs_dm_pa11 &usb_otg_hs_dp_pa12>;
+	pinctrl-names = "default";
+	/delete-property/ vbus-gpios;
+	status = "okay";
+
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+/* ====================================================================
+ *  ИНТЕРФЕЙСЫ SPI
+ * ==================================================================== */
+
+&spi2 {
+	pinctrl-0 = <&spi2_sck_pb13 &spi2_mosi_pb15>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpiob 9 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	hc595_chain: hc595-chain@0 {
+		compatible = "custom,hc595-chain";
+		reg = <0>;
+		spi-max-frequency = <400000>;
+		chain-length = <5>;
+		oe-gpios = <&gpiob 14 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&spi4 {
+	pinctrl-0 = <&spi4_sck_pe2 &spi4_miso_pe5 &spi4_mosi_pe6>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	fram_chip: mb85rs64@0 {
+		compatible = "atmel,at25";
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+		size = <8192>;
+		pagesize = <1>;
+		address-width = <16>;
+		timeout = <5>;
+	};
+};
+
+/* ====================================================================
+ *  ИНТЕРФЕЙСЫ I2C
+ * ==================================================================== */
+
+&i2c1 {
+	pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb7>;
+	pinctrl-names = "default";
+	scl-gpios = <&gpiob 8 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpiob 7 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	status = "okay";
+
+	eeprom_1: eeprom@51 {
+		compatible = "atmel,at24";
+		reg = <0x51>;
+		size = <256>;
+		pagesize = <16>;
+		address-width = <8>;
+		timeout = <10>;
+		status = "okay";
+	};
+
+	eeprom_2: eeprom@52 {
+		compatible = "atmel,at24";
+		reg = <0x52>;
+		size = <256>;
+		pagesize = <16>;
+		address-width = <8>;
+		timeout = <10>;
+		status = "okay";
+	};
+
+	mcp23017: mcp23017@20 {
+		compatible = "microchip,mcp23017";
+		reg = <0x20>;
+		status = "okay";
+		gpio-controller;
+		#gpio-cells = <2>;
+		ngpios = <16>;
+	};
+
+	tmp112_gnd: tmp112@48 {
+		compatible = "ti,tmp112";
+		reg = <0x48>;
+		status = "okay";
+	};
+
+	tmp112_vdd: tmp112@49 {
+		compatible = "ti,tmp112";
+		reg = <0x49>;
+		status = "okay";
+	};
+
+	bh1750_gnd: bh1750@23 {
+		compatible = "rohm,bh1750";
+		reg = <0x23>;
+		status = "okay";
+	};
+
+	bh1750_vdd: bh1750@5c {
+		compatible = "rohm,bh1750";
+		reg = <0x5c>;
+		status = "okay";
+	};
+
+	ads1115_custom: ads1115@4b {
+		compatible = "vnd,ads1115";
+		reg = <0x4b>;
+		status = "okay";
+		ads-sps = <16>;
+		ads-rdy = <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+	};
+};
+
+&i2c2 {
+	pinctrl-0 = <&i2c2_scl_pb10 &i2c2_sda_pb11>;
+	pinctrl-names = "default";
+	scl-gpios = <&gpiob 10 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	sda-gpios = <&gpiob 11 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+	clock-frequency = <I2C_BITRATE_FAST_PLUS>;
+	status = "okay";
+
+	timings = <96000000 I2C_BITRATE_STANDARD  0x20D09BEE>,
+	          <96000000 I2C_BITRATE_FAST      0x00A0329E>,
+	          <96000000 I2C_BITRATE_FAST_PLUS 0x00501043>,
+	          <120000000 I2C_BITRATE_STANDARD  0x20F091E5>,
+	          <120000000 I2C_BITRATE_FAST      0x00C03DC6>,
+	          <120000000 I2C_BITRATE_FAST_PLUS 0x00601453>,
+	          <137500000 I2C_BITRATE_STANDARD  0x30C082CE>,
+	          <137500000 I2C_BITRATE_FAST      0x00E047E3>,
+	          <137500000 I2C_BITRATE_FAST_PLUS 0x00701760>;
+
+	CUR_SENS_BRD_LOW: ina228@40 {
+		compatible = "ti,ina228";
+		reg = <0x40>;
+		current-lsb-microamps = <10>;
+		rshunt-micro-ohms = <50000>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+
+	CUR_SENS_BRD_HIGH: ina228@41 {
+		compatible = "ti,ina228";
+		reg = <0x41>;
+		current-lsb-microamps = <10>;
+		rshunt-micro-ohms = <50000>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+
+	CUR_SENS_VDUT2: ina228@42 {
+		compatible = "ti,ina228";
+		reg = <0x42>;
+		rshunt-micro-ohms = <500000>;
+		current-lsb-microamps = <1>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+
+	CUR_SENS_VDUT3: ina228@43 {
+		compatible = "ti,ina228";
+		reg = <0x43>;
+		rshunt-micro-ohms = <500000>;
+		current-lsb-microamps = <1>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+
+	CUR_SENS_VIN: ina228@44 {
+		compatible = "ti,ina228";
+		reg = <0x44>;
+		current-lsb-microamps = <10>;
+		rshunt-micro-ohms = <50000>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+
+	CUR_SENS_3_3_DCDC: ina228@45 {
+		compatible = "ti,ina228";
+		reg = <0x45>;
+		current-lsb-microamps = <1>;
+		rshunt-micro-ohms = <50000>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+
+	CUR_SENS_VDOUT_PWR: ina228@46 {
+		compatible = "ti,ina228";
+		reg = <0x46>;
+		current-lsb-microamps = <10>;
+		rshunt-micro-ohms = <50000>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+
+	CUR_SENS_5VD: ina228@47 {
+		compatible = "ti,ina228";
+		reg = <0x47>;
+		current-lsb-microamps = <10>;
+		rshunt-micro-ohms = <50000>;
+		adc-mode = "Bus and shunt voltage continuous";
+		vbus-conversion-time-us = <280>;
+		vshunt-conversion-time-us = <280>;
+		avg-count = <1>;
+		status = "okay";
+	};
+};
+
+/* ====================================================================
+ *  ТАЙМЕРЫ И АНАЛОГОВАЯ ПЕРИФЕРИЯ (ADC / DAC)
+ * ==================================================================== */
+
+&adc1 { status = "okay"; };
+&adc2 { status = "okay"; };
+
+&timers3 {
+	st,prescaler = <10000>;
+	status = "okay";
+	counter { status = "okay"; };
+};
+
+&timers4 {
+	st,prescaler = <10000>;
+	status = "okay";
+	counter { status = "okay"; };
+};
+
+&timers6 {
+	status = "okay";
+};
+
+&dac1 {
+	pinctrl-0 = <&dac1_out2_pa5>;
+	pinctrl-names = "default";
+	status = "okay";
 };

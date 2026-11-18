@@ -131,7 +131,7 @@ void send_binary_telemetry(const struct device *uart_dev) {
     server_get_real_fast(LIN_AO3,       &pkt.lin_voltages[2]);
     server_get_real_fast(LIN_AO4,       &pkt.lin_voltages[3]);
 
-     k_msgq_put(&telemetry_queue,&pkt,K_NO_WAIT);
+    k_msgq_put(&telemetry_queue,&pkt,K_NO_WAIT);
 
 }
 
