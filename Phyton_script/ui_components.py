@@ -77,7 +77,7 @@ def build_dashboard(ports_refs, ui_labels):
         ui.label('Вольт-амперные характеристики (ВАХ)').classes(
             'text-sm font-bold text-sky-300 mt-3 mb-1'
         )
-        build_iv_curve_panel()
+        build_iv_curve_panel(ports_refs)
 
 
     container.make_sortable()

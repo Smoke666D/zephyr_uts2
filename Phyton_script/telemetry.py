@@ -142,6 +142,7 @@ def telemetry_reader_loop(
         i_val = latest_pkt[curr_offset + 1]
         p_val = latest_pkt[curr_offset + 2]
 
+
         ui_labels[f'curr_v_{i}'].set_text(f'{v_val:.2f}')
         ui_labels[f'curr_i_{i}'].set_text(f'{i_val:.4f}')
 
@@ -149,8 +150,12 @@ def telemetry_reader_loop(
           ui_labels[f'curr_p_{i}'].set_text(f'{p_val:.4f}')
         elif f'curr_e_{i}' in ui_labels:
           ui_labels[f'curr_e_{i}'].set_text(f'{p_val:.4f}')
+        telemetry_data_cache[f'curr_v_{i}'] = v_val
+        telemetry_data_cache[f'curr_i_{i}'] = i_val
+        telemetry_data_cache[f'curr_p_{i}'] = p_val
 
         curr_offset += 3
+        
 
       # Напряжения LIN (1-4)
       for i in range(1, 5):
