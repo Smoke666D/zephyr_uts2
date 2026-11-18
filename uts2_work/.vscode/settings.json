@@ -2,13 +2,13 @@
   "zephyr-workbench.build.configurations": [
     {
       "name": "primary",
-      "board": "iglax_fd",
+      "board": "uts2_motherboard",
       "active": "true"
     }
   ],
-  "zephyr-workbench.westWorkspace": "${workspaceFolder}/../../../../../zephyr/zephyrproject",
+  "zephyr-workbench.westWorkspace": "${workspaceFolder}/../../zephyr_workspace/zephyrproject_4_5",
   "zephyr-workbench.toolchain": "zephyr",
-  "zephyr-workbench.sdk": "${workspaceFolder}/../../../../../zephyr/toochan/zephyr-sdk-1.0.1",
+  "zephyr-workbench.sdk": "${workspaceFolder}/../../../SDK/zephyr-sdk-1.0.1",
   "zephyr-workbench.intellisense.provider": "cpptools",
   "cmake.configureOnOpen": false,
   "cmake.enableAutomaticKitScan": false,

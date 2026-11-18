@@ -37,13 +37,17 @@ def build_dac_res_panel(ports_refs):
         shared_ramp_state = {'running': False, 'current_code': 4095}
 
         def send_dac_command(code_val: int):
-            """Отправляет одиночную команду SOUR:DAC <val> в Shell"""
+            """Отправляет одиночную команду SOUR:DAC <val> в Shell с принудительным сбросом буфера"""
             nonlocal last_sent_dac_val
             curr_shell = shell_ref.get('ser')
             if curr_shell and curr_shell.is_open:
-                cmd = f'SOUR:DAC {code_val}\r\n'
-                curr_shell.write(cmd.encode('utf-8'))
-                last_sent_dac_val = code_val
+                try:
+                    cmd = f'SOUR:DAC {code_val}\r\n'.encode('ascii')
+                    curr_shell.write(cmd)
+                    curr_shell.flush()  # Немедленно выталкиваем данные в порт
+                    last_sent_dac_val = code_val
+                except Exception as ex:
+                    print(f'[DAC ERROR]: {ex}')
             else:
                 ui.notify('SCPI порт закрыт!', type='warning')
 
@@ -100,12 +104,10 @@ def build_dac_res_panel(ports_refs):
 
                 # Расчёт шага по времени и шага по коду
                 if T_ms >= 4095.0:
-                    # Шаг по времени >= 1 мс, шаг по коду ровно 1
                     dt_sec = (T_ms / 4095.0) / 1000.0
                     total_steps = 4095
                     calc_code = lambda step: 4095 - step
                 else:
-                    # Шаг по времени строго 1.0 мс (не чаще 1 раза в мс)
                     dt_sec = 0.001
                     total_steps = int(round(T_ms))
                     calc_code = lambda step: int(round(4095.0 - step * (4095.0 / total_steps)))
@@ -122,10 +124,11 @@ def build_dac_res_panel(ports_refs):
                     if code > 4095:
                         code = 4095
 
-                    # Быстрая отправка в UART без лишних накладных расходов
+                    # Отправка в UART с немедленным сбросом буфера ОС / драйвера CDC
                     cmd = f'SOUR:DAC {code}\r\n'.encode('ascii')
                     try:
                         curr_ser.write(cmd)
+                        curr_ser.flush()  # <-- Сбрасываем буфер немедленно после записи
                     except Exception as err:
                         print(f'[DAC WORKER ERROR]: {err}')
                         break
@@ -139,14 +142,14 @@ def build_dac_res_panel(ports_refs):
                         rem = target_time - now
                         if rem <= 0:
                             break
-                        # Если до следующего тика больше 2 мс - спим, иначе точный spin-wait
                         if rem > 0.002:
                             time.sleep(rem - 0.001)
 
-                # Гарантированно выставляем 0 в конце
+                # Гарантированно выставляем 0 в конце с фиксацией сброса
                 if not ramp_stop_event.is_set():
                     try:
                         curr_ser.write(b'SOUR:DAC 0\r\n')
+                        curr_ser.flush()
                         shared_ramp_state['current_code'] = 0
                     except Exception:
                         pass
@@ -178,7 +181,6 @@ def build_dac_res_panel(ports_refs):
                 btn_ramp.classes(remove='bg-emerald-600 hover:bg-emerald-500', add='bg-red-600 hover:bg-red-500')
                 ui.notify(f'Запущен спад ЦАП (4095 -> 0 за {int(dur)} мс в отдельном потоке)...', type='info')
 
-                # Запуск отдельного потока ОС
                 ramp_thread = threading.Thread(
                     target=_dac_ramp_worker, args=(shell_ref, dur), daemon=True
                 )
@@ -190,7 +192,6 @@ def build_dac_res_panel(ports_refs):
                 btn_ramp.classes(remove='bg-red-600 hover:bg-red-500', add='bg-emerald-600 hover:bg-emerald-500')
                 ui.notify('Спад ЦАП остановлен', type='warning')
 
-        # Фоновый опрос для синхронизации графического интерфейса со значениями из потока
         def sync_ui_with_thread():
             if shared_ramp_state['running']:
                 code = shared_ramp_state['current_code']
@@ -204,7 +205,6 @@ def build_dac_res_panel(ports_refs):
                 if btn_ramp.text != 'Старт':
                     btn_ramp.text = 'Старт'
                     btn_ramp.classes(remove='bg-red-600 hover:bg-red-500', add='bg-emerald-600 hover:bg-emerald-500')
-                    # Обновляем UI до финального нуля
                     dac_slider.value = shared_ramp_state['current_code']
                     dac_input.value = str(shared_ramp_state['current_code'])
 
@@ -213,7 +213,7 @@ def build_dac_res_panel(ports_refs):
         # --- ВЕРСТКА ПАНЕЛИ ---
         with ui.row().classes('w-full gap-4 items-center'):
 
-            # ЛЕВАЯ ЧАСТЬ: ЦАП (Слайдер + Потоковый спад)
+            # ЛЕВАЯ ЧАСТЬ: ЦАП
             with ui.card().classes('bg-slate-700/50 p-2 flex-1 rounded border border-slate-600 flex flex-col gap-1.5'):
                 with ui.row().classes('w-full justify-between items-center'):
                     ui.label('ЦАП (12-бит)').classes('text-xs font-bold text-sky-300')
@@ -230,7 +230,6 @@ def build_dac_res_panel(ports_refs):
                 dac_slider.on('pan-end', on_slider_release)
                 dac_slider.on('change', on_slider_release)
 
-                # Режим спада
                 with ui.row().classes('w-full items-center justify-between pt-1 border-t border-slate-600/60'):
                     with ui.row().classes('items-center gap-1'):
                         ui.label('Спад 4095→0:').classes('text-[11px] text-slate-300 font-medium')
@@ -263,6 +262,7 @@ def build_dac_res_panel(ports_refs):
                                     curr_shell = shell_ref.get('ser')
                                     if curr_shell and curr_shell.is_open:
                                         curr_shell.write(cmd.encode('utf-8'))
+                                        curr_shell.flush()
                                         ui.notify(f'[R1] SCPI: {cmd.strip()}', type='positive')
                                     else:
                                         ui.notify('SCPI порт закрыт!', type='warning')
@@ -291,6 +291,7 @@ def build_dac_res_panel(ports_refs):
                                     curr_shell = shell_ref.get('ser')
                                     if curr_shell and curr_shell.is_open:
                                         curr_shell.write(cmd.encode('utf-8'))
+                                        curr_shell.flush()
                                         ui.notify(f'[R2] SCPI: {cmd.strip()}', type='positive')
                                     else:
                                         ui.notify('SCPI порт закрыт!', type='warning')
