@@ -23,7 +23,7 @@ channel_filters_ms = {}
 # Цвета для 4 каналов: Голубой, Зеленый, Желтый, Розовый
 SERIES_COLORS = ['#38bdf8', '#4ade80', '#facc15', '#f43f5e']
 
-# Список названий датчиков для формирования красивых имён колонок
+# Список названий датчиков для обратной совместимости со старыми логами
 SENSOR_NAMES = [
     'BOARD LOW',
     'BOARD HIGH',
@@ -35,7 +35,6 @@ SENSOR_NAMES = [
     'Линия 5В стенда',
 ]
 
-# Таблица маппинга сырых имен из CSV в понятные имена
 COLUMN_RENAME_MAP = {}
 for idx, name in enumerate(SENSOR_NAMES):
     i = idx + 1
@@ -122,11 +121,9 @@ def update_stats_panel():
                         str_dev_max = '0.0%'
                         str_dev_min = '0.0%'
 
-                    # Карточка канала
                     with ui.card().classes(
                         'bg-slate-900/90 py-1.5 px-3 flex-1 rounded border border-slate-700/80 shadow-md flex flex-col justify-between'
                     ):
-                        # Шапка карточки: имя канала + среднее значение
                         with ui.row().classes('w-full justify-between items-center mb-1'):
                             ui.label(col_name).style(f'color: {color};').classes(
                                 'text-xs font-bold leading-none truncate max-w-[180px]'
@@ -135,7 +132,6 @@ def update_stats_panel():
                                 'text-[11px] font-mono text-slate-200 font-semibold'
                             )
 
-                        # Вторая строка: Max / Min с процентами
                         with ui.row().classes(
                             'w-full justify-between items-center text-[10px] font-mono leading-none mb-1'
                         ):
@@ -149,7 +145,6 @@ def update_stats_panel():
                                 ui.label(f'{v_min:.3f}').classes('text-rose-400 font-bold')
                                 ui.label(f'({str_dev_min})').classes('text-rose-500/80 text-[9px]')
 
-                        # Третья строка: Окошко настройки медианного фильтра канала
                         with ui.row().classes('w-full justify-between items-center pt-1 border-t border-slate-800'):
                             ui.label('Медиана:').classes('text-[10px] text-slate-400 font-medium')
 
@@ -265,7 +260,7 @@ def render_chart():
 
 
 def rebuild_channel_checkboxes(columns):
-    """Строит сетку чекбоксов для выбора каналов"""
+    """Строит сетку чекбоксов ТОЛЬКО для найденных в лог-файле каналов"""
     global channels_container, selected_channels
     if not channels_container:
         return
@@ -273,7 +268,7 @@ def rebuild_channel_checkboxes(columns):
     channels_container.clear()
     with channels_container:
         ui.label(
-            'Выберите каналы для графика (до 4 каналов с раздельными осями Y):'
+            f'Каналы в файле ({len(columns)} шт.) — выберите до 4 для отображения:'
         ).classes('text-xs font-semibold text-yellow-300 col-span-full mb-1')
 
         for col in columns:
@@ -304,6 +299,7 @@ def rebuild_channel_checkboxes(columns):
 
 
 def load_log_to_chart(file_path):
+    """Быстрое потоковое чтение CSV-файла без повторного поиска индексов"""
     global cached_data, cached_timestamps, selected_channels, log_info_label, channel_filters_ms
     if not file_path or not os.path.exists(file_path):
         ui.notify('Файл не выбран или не существует!', type='warning')
@@ -313,77 +309,83 @@ def load_log_to_chart(file_path):
 
     cached_data = {}
     cached_timestamps = []
-    mcu_ms_timestamps = []
+    first_mcu_ms = None
+    last_mcu_ms = None
 
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
+            first_line = f.readline()
+            if not first_line:
+                ui.notify('Файл пуст!', type='warning')
+                return
 
-        if not lines:
-            ui.notify('Файл пуст!', type='warning')
-            return
+            # Если первая строка не 'sep=;', возвращаемся в начало файла
+            if not first_line.startswith('sep='):
+                f.seek(0)
 
-        if lines[0].startswith('sep='):
-            lines = lines[1:]
+            reader = csv.reader(f, delimiter=';')
+            header = next(reader, None)
 
-        reader = csv.reader(lines, delimiter=';')
-        header = next(reader, None)
+            if not header:
+                ui.notify('Не удалось прочитать заголовок таблицы!', type='warning')
+                return
 
-        if not header:
-            ui.notify('Не удалось прочитать заголовок таблицы!', type='warning')
-            return
+            idx_time = 0
+            if 'Time' in header:
+                idx_time = header.index('Time')
+            elif 'Timestamp' in header:
+                idx_time = header.index('Timestamp')
 
-        idx_time = 0
-        if 'Time' in header:
-            idx_time = header.index('Time')
-        elif 'Timestamp' in header:
-            idx_time = header.index('Timestamp')
+            idx_mcu_ms = header.index('MCU_Time_ms') if 'MCU_Time_ms' in header else -1
 
-        idx_mcu_ms = header.index('MCU_Time_ms') if 'MCU_Time_ms' in header else -1
+            # Предварительно вычисляем индексы колонок ОДИН РАЗ перед циклом строк
+            data_cols = []
+            col_extractors = []  # Список кортежей: (c_idx, list_append_func)
 
-        data_cols = []
-        col_mapping = {}
+            for c_idx, col in enumerate(header):
+                c_clean = col.strip()
+                if not c_clean or c_clean in ('Time', 'Timestamp', 'MCU_Time_ms'):
+                    continue
+                display_name = COLUMN_RENAME_MAP.get(c_clean, c_clean)
+                data_cols.append(display_name)
+                col_list = []
+                cached_data[display_name] = col_list
+                col_extractors.append((c_idx, col_list.append))
 
-        for col in header:
-            c_clean = col.strip()
-            if not c_clean or c_clean in ('Time', 'Timestamp', 'MCU_Time_ms'):
-                continue
-            display_name = COLUMN_RENAME_MAP.get(c_clean, c_clean)
-            data_cols.append(display_name)
-            col_mapping[display_name] = c_clean
+                if display_name not in channel_filters_ms:
+                    channel_filters_ms[display_name] = 1
 
-        for col_disp in data_cols:
-            cached_data[col_disp] = []
-            if col_disp not in channel_filters_ms:
-                channel_filters_ms[col_disp] = 1
+            ts_append = cached_timestamps.append
 
-        for row_idx, row in enumerate(reader):
-            if not row or len(row) <= idx_time:
-                continue
+            # Быстрый проход по строкам файла
+            for row in reader:
+                if not row or len(row) <= idx_time:
+                    continue
 
-            t_str = row[idx_time].strip()
-            cached_timestamps.append(t_str)
+                ts_append(row[idx_time].strip())
 
-            if idx_mcu_ms != -1 and len(row) > idx_mcu_ms:
-                try:
-                    mcu_ms_timestamps.append(int(row[idx_mcu_ms]))
-                except ValueError:
-                    pass
-
-            for col_disp in data_cols:
-                raw_col = col_mapping[col_disp]
-                c_idx = header.index(raw_col)
-                if len(row) > c_idx:
+                if idx_mcu_ms != -1 and len(row) > idx_mcu_ms:
                     try:
-                        cached_data[col_disp].append(float(row[c_idx]))
+                        ms_val = int(row[idx_mcu_ms])
+                        if first_mcu_ms is None:
+                            first_mcu_ms = ms_val
+                        last_mcu_ms = ms_val
                     except ValueError:
-                        cached_data[col_disp].append(0.0)
-                else:
-                    cached_data[col_disp].append(0.0)
+                        pass
+
+                row_len = len(row)
+                for c_idx, append_fn in col_extractors:
+                    if c_idx < row_len:
+                        try:
+                            append_fn(float(row[c_idx]))
+                        except ValueError:
+                            append_fn(0.0)
+                    else:
+                        append_fn(0.0)
 
         duration_str = '00:00.000'
-        if mcu_ms_timestamps:
-            total_ms = mcu_ms_timestamps[-1] - mcu_ms_timestamps[0]
+        if first_mcu_ms is not None and last_mcu_ms is not None:
+            total_ms = max(0, last_mcu_ms - first_mcu_ms)
             mins = (total_ms // 1000) // 60
             secs = (total_ms // 1000) % 60
             millis = total_ms % 1000
@@ -400,19 +402,19 @@ def load_log_to_chart(file_path):
                 f'Длительность: {duration_str} | Точек: {len(cached_timestamps)}'
             )
 
-        # По умолчанию выбираем напряжение и ток питания тестируемого узла
+        # Выбираем по умолчанию напряжение и ток тестируемого узла (если они есть в этом логе)
         default_targets = [
             'Питание тестируемого узла V',
             'Питание тестируемого узла I',
         ]
         selected_channels = [c for c in default_targets if c in data_cols]
         if not selected_channels and data_cols:
-            selected_channels = data_cols[:2]
+            selected_channels = data_cols[:min(2, len(data_cols))]
 
         rebuild_channel_checkboxes(data_cols)
         render_chart()
         ui.notify(
-            f'Загружено {len(cached_timestamps)} точек ({duration_str})',
+            f'Загружено {len(cached_timestamps)} точек ({len(data_cols)} кан., {duration_str})',
             type='positive',
         )
 
@@ -485,17 +487,14 @@ def build_oscilloscope_panel():
                     on_click=on_open_click,
                 ).classes('bg-emerald-600 text-white text-xs font-bold py-1 px-3')
 
-        # Панель статистических карточек над графиком
         stats_container = ui.row().classes('w-full mb-1.5')
 
-        # Контейнер для графика
         chart_container = ui.column().classes('w-full')
         with chart_container:
             ui.label('Выберите лог-файл и нажмите "Открыть график"').classes(
                 'text-xs text-slate-400 italic py-10 self-center'
             )
 
-        # Сетка чекбоксов каналов
         channels_container = ui.grid(columns=4).classes(
             'w-full gap-1.5 bg-slate-700/30 p-2.5 rounded mt-2'
         )

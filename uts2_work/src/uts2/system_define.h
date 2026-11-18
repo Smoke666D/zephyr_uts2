@@ -1,0 +1,235 @@
+#pragma once
+
+
+#define ADS1115_DEAMON_INIT_LEVEL       APPLICATION
+#define ADS1115_DEAMON_INIT_PRIOR       84
+#define EEPROM_DEAMON_INIT_LEVEL        APPLICATION
+#define EEPROM_DEAMON_INIT_PRIOR        85
+#define DAC_DEAMON_INIT_LEVEL           APPLICATION
+#define DAC_DEAMON_INIT_PRIOR           50
+#define LED_DEAMON_INIT_LEVEL           APPLICATION
+#define LED_DEAMON_INIT_PRIOR           80
+#define PWR_CTL_INIT_LEVEL              APPLICATION
+#define PWR_CTL_INIT_PRIOR              40
+#define I2C_SENS_DEAMON_INIT_LEVEL      APPLICATION
+#define I2C_SENS_DEAMON_INIT_PRIOR      83
+#define ADC_PIPELINE_DEAMON_INIT_LEVEL  APPLICATION 
+#define ADC_PIPELINE_DEAMON_INIT_PRIOR  40 
+#define LIN_DEAMON_INIT_LEVEL           APPLICATION 
+#define LIN_DEAMON_INIT_PRIOR           50 
+#define CAN_DEAMON_INIT_LEVEL           APPLICATION 
+#define CAN_DEAMON_INIT_PRIOR           50 
+#define UART_DETECT_DEAMON_INIT_LEVEL   APPLICATION
+#define UART_DETECT_DEAMON_INIT_PRIOR   50
+#define OUT_CTL_DEAMON_INIT_LEVEL       APPLICATION
+#define OUT_CTL_DEAMON_INIT_PRIOR       40
+#define MCP_CTL_DEAMON_INIT_LEVEL       APPLICATION
+#define MCP_CTL_DEAMON_INIT_PRIOR       70
+#define SPCI_CAN_INIT_LEVEL             APPLICATION
+#define SPCI_CAN_INIT_PRIOR             51
+#define SERVER_INIT_LEVEL               POST_KERNEL
+#define SERVER_INIT_PRIOR               90
+
+
+#define TELEMETRY_THREAD_PRIORITY       0    
+#define INA228_THREAD_PRIORITY          4
+#define EEPROM_THREAD_PRIORITY          5   
+#define FRAM_THREAD_PRIORITY            6    
+#define APP_WORKER_PRIORITY             7
+#define COMMON_WORKER_PRIORITY          4
+#define REAL_TIME_WORKER_PRIORITY       -1  
+
+
+/**************WORKER*********************************/
+#define SCPI_MONITOR_K_WORK             COMMON_WORKER
+//APPLICATION_WORKER
+#define LIN_K_WORK                      REAL_TIME_WORKER
+#define CAN_K_WORK                      REAL_TIME_WORKER
+#define UART_DETECT_K_WORK              COMMON_WORKER
+#define POWER_CTL_K_WORK                COMMON_WORKER
+#define OUT_CTL_K_WORK                  REAL_TIME_WORKER
+#define MCP_CTL_K_WORK                  COMMON_WORKER
+#define LED_K_WORK                      COMMON_WORKER
+#define I2C_SENS_K_WORK                 COMMON_WORKER
+#define DAC_K_WORK                      COMMON_WORKER
+#define INT_DAC_K_WORK                  REAL_TIME_WORKER
+#define ASS1115_K_WORK                  COMMON_WORKER
+#define ADC_PIPELINE_K_WORK             REAL_TIME_WORKER
+
+typedef enum
+{   AIN_AO1,
+    AIN_AO7,
+    AIN_AO13,
+    AIN_AVsense1,
+    LIN_AO1,
+    AIN_AO2,
+    AIN_AO8,
+    AIN_AO14,
+    AIN_AVsense2,    
+    LIN_AO2,
+    AIN_AO3,
+    AIN_AO9,
+    AIN_AO15,
+    AIN_AVsense3,        
+    LIN_AO3,
+    AIN_AO4,
+    AIN_AO10,
+    AIN_AO16,
+    AIN_AVsense4,
+    LIN_AO4,
+    AIN_AO5,
+    AIN_AO11,
+    AIN_AO17,
+    AIN_AVsense5,
+    DA41_GND1,
+    AIN_AO6,                    
+    AIN_AO12,                
+    AIN_AO18,
+    AIN_AVsense6,
+    DA41_GND2,
+    AIN_DA11_test1,
+    AIN_DA20_test1,
+    AIN_DA33_test1,
+    AIN_DA44_test1,
+    AIN_DA41_test1,
+    AIN_DA11_test2,
+    AIN_DA20_test2,
+    AIN_DA33_test2,
+    AIN_DA44_test2, 
+    AIN_DA41_test2,
+    ENV_P3V3,
+    ENV_P5V0,
+    ENV_VIN,
+    ENV_VDOUT1,
+    ENV_P40V,
+    ENV_USB, 
+    ENV_VDOUT2,
+    ENV_VDOUT3,
+    LED1,
+    LED2,
+    LED3,
+    I2C1_TEMP1,
+    I2C1_TEMP2,
+    I2C1_LUX1,
+    I2C1_LUX2,
+    RF_POWER,
+    NTC,
+    EXT_VSENSE,
+    BRD_DETECT,
+    DOUT1,
+    DOUT2,
+    DOUT3,
+    DOUT4,
+    DOUT5,
+    DOUT6,
+    DOUT7,
+    DOUT8,
+    DOUT9,
+    DOUT10,
+    DOUT11,
+    DOUT12,
+    DOUT13,
+    DOUT14,
+    DOUT15,
+    DOUT16,
+    DOUT17,
+    DOUT18,
+    LIN_PD1,
+    LIN_PD2,
+    LIN_PD3,
+    LIN_PD4,
+    EN_DUT2_PSU,
+    EN_DUT3_PSU,  
+    EN_P12V,
+    EN_P24V,
+    EN_VA,
+    EN_USB_OUT,
+    EN_USB_BOOT,
+    EN_USB_TOP,
+    DAC_VALUE,
+    DCA_RAMP_START,
+    DCA_RAMP_STOP,
+    DCA_RAMP_STIME,
+    ADJ_RES1,
+    ADJ_RES2,
+    SENS_BRD_LOW_CURRENT, 
+    SENS_BRD_LOW_VOLTAGE,  
+    SENS_BRD_HIGH_CURRENT, 
+    SENS_BRD_HIGH_VOLTAGE, 
+    SENS_VDUT2_CURRENT,   
+    SENS_VDUT2_VOLTAGE,  
+    SENS_VDUT3_CURRENT,  
+    SENS_VDUT3_VOLTAGE,  
+    SENS_VIN_CURRENT,    
+    SENS_VIN_VOLTAGE,    
+    SENS_DCDC_3_3_CURRENT,
+    SENS_DCDC_3_3_VOLTAGE,
+    SENS_VDOUT_PWR_CURRENT,
+    SENS_VDOUT_PWR_VOLTAGE,
+    SENS_VD5_CURRENT,      
+    SENS_VD5_VOLTAGE,      
+    SENS_I2C_POWER_BRD_LOW,
+    SENS_I2C_POWER_BRD_HIGH,
+    SENS_I2C_POWER_VDUT2,
+    SENS_I2C_POWER_VDUT3,
+    SENS_I2C_POWER_VIN,
+    SENS_I2C_POWER_DCDC_3_3,
+    SENS_I2C_POWER_VDOUT_PWR,
+    SENS_I2C_POWER_VD5,
+    HARDWARE_ERROR_REGISTER1,
+    HARDWARE_ERROR_REGISTER2,
+    HARDWARE_ERROR_REGISTER3,
+    EVENT_1_REG,
+    CAN1_TX,
+    CAN2_TX,
+    CAN3_TX,
+    CAN1_RX,
+    CAN2_RX,
+    CAN3_RX,
+    LIN1_TX,
+    LIN1_RX,
+    LIN2_TX,
+    LIN2_RX,
+    LIN3_TX,
+    LIN3_RX,
+    LIN4_TX,
+    LIN4_RX,
+    USB_FB_MUX,    
+    UART_DETECT_DATA,
+    UART_DETECT_CONFIG,
+    JTAG_MUX0,    
+    JTAG_MUX_EN,    
+    EN_USB_UART,
+    EN_USB_OUT1,
+    EN_USB_OUT2,
+    EN_USB_OUT3,    
+    UART_FB_EN,
+    UART_RX_EN,
+    OK2,
+    OK1,
+    SETTING_MU_ID_1,
+    SETTING_MU_ID_2,
+    SETTING_MU_ID_3,
+    SETTING_MU_SN,
+    SETTING_MU_HW_ID,
+    SETTING_MU_HW_VER,
+    SETTING_MU_USER_DATA,
+    SETTING_IU_ID,
+    SETTING_IU_SN,
+    SETTING_IU_HW_ID,
+    SETTING_IU_HW_VER,
+    SETTING_IU_USER_DATA,
+    SETTING_CU_ID,    
+    SETTING_CU_SN,    
+    SETTING_CU_HW_ID,
+    SETTING_CU_HW_VER,
+    SETTING_CU_USER_DATA,
+    SETTING_OUT_TEST_CUR,
+    SETTING_3_3_CUR_HIGH,
+    SETTING_3_3_CUR_LOW,
+    SETTING_5_CUR_HIGH,
+    SETTING_5_CUR_LOW,
+    UART_DETECT_RX,
+    /* Сюда в будущем можно добавлять любые другие параметры других модулей */
+    SYSTEM_BUS_COUNT
+} SYSTEM_BUS_ID;

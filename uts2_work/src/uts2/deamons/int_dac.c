@@ -38,25 +38,6 @@
  **************************************************************************************************/
 LOG_MODULE_REGISTER(int_dac_work, LOG_LEVEL_INF);
 
-
-
-#define MAX_P40V_OUT         30.0f
-#define MIN_P40V_OUT         12.0f
-
-
-
-
-#define DAC_TIM_NODE DT_ALIAS(dac_timer)
-
-#if !DT_NODE_HAS_STATUS(DAC_TIM_NODE, okay)
-#error "Алиас 'dac-timer' не определен или отключен в DeviceTree (.overlay)!"
-#endif
-
-/* 2. Получаем базовый адрес регистров таймера напрямую из DT */
-#define DAC_TIM_REG  ((TIM_TypeDef *)DT_REG_ADDR(DAC_TIM_NODE))
-
-/* 3. Извлекаем информацию о подсистеме тактирования (RCC) для этого таймера */
-static const struct stm32_pclken tim_clk_info = STM32_CLOCK_INFO(0, DAC_TIM_NODE);
 /***************************************************************************************************
  *                                          PRIVATE TYPES
  **************************************************************************************************/
@@ -79,11 +60,6 @@ typedef struct dac_data_msg
     uint32_t value[DAC_CH_CNT]; // Буфер значений (8 шагов * 2 канала)
 } dac_data_msg_t;
 
-
-typedef struct dac_ramp_msg 
-{
-    uint32_t value[3]; // Буфер значений (8 шагов * 2 канала)
-} dac_ramp_msg_t;
 /***************************************************************************************************
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
@@ -105,17 +81,6 @@ static dac_data_msg_t      cache_dac_data           __attribute__((section("DTCM
 
 
 K_MSGQ_DEFINE(int_dac_rx_queue, sizeof(server_request), 3, 4);
-
-
-
-ZBUS_CHAN_DEFINE(
-    dac_ramp_chan,
-    struct dac_data_msg,
-    NULL,
-    NULL,
-    ZBUS_OBSERVERS_EMPTY,
-    ZBUS_MSG_INIT(0)
-);
 
 
 ZBUS_CHAN_DEFINE(

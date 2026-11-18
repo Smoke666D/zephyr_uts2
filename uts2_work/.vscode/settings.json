@@ -2,7 +2,7 @@
   "zephyr-workbench.build.configurations": [
     {
       "name": "primary",
-      "board": "uts2_motherboard",
+      "board": "iglax_x2",
       "active": "true"
     }
   ],

@@ -66,4 +66,50 @@ CONFIG_HEAP_MEM_POOL_SIZE=16384
 # Поддержка вывода чисел с плавающей точкой (float/double) в консоль
 CONFIG_CBPRINTF_FP_SUPPORT=y
 
+
+# ==============================================================================
+# 6. КОНСОЛЬ SHELL И ИНТЕРФЕЙСЫ ВВОДА-ВЫВОДА (Shell & Console)
+# ==============================================================================
+CONFIG_SERIAL=y
+CONFIG_CONSOLE=y
+CONFIG_UART_CONSOLE=y
+CONFIG_UART_INTERRUPT_DRIVEN=y
+CONFIG_UART_LINE_CTRL=y
+
+#CONFIG_SHELL=y
+#CONFIG_SHELL_BACKEND_SERIAL=y
+#CONFIG_SHELL_BACKEND_SERIAL_CHECK_DTR=n
+#CONFIG_SHELL_VT100_COMMANDS=n
+#CONFIG_I2C_SHELL=y
+#CONFIG_SENSOR_SHELL=y
+#CONFIG_KERNEL_SHELL=y
+CONFIG_CONSOLE_SUBSYS=y
+CONFIG_CONSOLE_GETCHAR=y
+
+
+
+# Не выводить системные логи в USB Shell (чистый терминал)
+CONFIG_SHELL_LOG_BACKEND=n
+
+# ==============================================================================
+# 7. ПОДСИСТЕМА ЛОГИРОВАНИЯ (Logging, Backends & RTT)
+# ==============================================================================
+CONFIG_LOG=y
+# Асинхронный режим, чтобы не нарушать тайминги USB
+CONFIG_LOG_BACKEND_RTT_MODE_BLOCK=y
+CONFIG_LOG_MODE_DEFERRED=y
+CONFIG_SEGGER_RTT_BUFFER_SIZE_UP=4096
+CONFIG_LOG_BUFFER_SIZE=4096
+
+# Направлять вызовы printk() через логгер
+CONFIG_LOG_PRINTK=y
+
+# Бэкенд 1: Аппаратный UART (ОТКЛЮЧЕН — логи уходят только в RTT)
+CONFIG_LOG_BACKEND_UART=n
+
+# Бэкенд 2: SEGGER RTT (SWD)
+CONFIG_USE_SEGGER_RTT=y
+CONFIG_LOG_BACKEND_RTT=y
+CONFIG_LOG_BACKEND_RTT_MODE_DROP=y
+
 CONFIG_CRC=y

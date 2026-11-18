@@ -144,15 +144,10 @@ static void telemetry_timer_expiry(struct k_timer *timer)
 static K_TIMER_DEFINE(telemetry_timer, telemetry_timer_expiry, NULL);
 
 
-
-
 static void     _telemetry_thread_entry(void *p1, void *p2, void *p3)
 {
-
-    LOG_INF("SYSTETM START");	
     struct telemetry_packet _packet_to_send;
 
-   
     k_timer_start(&telemetry_timer, K_MSEC(1), K_MSEC(1));
 
     while (1) 
