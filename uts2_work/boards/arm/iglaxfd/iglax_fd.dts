@@ -12,8 +12,8 @@
 
 
 / {
-	model = "STMicroelectronics STM32G0B1RE-NUCLEO board";
-	compatible = "st,stm32g0b1re-nucleo";
+		model = "IGLA_X2 (STM32F413)";
+	compatible = "st,igla_x2";
 
 	chosen {
 		zephyr,console = &usart2;
@@ -135,7 +135,7 @@
 };
 
 &iwdg {
-	status = "okay";
+	status = "disabled";
 };
 
 &timers3 {

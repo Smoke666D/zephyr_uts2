@@ -11,7 +11,7 @@ def get_available_ports():
 
 
 def build_ports_panel(ports_refs, on_device_connected=None):
-    """Панель управления портами связи с поддержкой SCPI на 250 000 бод"""
+    """Панель управления портами связи с поддержкой SCPI на 115 200 бод"""
     tel_ref = ports_refs['tel']
     shell_ref = ports_refs['shell']
 
@@ -22,7 +22,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
             with ui.card().classes(
                 'bg-slate-700/50 p-2 flex-1 rounded border border-slate-600'
             ):
-                ui.label('Телеметрия (Бинарный)').classes(
+                ui.label('Телеметрия (Бинарный) 3000 кбод').classes(
                     'text-xs font-semibold text-sky-300 mb-1'
                 )
 
@@ -73,7 +73,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
             with ui.card().classes(
                 'bg-slate-700/50 p-2 flex-1 rounded border border-slate-600'
             ):
-                ui.label('SCPI / Команды (250 кбод)').classes(
+                ui.label('SCPI / Команды (115,2 кбод)').classes(
                     'text-xs font-semibold text-emerald-300 mb-1'
                 )
 
@@ -103,14 +103,13 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                             try:
                                 p_name = shell_select.value
                                 if not p_name or p_name == 'Нет портов':
-                                    raise ValueError('Порт не выбран!')
-                                # Скорость переведена на 250 000 бод
+                                    raise ValueError('Порт не выбран!')                                
                                 shell_ref['ser'] = serial.Serial(
                                     p_name, baudrate=115200, timeout=0.05
                                 )
                                 shell_btn.text = 'Закрыть'
                                 shell_btn.classes(remove='bg-emerald-600', add='bg-red-600')
-                                ui.notify(f'SCPI открыт на {p_name} (250 кбод)', type='positive')
+                                ui.notify(f'SCPI открыт на {p_name} (115,2 кбод)', type='positive')
                             except Exception as e:
                                 shell_ref['ser'] = None
                                 ui.notify(f'Ошибка открытия SCPI: {e}', type='negative')

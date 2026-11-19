@@ -34,34 +34,33 @@ def build_dashboard(ports_refs, ui_labels):
 
         build_ports_panel(ports_refs, on_device_connected=on_scpi_ready)
 
-        # 2. Система: UID, SN, HW, USER (system_panel.py)
-        system_callbacks['read_all_uids'] = lambda: read_all_uids_async(shell_ref)
-        build_system_panel(ports_refs)
-
-        # 3. Питание OUTPut:POWer (power_panel.py)
+        # Питание OUTPut:POWer (power_panel.py)
         build_power_panel(ports_refs)
 
-        # 4. Светодиоды DISPlay:LED:STATe (led_panel.py)
+        #Автоопределение портов UART и JTAG (uart_detect_panel.py)
+        build_uart_detect_panel(ports_refs)
+        
+        # Светодиоды DISPlay:LED:STATe (led_panel.py)
         build_led_panel(ports_refs)
 
-        # 5. Дискретные драйверы OUTPut:DOUT 1-18 (dout_panel.py)
-        build_dout_panel(ports_refs)
-
-        # 6. ЦАП и потенциометры (dac_res_panel.py)
+        # ЦАП и потенциометры (dac_res_panel.py)
         build_dac_res_panel(ports_refs)
 
-        # 7. Дашборд датчиков (sensors_panel.py)
+        # Дашборд датчиков (sensors_panel.py)
         build_sensors_panel(ui_labels)
 
-        # 8. Датчики тока, напряжения и мощности (current_panel.py)
+        # Датчики тока, напряжения и мощности (current_panel.py)
         build_current_panel(ports_refs, ui_labels)
         
-                # 12. Логирование CSV с секундомером (logging_panel.py)
+        # Логирование CSV с секундомером (logging_panel.py)
         build_logging_panel()
 
-        # 13. Офлайн-осциллограф (oscilloscope.py)
+        #  Офлайн-осциллограф (oscilloscope.py)
         ui.label('Осциллограф').classes('text-sm font-bold text-sky-300 mt-3 mb-1')
         build_oscilloscope_panel()
+        
+        # Дискретные драйверы OUTPut:DOUT 1-18 (dout_panel.py)
+        build_dout_panel(ports_refs)
 
         # 9. Шины LIN 1-4 (lin_panel.py)
         build_lin_panel(ports_refs, ui_labels, lin_logs_dict)
@@ -69,8 +68,7 @@ def build_dashboard(ports_refs, ui_labels):
         # 10. Шины CAN 1-3 (can_panel.py)
         build_can_panel(ports_refs, can_logs_dict)
 
-        # 11. Автоопределение портов UART и JTAG (uart_detect_panel.py)
-        build_uart_detect_panel(ports_refs)
+  
 # ==========================================
         # 14. ГРАФИК ВОЛЬТ-АМПЕРНЫХ ХАРАКТЕРИСТИК (ВАХ)
         # ==========================================
@@ -78,7 +76,10 @@ def build_dashboard(ports_refs, ui_labels):
             'text-sm font-bold text-sky-300 mt-3 mb-1'
         )
         build_iv_curve_panel(ports_refs)
-
+        
+        #Система: UID, SN, HW, USER (system_panel.py)
+        system_callbacks['read_all_uids'] = lambda: read_all_uids_async(shell_ref)
+        build_system_panel(ports_refs)
 
     container.make_sortable()
     return can_logs_dict, lin_logs_dict, raw_logs_dict

@@ -14,14 +14,15 @@ ENABLE_LINES = [
 
 
 def build_power_panel(ports_refs):
-    """Строит карточку управления питанием (SCPI OUTPut:POWer)"""
+    """Строит компактную однострочную карточку управления питанием"""
     shell_ref = ports_refs['shell']
-    enable_checkboxes = []
-    bulk_updating = False
 
-    with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
+    with ui.card().classes('bg-slate-800 py-1.5 px-3 w-full cursor-grab'):
+        enable_checkboxes = []
+        bulk_updating = False
+
         ui.label('Управление питанием (OUTPut:POWer)').classes(
-            'text-sm font-bold text-yellow-300 text-center w-full mb-2 tracking-wide'
+            'text-xs font-bold text-yellow-300 text-center w-full mb-1 tracking-wide leading-none'
         )
 
         def pwr_all_on():
@@ -67,28 +68,32 @@ def build_power_panel(ports_refs):
 
             return handler
 
-        with ui.row().classes('w-full gap-3 items-center'):
-            with ui.grid(columns=4).classes('flex-1 gap-1'):
+        # Единая горизонтальная линия: чекбоксы равномерно слева + кнопки размера w-44 справа
+        with ui.row().classes('w-full items-center justify-between gap-4 flex-nowrap'):
+            
+            # 8 чекбоксов равномерно распределены по всему оставшемуся месту (flex-1 justify-between)
+            with ui.row().classes('flex-1 items-center justify-between pr-2 flex-nowrap'):
                 for idx, name in enumerate(ENABLE_LINES):
                     ch_num = idx + 1
                     cb = ui.checkbox(
-                        f'{ch_num}. {name}',
+                        f'{ch_num}.{name}',
                         value=False,
                         on_change=make_en_handler(name),
-                    ).classes('text-white text-xs')
+                    ).props('dense').classes('text-white text-xs font-medium whitespace-nowrap')
                     enable_checkboxes.append(cb)
 
-            with ui.column().classes('gap-1.5 w-44 justify-center'):
+            # Кнопки точно такого же размера (w-44 py-1.5 text-xs), как в панели портов
+            with ui.row().classes('gap-2 items-center flex-nowrap'):
                 ui.button(
                     'ВКЛЮЧИТЬ ВСЕ',
                     on_click=pwr_all_on,
                 ).props('color=positive text-color=white').classes(
-                    'w-full font-bold text-xs py-2 rounded shadow bg-green-600'
+                    'w-44 font-bold text-xs py-1.5 rounded shadow bg-green-600 whitespace-nowrap'
                 )
 
                 ui.button(
                     'ВЫКЛЮЧИТЬ ВСЕ',
                     on_click=pwr_all_off,
                 ).props('color=negative text-color=white').classes(
-                    'w-full font-bold text-xs py-2 rounded shadow bg-red-600'
+                    'w-44 font-bold text-xs py-1.5 rounded shadow bg-red-600 whitespace-nowrap'
                 )
