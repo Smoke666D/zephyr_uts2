@@ -75,7 +75,7 @@ static void uart_detect_cfg_listener_cb(const struct zbus_channel *chan)
         .flow_ctrl = UART_CFG_FLOW_CTRL_NONE,
     };
 
-    LOG_INF("UART_DETECT: смена настроек (Baud: %u, Parity: %d, Stop: %d, Data: %d)",
+    LOG_INF("UART_DETECT: settings (Baud: %u, Parity: %d, Stop: %d, Data: %d)",
             ucfg.baudrate, ucfg.parity, ucfg.stop_bits, ucfg.data_bits);
 
     uart_irq_rx_disable(uart_dev);

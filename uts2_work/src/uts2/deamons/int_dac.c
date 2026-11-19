@@ -64,8 +64,8 @@ typedef struct dac_data_msg
  *                                   PRIVATE FUNCTION PROTOTYPES
  **************************************************************************************************/
 
-static void _dac_update_handler(struct k_work *_work);
-static int  _dac_control_init(void);
+static void _int_dac_update_handler(struct k_work *_work);
+static int int_dac_control_init(void);
 
 /***************************************************************************************************
  *                                           PRIVATE DATA

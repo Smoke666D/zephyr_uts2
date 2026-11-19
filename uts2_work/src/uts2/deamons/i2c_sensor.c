@@ -140,7 +140,7 @@ static int _app_worker_system_init(void)
     
     app_worker_reschedule_submit(&sensor_poll_dwork, K_MSEC(100),I2C_SENS_K_WORK);
 
-    LOG_INF("Фоновый опрос датчиков успешно инициализирован");
+    LOG_INF("I2C Sensor init successfull!");
     return 0;
 }
 

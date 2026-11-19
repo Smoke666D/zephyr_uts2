@@ -7,13 +7,13 @@ target_include_directories(app PRIVATE
     ${CMAKE_SOURCE_DIR}/src/lib/scpi/libscpi/inc
 )
 
-file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/iglax2/*.c"       
-    "${CMAKE_SOURCE_DIR}/src/iglax2/deamons/*.c"     
-    "${CMAKE_SOURCE_DIR}/src/iglax2/spci_interface/*.c"
-    "${CMAKE_SOURCE_DIR}/src/iglax2/app/*.c"
-    "${CMAKE_SOURCE_DIR}/src/lib/scpi/libscpi/src/*.c"
-    "${CMAKE_SOURCE_DIR}/src/midelware/*.c"  
-)
+#file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
+   # "${CMAKE_SOURCE_DIR}/src/iglax2/*.c"       
+   # "${CMAKE_SOURCE_DIR}/src/iglax2/deamons/*.c"     
+   # "${CMAKE_SOURCE_DIR}/src/iglax2/spci_interface/*.c"
+   # "${CMAKE_SOURCE_DIR}/src/iglax2/app/*.c"
+   # "${CMAKE_SOURCE_DIR}/src/lib/scpi/libscpi/src/*.c"
+  #  "${CMAKE_SOURCE_DIR}/src/midelware/*.c"  
+#)
 
 target_sources(app PRIVATE ${APP_SOURCES})

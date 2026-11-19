@@ -92,7 +92,6 @@ static int  _dac_control_init(void);
 /***************************************************************************************************
  *                                           PRIVATE DATA
  **************************************************************************************************/
-static const struct device *dac_dev = DEVICE_DT_GET(DT_NODELABEL(dac1));
 
 static struct k_work_poll  dac_task                 __attribute__((section("DTCM")));
 static struct k_poll_event dac_poll_events[1]       __attribute__((section("DTCM")));
@@ -215,21 +214,14 @@ static void _dac_update_handler(struct k_work *_work)
  */
 static int _dac_control_init(void)
 {
-    int err;
-
 
     k_poll_event_init(&dac_poll_events[0],
                       K_POLL_TYPE_MSGQ_DATA_AVAILABLE, // Тип: появление данных в очереди
                       K_POLL_MODE_NOTIFY_ONLY,         // Режим: только уведомить
                       &dac_rx_queue); 
 
-
-
     k_work_poll_init(&dac_task, _dac_update_handler); 
     app_worker_poll_submit(&dac_task, dac_poll_events,ARRAY_SIZE(dac_poll_events), DAC_K_WORK);
-
-
-
 
     if (!device_is_ready(i2c_spec.bus)) 
     {

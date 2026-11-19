@@ -1,10 +1,26 @@
+
+# Включаем консоль и SEGGER RTT
+CONFIG_CONSOLE=y
+CONFIG_UART_CONSOLE=n
+CONFIG_USE_SEGGER_RTT=y
+CONFIG_RTT_CONSOLE=y
+
+# Включаем Shell с бэкендом на RTT
+CONFIG_SHELL=y
+CONFIG_SHELL_BACKEND_RTT=y
+CONFIG_SHELL_BACKEND_SERIAL=n
+
+# Логирование через Shell/RTT
+CONFIG_LOG=y
+CONFIG_LOG_MODE_DEFERRED=y
+
 # ==============================================================================
 # 1. БАЗОВАЯ ПЕРИФЕРИЯ МК (STM32F413)
 # ==============================================================================
-CONFIG_ARM_MPU=y
-CONFIG_GPIO=y
+#CONFIG_ARM_MPU=y
+#CONFIG_GPIO=y
 #CONFIG_ADC=y
-CONFIG_SERIAL=y
+#CONFIG_SERIAL=y
 
 # Классический CAN (без CAN-FD, так как на STM32F413 обычный bxCAN)
 #CONFIG_CAN=y
@@ -17,26 +33,26 @@ CONFIG_SERIAL=y
 # ==============================================================================
 # 2. SEGGER RTT: КОНСОЛЬ, SHELL И ЛОГИ (Всё в одном окне RTT Канал 0)
 # ==============================================================================
-CONFIG_USE_SEGGER_RTT=y
-CONFIG_SEGGER_RTT_BUFFER_SIZE_UP=2048
-CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=1024
+#CONFIG_USE_SEGGER_RTT=y
+#CONFIG_SEGGER_RTT_BUFFER_SIZE_UP=2048
+#CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=1024
 
 # Перенаправляем printk() в RTT и отвязываем от UART/USB
-CONFIG_RTT_CONSOLE=y
-CONFIG_UART_CONSOLE=n
+#CONFIG_RTT_CONSOLE=y
+#CONFIG_UART_CONSOLE=n
 
 # Включаем Shell ТОЛЬКО через RTT
-CONFIG_SHELL=n
-CONFIG_SHELL_BACKENDS=y
-CONFIG_SHELL_BACKEND_RTT=y
-CONFIG_SHELL_BACKEND_SERIAL=n
-CONFIG_SHELL_CMDS=y
+#CONFIG_SHELL=y
+#CONFIG_SHELL_BACKENDS=y
+#CONFIG_SHELL_BACKEND_RTT=y
+#CONFIG_SHELL_BACKEND_SERIAL=n
+#CONFIG_SHELL_CMDS=y
 
 # Включаем логирование. 
 # ВАЖНО: LOG_BACKEND_RTT должен быть "n", так как логи в RTT выводит сам Shell!
-CONFIG_LOG=y
-CONFIG_SHELL_LOG_BACKEND=y
-CONFIG_LOG_BACKEND_RTT=n
+#CONFIG_LOG=n
+#CONFIG_SHELL_LOG_BACKEND=y
+#CONFIG_LOG_BACKEND_RTT=y
 
 # ==============================================================================
 # 3. USB (Отдельный независимый канал CDC_ACM для ваших данных)
