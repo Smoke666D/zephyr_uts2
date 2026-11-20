@@ -1,0 +1,5 @@
+r
+h
+loadfile build/primary/zephyr/zephyr.hex
+r
+q

@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 #include <zephyr/kernel.h>
-#include "spci_uts2.h"
+#include "spci_iglax2.h"
 #include "system_bus_model.h"
 
 scpi_result_t scpi_cmd_idn_q(scpi_t *context) {

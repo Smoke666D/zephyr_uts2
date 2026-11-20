@@ -266,11 +266,11 @@ static int early_hse_try_switch(void)
 static int pre_kernel_factory_test(void)
 {
     /* 1. Включаем тактирование всех портов GPIO */
-    LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA |
-                             LL_AHB1_GRP1_PERIPH_GPIOB |
-                             LL_AHB1_GRP1_PERIPH_GPIOC |
-                             LL_AHB1_GRP1_PERIPH_GPIOD);
-
+//    LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA |
+ //                            LL_AHB1_GRP1_PERIPH_GPIOB |
+  //                           LL_AHB1_GRP1_PERIPH_GPIOC |
+  //                           LL_AHB1_GRP1_PERIPH_GPIOD);
+//
    /* 2. Тестируем кварцы */
     test_lse_against_hsi();
     early_hse_try_switch();
@@ -285,7 +285,7 @@ static int pre_kernel_factory_test(void)
 }
 
 
-//SYS_INIT(pre_kernel_factory_test, PRE_KERNEL_2, 0);
+SYS_INIT(pre_kernel_factory_test, PRE_KERNEL_2, 0);
 
 
 

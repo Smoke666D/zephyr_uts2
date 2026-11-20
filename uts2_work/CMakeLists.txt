@@ -17,7 +17,7 @@ target_compile_definitions(app PRIVATE
 if(BOARD STREQUAL "uts2_motherboard")
     add_subdirectory(src/uts2)
 elseif(BOARD STREQUAL "iglax_x2")
-   # add_subdirectory(src/iglax2)
+    add_subdirectory(src/iglax2)
 endif()
 
 target_sources(app PRIVATE 

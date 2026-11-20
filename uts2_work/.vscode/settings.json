@@ -3,8 +3,7 @@
     {
       "name": "primary",
       "board": "iglax_x2",
-      "active": "true",
-      "default-runner": "jlink"
+      "active": "true"
     }
   ],
   "zephyr-workbench.westWorkspace": "${workspaceFolder}/../../zephyr_workspace/zephyrproject_4_5",
