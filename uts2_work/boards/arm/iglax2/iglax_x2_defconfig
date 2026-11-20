@@ -1,18 +1,26 @@
 
-# Включаем консоль и SEGGER RTT
-CONFIG_CONSOLE=y
-CONFIG_UART_CONSOLE=n
+# Включаем поддержку SEGGER RTT
 CONFIG_USE_SEGGER_RTT=y
+# Переводим стандартный вывод (printk) и консоль в RTT (займет Channel 0)
+CONFIG_CONSOLE=y
 CONFIG_RTT_CONSOLE=y
+CONFIG_UART_CONSOLE=n
 
 # Включаем Shell с бэкендом на RTT
-CONFIG_SHELL=y
-CONFIG_SHELL_BACKEND_RTT=y
-CONFIG_SHELL_BACKEND_SERIAL=n
+#CONFIG_SHELL=y
+#CONFIG_SHELL_BACKEND_RTT=y
+#CONFIG_SHELL_BACKEND_SERIAL=n
 
-# Логирование через Shell/RTT
+# Если используется подсистема логирования Zephyr (LOG_INF/LOG_ERR)
 CONFIG_LOG=y
-CONFIG_LOG_MODE_DEFERRED=y
+CONFIG_LOG_BACKEND_RTT=y
+CONFIG_LOG_BACKEND_UART=n
+
+# Настройка буферов SEGGER RTT (опционально, под ваши нужды)
+CONFIG_SEGGER_RTT_MAX_NUM_UP_BUFFERS=2
+CONFIG_SEGGER_RTT_MAX_NUM_DOWN_BUFFERS=2
+CONFIG_SEGGER_RTT_BUFFER_SIZE_UP=1024
+CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=256
 
 # ==============================================================================
 # 1. БАЗОВАЯ ПЕРИФЕРИЯ МК (STM32F413)

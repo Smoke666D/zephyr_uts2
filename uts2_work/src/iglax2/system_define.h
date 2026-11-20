@@ -1,6 +1,7 @@
 #pragma once
 
-
+#define OUT_CTL_INIT_LEVEL              APPLICATION
+#define OUT_CTL_INIT_PRIOR              40
 #define SELF_TEST_INIT_LEVEL            APPLICATION
 #define SELF_TEST_INIT_PRIOR            90
 #define DIN_DEAMON_INIT_LEVEL           APPLICATION
@@ -10,6 +11,8 @@
 #define SERVER_INIT_LEVEL               POST_KERNEL
 #define SERVER_INIT_PRIOR               90
 
+
+#define OUT_CTL_K_WORK                COMMON_WORKER
 
 #define APP_WORKER_PRIORITY             7
 #define COMMON_WORKER_PRIORITY          4

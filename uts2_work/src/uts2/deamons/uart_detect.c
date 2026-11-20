@@ -9,6 +9,8 @@
 #include <zephyr/drivers/uart.h>
 #include "system_bus_model.h"
 #include "app_worker.h"
+#include <zephyr/drivers/spi.h>
+
 #include "system_define.h"
 
 LOG_MODULE_REGISTER(uart_detect, LOG_LEVEL_INF);

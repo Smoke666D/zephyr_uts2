@@ -11,7 +11,7 @@ extern const struct system_bus_handler __start_param_routes[];
 extern const struct system_bus_handler __stop_param_routes[];
 
 /* RAM-кэш указателей на структуры обработчиков в ROM */
-static const struct system_bus_handler *cache[SYSTEM_BUS_COUNT] __dtcm_bss_section;
+static const struct system_bus_handler *cache[SYSTEM_BUS_COUNT];// __dtcm_bss_section;
 
 /**
  * @brief Функция автоинициализации кэша (вызывается до старта планировщика)

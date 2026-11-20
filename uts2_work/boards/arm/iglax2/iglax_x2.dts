@@ -19,6 +19,46 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 	};
+	dout_contorl: dout_contorl {
+		compatible = "gpio-leds";
+
+		/* Пин включения питания метки №1 */
+		od1: od1 {
+			gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>;
+		};
+		/* Пин включения питания метки №2 */
+		od2: od2 {
+			gpios = <&gpiod 13 GPIO_ACTIVE_HIGH>;
+		};
+		od3: od3 {
+			gpios = <&gpiod 15 GPIO_ACTIVE_HIGH>;
+		};
+		od4: od4 {
+			gpios = <&gpiod 14 GPIO_ACTIVE_HIGH>;
+		};
+		od5: od5 {
+			gpios = <&gpioe 6 GPIO_ACTIVE_HIGH>;
+		};
+		od6: od6 {
+			gpios = <&gpiob 6 GPIO_ACTIVE_HIGH>;
+		};
+		od7: od7 {
+			gpios = <&gpiod 7 GPIO_ACTIVE_HIGH>;
+		};
+		od8: od8 {
+			gpios = <&gpiod 6 GPIO_ACTIVE_HIGH>;
+		};
+		od9: od9 {
+			gpios = <&gpioe 5 GPIO_ACTIVE_HIGH>;
+		};
+		od10: od10 {
+			gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>;
+		};
+		od11: od11 {
+			gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
+		};
+
+	};
 };
 
 &clk_hsi {
@@ -58,3 +98,4 @@
 &iwdg {
 	status = "disabled";
 };
+

@@ -6,8 +6,9 @@
  *  @author     Dymov Igor
  *
  *  @brief      Сервер парсера SCPI-команд для контрольно-измерительного стенда UTS2 (SEGGER RTT)
- *  @details    Обеспечивает прием и отправку команд через SEGGER RTT (Channel 0) 
+ *  @details    Обеспечивает прием и отправку команд через выделенный канал SEGGER RTT (Channel 1)
  *              и выполнение задач в едином потоке воркера (APPLICATION_WORKER).
+ *              Channel 0 оставлен для системных логов и printk.
  */
 
 /***************************************************************************************************
@@ -32,7 +33,10 @@
 /***************************************************************************************************
  *                                           DEFINITIONS
  **************************************************************************************************/
-#define SCPI_RTT_CHANNEL        0       // Канал 0 (стандартный терминал J-Link RTT)
+#define SCPI_RTT_CHANNEL        0       // Канал 1 (Канал 0 занят системной консолью/логами Zephyr)
+#define SCPI_RTT_UP_BUF_SIZE    512     // Размер буфера передачи (МК -> ПК)
+#define SCPI_RTT_DOWN_BUF_SIZE  256     // Размер буфера приема (ПК -> МК)
+
 #define SCPI_INPUT_BUF_LEN      256
 #define SCPI_ERROR_QUEUE_SIZE   16
 
@@ -54,6 +58,7 @@ static int           _scpi_server_init(void);
 static char                    scpi_input_buffer[SCPI_INPUT_BUF_LEN];
 static scpi_error_t            scpi_error_queue_data[SCPI_ERROR_QUEUE_SIZE];
 static scpi_t                  scpi_context;
+
 
 /* Отложенная задача для опроса RTT буфера в контексте APPLICATION_WORKER */
 static struct k_work_delayable scpi_rx_work;
@@ -78,6 +83,10 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "*OPC",                        .callback = scpi_cmd_opc            },     
     { .pattern = "*OPC?",                       .callback = scpi_cmd_opc_q          },   
 
+        // Управление выходами питания
+    { .pattern = "OUTPut:OD[:STATe]",        .callback = cmd_output_state        },
+    { .pattern = "OUTPut:OD[:STATe]?",       .callback = cmd_output_state_q      },    
+
     SCPI_CMD_LIST_END
 };
 
@@ -86,11 +95,12 @@ static const scpi_command_t scpi_commands[] =
  **************************************************************************************************/
 
 /**
- *  @brief      Прямая безопасная отправка строки клиенту из контекста асинхронной задачи
+ *  @brief      Прямая потокобезопасная отправка строки клиенту из контекста асинхронной задачи
  */
 void scpi_async_send_text(const char *text)
 {
-    if (text != NULL) {
+    if (text != NULL) 
+    {
         _scpi_write(&scpi_context, text, strlen(text));
     }
 }
@@ -100,13 +110,19 @@ void scpi_async_send_text(const char *text)
  **************************************************************************************************/
 
 /**
- *  @brief      Отправка данных клиенту напрямую через буфер SEGGER RTT
+ *  @brief      Отправка данных клиенту напрямую через буфер SEGGER RTT (Channel 1)
  */
 static size_t _scpi_write(scpi_t *_context, const char *_data, size_t _len) 
 {
     ARG_UNUSED(_context);
 
-    return SEGGER_RTT_Write(SCPI_RTT_CHANNEL, _data, _len);
+    if (_data == NULL || _len == 0) 
+    {
+        return 0;
+    }
+
+    size_t written = SEGGER_RTT_Write(SCPI_RTT_CHANNEL, _data, _len);
+    return written;
 }
 
 static int _scpi_error(scpi_t *_context, int_fast16_t _err) 
@@ -118,10 +134,10 @@ static int _scpi_error(scpi_t *_context, int_fast16_t _err)
 
     const char *err_desc = SCPI_ErrorTranslate(_err);
 
-    // 1. Системный лог (уйдет в UART консоль)
+    // 1. Системный лог (уйдет в Channel 0 RTT)
     printk("[SCPI ERROR] Code: %d, Description: %s\r\n", (int)_err, err_desc);
 
-    // 2. Ответ клиенту в RTT
+    // 2. Ответ клиенту в Channel 1 RTT (убедитесь, что указан размер)
     char err_msg[128];
     int len = snprintf(err_msg, sizeof(err_msg), "ERR: %d, \"%s\"\r\n", (int)_err, err_desc);
 
@@ -140,19 +156,18 @@ static scpi_result_t _scpi_reset(scpi_t *_context)
 }
 
 /**
- *  @brief      Обработчик воркера: вычитывает принятые байты из RTT и скармливает парсеру
+ *  @brief      Обработчик воркера: вычитывает все принятые байты из RTT и скармливает парсеру
  *  @note       Выполняется в контексте APPLICATION_WORKER
  */
 static void _scpi_rx_work_handler(struct k_work *_work)
 {
     ARG_UNUSED(_work);
-    uint8_t buffer[64];
+    uint8_t buffer[128];
     unsigned int bytes_read;
     bool has_data = false;
 
-    bytes_read = SEGGER_RTT_Read(SCPI_RTT_CHANNEL, buffer, sizeof(buffer));
-    // Выгребаем все доступные байты напрямую из Down-буфера RTT
-    if (bytes_read  > 0) 
+    // Выгребаем все доступные байты из Down-буфера Channel 1 за один проход
+    while ((bytes_read = SEGGER_RTT_Read(SCPI_RTT_CHANNEL, buffer, sizeof(buffer))) > 0) 
     {
         has_data = true;
         SCPI_Input(&scpi_context, (char *)buffer, bytes_read);
@@ -165,20 +180,21 @@ static void _scpi_rx_work_handler(struct k_work *_work)
 }
 
 /**
- *  @brief      Инициализация сервера SCPI поверх RTT и запуск поллера в воркере
+ *  @brief      Инициализация сервера SCPI поверх RTT (Channel 1) и запуск поллера в воркере
  */
 static int _scpi_server_init(void)
 {
-    // 1. Инициализация SEGGER RTT
-    SEGGER_RTT_Init();
+    
 
-    // 2. Инициализация контекста библиотеки libscpi
+    printk("\r\n--- SCPI RTT INIT ---\r\n");
+
+    // 3. Инициализация контекста библиотеки libscpi
     SCPI_Init(&scpi_context,
               scpi_commands,
               &scpi_interface,
               scpi_units_def,
               "Author-ALARM",           // Производитель (IDN1)
-              "IGLAX2",                   // Модель        (IDN2)
+              "IGLAX2",                 // Модель        (IDN2)
               "SN123456",               // Серийный номер(IDN3)
               "v1.0.0",                 // Прошивка      (IDN4)
               scpi_input_buffer,
@@ -186,14 +202,13 @@ static int _scpi_server_init(void)
               scpi_error_queue_data,
               SCPI_ERROR_QUEUE_SIZE);
 
-
     SCPI_RegSet(&scpi_context, SCPI_REG_ESR, ESR_PON);
 
-    // 3. Запуск периодического опроса RTT в очереди APPLICATION_WORKER
+    // 4. Запуск периодического опроса RTT в очереди APPLICATION_WORKER
     k_work_init_delayable(&scpi_rx_work, _scpi_rx_work_handler);
     app_worker_reschedule_submit(&scpi_rx_work, K_NO_WAIT, APPLICATION_WORKER);
 
     return 0;
 }
 
-//SYS_INIT(_scpi_server_init, APPLICATION, 80);
+SYS_INIT(_scpi_server_init, APPLICATION, 80);
