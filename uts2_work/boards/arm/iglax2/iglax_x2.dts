@@ -19,6 +19,33 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 	};
+
+	transistor_inputs: transistor-inputs {
+        compatible = "gpio-keys";
+        status = "okay";
+
+		gray_in: gray_in {
+            gpios = <&gpioe 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Transistor Input 1";
+        };
+        /* Первый вход (например, пин PA0) */
+        ign_in: ign_in {
+            gpios = <&gpioe 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Transistor Input 1";
+        };
+
+        /* Второй вход (например, пин PB5) */
+        in_ch3: in_ch3 {
+            gpios = <&gpioe 12 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Transistor Input 2";
+        };
+
+		in_ch4: in_ch4 {
+            gpios = <&gpioe 13 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Transistor Input 2";
+        };
+	};
+	
 	dout_contorl: dout_contorl {
 		compatible = "gpio-leds";
 
@@ -57,6 +84,16 @@
 		od11: od11 {
 			gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
 		};
+		pd_on_in3: pd_on_in3 {
+			gpios = <&gpioe 8 GPIO_ACTIVE_HIGH>;
+		};
+		pd_on_in4: pd_on_in4 {
+			gpios = <&gpioe 9 GPIO_ACTIVE_HIGH>;
+		};
+		out_gate: out_gate {
+			gpios = <&gpioe 7 GPIO_ACTIVE_HIGH>;
+		};
+
 
 	};
 };

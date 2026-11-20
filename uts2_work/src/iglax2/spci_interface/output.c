@@ -51,8 +51,10 @@ static const scpi_choice_def_t out_channel_choices[] =
     {"OD7", OD7},
     {"OD8", OD8},
     {"OD9", OD9},
-    {"OD10", OD10},
-    {"OD11", OD11},
+    {"OD10", OD10},    
+    {"PU_ON3", IN3_CONFIG},
+    {"PU_ON4", IN4_CONFIG},
+    {"OUT_P", OUT_P},    
     SCPI_CHOICE_LIST_END
 };
 

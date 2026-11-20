@@ -145,6 +145,9 @@ typedef struct server_request
         .queue = NULL, \
     }
 
+
+
+
 #define SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(id, chan_ptr, chan_type) \
     const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
         .bus_id = id, \
@@ -159,16 +162,16 @@ typedef struct server_request
  int serever_set_real(SYSTEM_BUS_ID id, float _val,    struct k_sem * sync, uint8_t * ret);
  
 
-#define SERVER_CH_SET_ASYC(id, val) _Generic((val), \
-        bool:       serever_set_bool(id, val, NULL, NULL), \
-        uint32_t:        serever_set_u32(id, val, NULL, NULL),  \
-        float:      serever_set_real(id, val, NULL, NULL) \
+#define SERVER_CH_SET_ASYC(id, val) _Generic((val),           \
+        bool:       serever_set_bool(id, val, NULL, NULL),    \
+        uint32_t:   serever_set_u32(id, val, NULL, NULL),     \
+        float:      serever_set_real(id, val, NULL, NULL)     \
     )
 
 #define SERVER_CH_SET_SYC(id, val, sync, ret) _Generic((val), \
-        bool:       serever_set_bool(id, val, sync, ret), \
-        uint32_t:        serever_set_u32(id, val, sync, ret),  \
-        float:   serever_set_real(id, val,  sync, ret) \
+        bool:       serever_set_bool(id, val, sync, ret),     \
+        uint32_t:   serever_set_u32(id, val, sync, ret),      \
+        float:      serever_set_real(id, val,  sync, ret)     \
     )
 
 

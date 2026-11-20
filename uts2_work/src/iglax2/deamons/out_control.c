@@ -15,7 +15,7 @@
 
 LOG_MODULE_REGISTER(input_control_module, LOG_LEVEL_INF);
 
-#define OUT_CONTROL_LINE_CNT 11
+#define OUT_CONTROL_LINE_CNT 14
 
 typedef struct out_control_line_msg 
 {
@@ -63,6 +63,9 @@ static const struct gpio_dt_spec out_switches[OUT_CONTROL_LINE_CNT] =
     GPIO_DT_SPEC_GET(DT_NODELABEL(od9), gpios),
     GPIO_DT_SPEC_GET(DT_NODELABEL(od10), gpios),
     GPIO_DT_SPEC_GET(DT_NODELABEL(od11), gpios),    
+    GPIO_DT_SPEC_GET(DT_NODELABEL(pd_on_in3), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(pd_on_in4), gpios),
+    GPIO_DT_SPEC_GET(DT_NODELABEL(out_gate),  gpios),        
 };
 
 
@@ -155,7 +158,9 @@ SERVER_OUT_CHANNEL_DEFINE(OD8, &out_control_chan, 7, BOOL_DATA);
 SERVER_OUT_CHANNEL_DEFINE(OD9, &out_control_chan, 8, BOOL_DATA);
 SERVER_OUT_CHANNEL_DEFINE(OD10, &out_control_chan, 9, BOOL_DATA);
 SERVER_OUT_CHANNEL_DEFINE(OD11, &out_control_chan, 10, BOOL_DATA);
-
+SERVER_OUT_CHANNEL_DEFINE(IN3_CONFIG, &out_control_chan, 11, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(IN4_CONFIG, &out_control_chan, 12, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OUT_P, &out_control_chan, 13, BOOL_DATA);
 
 
 /***************************************************************************************************
