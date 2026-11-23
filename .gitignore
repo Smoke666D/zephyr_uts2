@@ -3,3 +3,4 @@ uts2/build/
 uts2_work/build/
 logs/
 __pycache__/
+phyton_hil_tests/allure-results/

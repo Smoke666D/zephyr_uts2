@@ -10,50 +10,47 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
-	model = "STMicroelectronics STM32F413ZH-NUCLEO board";
+	model = "STMicroelectronics STM32F413VG board";
 	compatible = "st,igla-x2";
 
 	chosen {
-		//zephyr,console = &cdc_acm_uart0;
-		//zephyr,shell-uart = &cdc_acm_uart0;
+		zephyr,console = &cdc_acm_uart0;
+		zephyr,shell-uart = &cdc_acm_uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 	};
 
 	transistor_inputs: transistor-inputs {
-        compatible = "gpio-keys";
-        status = "okay";
+		compatible = "gpio-keys";
+		status = "okay";
 
 		gray_in: gray_in {
-            gpios = <&gpioe 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-            label = "Transistor Input 1";
-        };
-        /* Первый вход (например, пин PA0) */
-        ign_in: ign_in {
-            gpios = <&gpioe 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-            label = "Transistor Input 1";
-        };
+			gpios = <&gpioe 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Transistor Input 1";
+		};
 
-        /* Второй вход (например, пин PB5) */
-        in_ch3: in_ch3 {
-            gpios = <&gpioe 12 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-            label = "Transistor Input 2";
-        };
+		ign_in: ign_in {
+			gpios = <&gpioe 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Transistor Input 1";
+		};
+
+		in_ch3: in_ch3 {
+			gpios = <&gpioe 12 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Transistor Input 2";
+		};
 
 		in_ch4: in_ch4 {
-            gpios = <&gpioe 13 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-            label = "Transistor Input 2";
-        };
+			gpios = <&gpioe 13 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+			label = "Transistor Input 2";
+		};
 	};
-	
+
 	dout_contorl: dout_contorl {
 		compatible = "gpio-leds";
 
-		/* Пин включения питания метки №1 */
 		od1: od1 {
 			gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>;
 		};
-		/* Пин включения питания метки №2 */
 		od2: od2 {
 			gpios = <&gpiod 13 GPIO_ACTIVE_HIGH>;
 		};
@@ -93,8 +90,6 @@
 		out_gate: out_gate {
 			gpios = <&gpioe 7 GPIO_ACTIVE_HIGH>;
 		};
-
-
 	};
 };
 
@@ -131,8 +126,15 @@
 	status = "okay";
 };
 
-
 &iwdg {
 	status = "disabled";
 };
 
+zephyr_udc0: &usbotg_fs {
+	pinctrl-0 = <&usb_otg_fs_dm_pa11 &usb_otg_fs_dp_pa12>;
+	pinctrl-names = "default";
+	status = "okay";
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
