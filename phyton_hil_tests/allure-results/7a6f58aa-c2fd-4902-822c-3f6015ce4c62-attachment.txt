@@ -1,0 +1,4 @@
+RTT Logs preview:
+
+J-Link connection closed.
+SCPI bench connection closed.
