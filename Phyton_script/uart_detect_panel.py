@@ -281,6 +281,35 @@ def build_uart_detect_panel(ports_refs):
                 'JTAG ENABLE', value=False, on_change=handle_jtag_enable
             ).classes('text-white text-xs font-semibold')
 
+            def handle_usb1_enable(e):
+                state = 'ON' if e.value else 'OFF'
+                cmd = f'OUTP:MUX EN_USB_OUT1, {state}\r\n'
+                curr_shell = shell_ref.get('ser')
+                if curr_shell and curr_shell.is_open:
+                    curr_shell.write(cmd.encode('utf-8'))
+                    ui.notify(f'[USB1 EN] SCPI: {cmd.strip()}', type='info')
+                else:
+                    ui.notify('SCPI порт закрыт!', type='warning')
+                   
+            ui.checkbox(
+                'USB1', value=False, on_change=handle_usb1_enable
+            ).classes('text-white text-xs font-semibold')
+
+            def handle_usb_hub_enable(e):
+                state = 'ON' if e.value else 'OFF'
+                cmd = f'OUTP:MUX EN_USB_UART, {state}\r\n'
+                curr_shell = shell_ref.get('ser')
+                if curr_shell and curr_shell.is_open:
+                    curr_shell.write(cmd.encode('utf-8'))
+                    ui.notify(f'[USB_HUB EN] SCPI: {cmd.strip()}', type='info')
+                else:
+                    ui.notify('SCPI порт закрыт!', type='warning')
+
+            ui.checkbox(
+                'USB ENABLE', value=False, on_change=handle_usb_hub_enable
+            ).classes('text-white text-xs font-semibold')
+
+
             def handle_jtag_mux(e):
                 mux_val = e.value
                 cmd = f'OUTP:MUX:JTAG {mux_val}\r\n'

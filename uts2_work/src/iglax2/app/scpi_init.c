@@ -86,8 +86,6 @@ static const scpi_command_t scpi_commands[] =
         // Управление выходами питания
     { .pattern = "OUTPut:OD[:STATe]",        .callback = cmd_output_state        },
     { .pattern = "OUTPut:OD[:STATe]?",       .callback = cmd_output_state_q      },    
-    
-
     SCPI_CMD_LIST_END
 };
 

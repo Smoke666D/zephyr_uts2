@@ -6,13 +6,10 @@ CONFIG_CONSOLE=y
 CONFIG_RTT_CONSOLE=y
 CONFIG_UART_CONSOLE=n
 
-# Включаем Shell с бэкендом на RTT
-#CONFIG_SHELL=y
-#CONFIG_SHELL_BACKEND_RTT=y
-#CONFIG_SHELL_BACKEND_SERIAL=n
 
 # Если используется подсистема логирования Zephyr (LOG_INF/LOG_ERR)
 CONFIG_LOG=y
+CONFIG_LOG_MODE_IMMEDIATE=y
 CONFIG_LOG_BACKEND_RTT=y
 CONFIG_LOG_BACKEND_UART=n
 
@@ -23,81 +20,17 @@ CONFIG_SEGGER_RTT_BUFFER_SIZE_UP=1024
 CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=256
 
 # ==============================================================================
-# 1. БАЗОВАЯ ПЕРИФЕРИЯ МК (STM32F413)
-# ==============================================================================
-#CONFIG_ARM_MPU=y
-#CONFIG_GPIO=y
-#CONFIG_ADC=y
-#CONFIG_SERIAL=y
-
-# Классический CAN (без CAN-FD, так как на STM32F413 обычный bxCAN)
-#CONFIG_CAN=y
-
-# Внутренние датчики МК (выключены)
-#CONFIG_STM32_TEMP=n
-#CONFIG_STM32_VBAT=n
-#ONFIG_STM32_VREF=n
-
-# ==============================================================================
-# 2. SEGGER RTT: КОНСОЛЬ, SHELL И ЛОГИ (Всё в одном окне RTT Канал 0)
-# ==============================================================================
-#CONFIG_USE_SEGGER_RTT=y
-#CONFIG_SEGGER_RTT_BUFFER_SIZE_UP=2048
-#CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=1024
-
-# Перенаправляем printk() в RTT и отвязываем от UART/USB
-#CONFIG_RTT_CONSOLE=y
-#CONFIG_UART_CONSOLE=n
-
-# Включаем Shell ТОЛЬКО через RTT
-#CONFIG_SHELL=y
-#CONFIG_SHELL_BACKENDS=y
-#CONFIG_SHELL_BACKEND_RTT=y
-#CONFIG_SHELL_BACKEND_SERIAL=n
-#CONFIG_SHELL_CMDS=y
-
-# Включаем логирование. 
-# ВАЖНО: LOG_BACKEND_RTT должен быть "n", так как логи в RTT выводит сам Shell!
-#CONFIG_LOG=n
-#CONFIG_SHELL_LOG_BACKEND=y
-#CONFIG_LOG_BACKEND_RTT=y
-
-# ==============================================================================
 # 3. USB (Отдельный независимый канал CDC_ACM для ваших данных)
 # ==============================================================================
-#CONFIG_USB_DEVICE_STACK_NEXT=y
-#CONFIG_USBD_CDC_ACM_CLASS=y
-#CONFIG_UART_LINE_CTRL=y
-#CONFIG_UART_INTERRUPT_DRIVEN=y
 
-# ==============================================================================
-# 4. ФАЙЛОВАЯ СИСТЕМА И QSPI FLASH
-# ==============================================================================
-#CONFIG_FLASH=y
-#CONFIG_FLASH_MAP=y
-#CONFIG_FLASH_PAGE_LAYOUT=y
-#CONFIG_FLASH_STM32_QSPI=y
 
-#CONFIG_FILE_SYSTEM=y
-#CONFIG_FILE_SYSTEM_LITTLEFS=y
-#CONFIG_HEAP_MEM_POOL_SIZE=16384
+# Отключаем логи самого USB-стека, чтобы не засорять RTT
+CONFIG_USBD_LOG_LEVEL_OFF=y
+CONFIG_USBD_CDC_ACM_LOG_LEVEL_OFF=y
+CONFIG_UDC_DRIVER_LOG_LEVEL_OFF=y
 
-# ==============================================================================
-# 5. СЕТЬ И GSM-МОДЕМ (SIM7080 / SIM868)
-# ==============================================================================
-#CONFIG_NETWORKING=y
-#CONFIG_NET_NATIVE=y
-#CONFIG_NET_DRIVERS=y
-#CONFIG_NET_IPV4=y
-#CONFIG_NET_UDP=y
-#CONFIG_NET_TCP=y
-#CONFIG_NET_SOCKETS=y
-#CONFIG_NET_PPP=y
-#CONFIG_NET_L2_PPP=y
-
-#CONFIG_MODEM=y
-#CONFIG_MODEM_SIM7080=y
-#CONFIG_MODEM_SIMCOM_SIM7080_APN="internet"
-#CONFIG_MODEM_SHELL=y
-
-#CONFIG_TEST_RANDOM_GENERATOR=y
+# Свои VID/PID и названия для нового COM-порта
+CONFIG_CDC_ACM_SERIAL_VID=0x2fe3
+CONFIG_CDC_ACM_SERIAL_PID=0x0001
+CONFIG_CDC_ACM_SERIAL_MANUFACTURER_STRING="Igla"
+CONFIG_CDC_ACM_SERIAL_PRODUCT_STRING="Igla X2 USB Data"

@@ -27,14 +27,14 @@ def target(request, bench):
     
     # 1. Подаем питание на стенд
     bench.send("OUTP:POW:ALL 1")
-    time.sleep(1.0) 
+    time.sleep(0.2) 
     # 2. Включаем JTAG в мультиплексоре
     bench.send("OUTP:MUX:JTAG 1")
-    time.sleep(1.0)
+    time.sleep(0.2)
     bench.send("OUTP:MUX JTAG_MUX_EN, ON")
     
     # Небольшая пауза на инициализацию железа и старт процессора
-    time.sleep(1.0)
+    time.sleep(0.2)
     
     # 3. Теперь, когда питание и линии активны, инициализируем J-Link / RTT
     sn = request.config.getoption("--jlink-sn")
