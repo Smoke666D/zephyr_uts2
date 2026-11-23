@@ -137,3 +137,73 @@ zephyr_udc0: &usbotg_fs {
 	};
 };
 
+&pinctrl {
+	quadspi_clk_pb1: quadspi_clk_pb1 {
+		pinmux = <STM32_PINMUX('B', 1, AF9)>;
+		slew-rate = "very-high-speed";
+	};
+
+	quadspi_ncs_pc11: quadspi_ncs_pc11 {
+		pinmux = <STM32_PINMUX('C', 11, AF9)>;
+		bias-pull-up;
+		slew-rate = "very-high-speed";
+	};
+
+	quadspi_io0_pa6: quadspi_io0_pa6 {
+		pinmux = <STM32_PINMUX('A', 6, AF10)>;
+		bias-pull-up;
+		slew-rate = "very-high-speed";
+	};
+
+	quadspi_io1_pa7: quadspi_io1_pa7 {
+		pinmux = <STM32_PINMUX('A', 7, AF10)>;
+		bias-pull-up;
+		slew-rate = "very-high-speed";
+	};
+
+	quadspi_io2_pc4: quadspi_io2_pc4 {
+		pinmux = <STM32_PINMUX('C', 4, AF10)>;
+		bias-pull-up;
+		slew-rate = "very-high-speed";
+	};
+
+	quadspi_io3_pc5: quadspi_io3_pc5 {
+		pinmux = <STM32_PINMUX('C', 5, AF10)>;
+		bias-pull-up;
+		slew-rate = "very-high-speed";
+	};
+};
+
+&quadspi {
+	status = "okay";
+	pinctrl-0 = <&quadspi_clk_pb1 
+	             &quadspi_ncs_pc11 
+	             &quadspi_io0_pa6 
+	             &quadspi_io1_pa7 
+	             &quadspi_io2_pc4 
+	             &quadspi_io3_pc5>;
+	pinctrl-names = "default";
+
+    flash-id = <2>; 
+
+	mx25l128: qspi-nor-flash@0 {
+		compatible = "st,stm32-qspi-nor";
+		reg = <0>;                             /* Flash-память на Банке 1 */
+		qspi-max-frequency = <40000000>;      /* Частота тактирования (40 МГц) */
+		size = <134217728>;
+		jedec-id = [c2 20 18];                 /* JEDEC ID для MX25L12835F */
+		spi-bus-width = <4>;                   /* Режим Quad-SPI (4 линии данных) */
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			/* Раздел под LittleFS */
+			storage_partition: partition@0 {
+				label = "storage";
+				reg = <0x00000000 0x01000000>;
+			};
+		};
+	};
+};
