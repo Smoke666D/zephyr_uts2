@@ -19,12 +19,24 @@ CONFIG_SEGGER_RTT_MAX_NUM_DOWN_BUFFERS=2
 CONFIG_SEGGER_RTT_BUFFER_SIZE_UP=1024
 CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=256
 
+
+
 # ==============================================================================
 # 3. USB (Отдельный независимый канал CDC_ACM для ваших данных)
 # ==============================================================================
 # Активируем новый стек USB и автозапуск серийного порта
 
+# Новый USB Device стек
+CONFIG_USB_DEVICE_STACK_NEXT=y
+CONFIG_USBD_CDC_ACM_CLASS=y
 
+# Стандартная подсистема UART для работы с CDC как с обычным UART
+CONFIG_SERIAL=y
+CONFIG_UART_LINE_CTRL=y
+
+# Опционально: логи самого USB-стека (пойдут в ваш текущий RTT)
+CONFIG_USBD_LOG_LEVEL_WRN=y
+CONFIG_USBD_CDC_ACM_LOG_LEVEL_WRN=y
 # Отключаем логи самого USB-стека, чтобы не засорять RTT
 #CONFIG_USBD_LOG_LEVEL_OFF=y
 #CONFIG_USBD_CDC_ACM_LOG_LEVEL_OFF=y
@@ -35,3 +47,4 @@ CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=256
 #CONFIG_CDC_ACM_SERIAL_PID=0x0001
 #CONFIG_CDC_ACM_SERIAL_MANUFACTURER_STRING="Igla"
 #CONFIG_CDC_ACM_SERIAL_PRODUCT_STRING="Igla X2 USB Data"
+

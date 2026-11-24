@@ -211,3 +211,27 @@ static int _scpi_server_init(void)
 }
 
 SYS_INIT(_scpi_server_init, APPLICATION, 80);
+#include <zephyr/usb/usbd.h>
+#include <sample_usbd.h>
+
+static int usb_cdc_sys_init(void)
+{
+    struct usbd_context *sample_usbd;
+    int err;
+
+    /* Инициализация контекста и регистрация классов через хелпер из sample_usbd_init.c */
+    sample_usbd = sample_usbd_init_device(NULL);
+    if (sample_usbd == NULL) {
+        return -ENODEV;
+    }
+
+    /* Включаем USB-устройство (подтяжка D+) */
+    err = usbd_enable(sample_usbd);
+    if (err) {
+        return err;
+    }
+
+    return 0;
+}
+
+SYS_INIT(usb_cdc_sys_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
