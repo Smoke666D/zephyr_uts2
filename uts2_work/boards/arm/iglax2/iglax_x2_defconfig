@@ -34,17 +34,12 @@ CONFIG_USBD_CDC_ACM_CLASS=y
 CONFIG_SERIAL=y
 CONFIG_UART_LINE_CTRL=y
 
-# Опционально: логи самого USB-стека (пойдут в ваш текущий RTT)
-CONFIG_USBD_LOG_LEVEL_WRN=y
-CONFIG_USBD_CDC_ACM_LOG_LEVEL_WRN=y
-# Отключаем логи самого USB-стека, чтобы не засорять RTT
-#CONFIG_USBD_LOG_LEVEL_OFF=y
-#CONFIG_USBD_CDC_ACM_LOG_LEVEL_OFF=y
-#CONFIG_UDC_DRIVER_LOG_LEVEL_OFF=y
+# Отключаем логи ядра нового USB-стека
+CONFIG_USBD_LOG_LEVEL_OFF=y
+# Отключаем логи аппаратного драйвера контроллера (STM32 UDC)
+CONFIG_UDC_DRIVER_LOG_LEVEL_OFF=y
+# Отключаем логи класса CDC ACM
+CONFIG_USBD_CDC_ACM_LOG_LEVEL_OFF=y
 
-# Свои VID/PID и названия для нового COM-порта
-#CONFIG_CDC_ACM_SERIAL_VID=0x2fe3
-#CONFIG_CDC_ACM_SERIAL_PID=0x0001
-#CONFIG_CDC_ACM_SERIAL_MANUFACTURER_STRING="Igla"
-#CONFIG_CDC_ACM_SERIAL_PRODUCT_STRING="Igla X2 USB Data"
+
 
