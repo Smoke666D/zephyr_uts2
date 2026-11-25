@@ -262,15 +262,10 @@ static void _process_fast_measurements(ina_batch_msg_t *_batch)
     zbus_chan_pub(&ina_power_chan, &power, K_NO_WAIT);
 }
 
-static K_SEM_DEFINE(new_cur_sens_run, 0, 1);
 
-static void cur_sens_timer_expiry(struct k_timer *timer)
-{
 
-    k_sem_give(&new_cur_sens_run);
-}
 
-static K_TIMER_DEFINE(cur_sens_timer, cur_sens_timer_expiry, NULL);
+static K_TIMER_DEFINE(cur_sens_timer, NULL , NULL);
 
 /**
  * @brief Главный поток планировщика
@@ -286,8 +281,7 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
             LOG_ERR("Devise %s not ready", devices[i]->name);
             return;
         }
-    }
-    k_sem_reset(&new_cur_sens_run);
+    }    
     k_timer_start(&cur_sens_timer, K_MSEC(1), K_MSEC(1));
 
     LOG_INF("Current sens deamon init done!");
@@ -296,13 +290,11 @@ static void _rti_poller_thread(void *_p1, void *_p2, void *_p3)
     memset(&batch, 0, sizeof(batch)); 
 
     while (1) 
-    {  
-        k_sem_take(&new_cur_sens_run,K_MSEC(1));
-        // 1. Быстрый опрос U и I каждые FAST_POLL_INTERVAL_MS (10 мс)
-        _process_fast_measurements(&batch);
-
-        k_sem_reset(&new_cur_sens_run);
+    {          
+        k_timer_status_sync(&cur_sens_timer);
        
+        _process_fast_measurements(&batch);
+ 
     }
 }
 

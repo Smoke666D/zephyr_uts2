@@ -234,4 +234,4 @@ static int usb_cdc_sys_init(void)
     return 0;
 }
 
-SYS_INIT(usb_cdc_sys_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+//SYS_INIT(usb_cdc_sys_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
