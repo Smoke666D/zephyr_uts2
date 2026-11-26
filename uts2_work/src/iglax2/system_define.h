@@ -12,6 +12,8 @@
 #define SPCI_CAN_INIT_PRIOR             51
 #define SERVER_INIT_LEVEL               POST_KERNEL
 #define SERVER_INIT_PRIOR               90
+#define ACC_DEAMON_INIT_LEVEL           APPLICATION
+#define ACC_DEAMON_INIT_PRIOR           80
 
 #define DINPUT_K_WORK                   COMMON_WORKER  
 #define OUT_CTL_K_WORK                  COMMON_WORKER

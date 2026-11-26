@@ -141,75 +141,22 @@ zephyr_udc0: &usbotg_fs {
     };
 };
 
-&pinctrl {
-	quadspi_clk_pb1: quadspi_clk_pb1 {
-		pinmux = <STM32_PINMUX('B', 1, AF9)>;
-		slew-rate = "very-high-speed";
-	};
+&spi2 {
+    status = "okay";
+    /* Настраиваем пины: SCK (PA5), MISO (PA6), MOSI (PA7) */
+    pinctrl-0 = <&spi2_sck_pb10 &spi2_miso_pb14 &spi2_mosi_pb15>;
+    pinctrl-names = "default";
+    
+    /* PA4 используем как программный выбор кристалла CS (Chip Select) */
+    cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
 
-	quadspi_ncs_pc11: quadspi_ncs_pc11 {
-		pinmux = <STM32_PINMUX('C', 11, AF9)>;
-		bias-pull-up;
-		slew-rate = "very-high-speed";
-	};
-
-	quadspi_io0_pa6: quadspi_io0_pa6 {
-		pinmux = <STM32_PINMUX('A', 6, AF10)>;
-		bias-pull-up;
-		slew-rate = "very-high-speed";
-	};
-
-	quadspi_io1_pa7: quadspi_io1_pa7 {
-		pinmux = <STM32_PINMUX('A', 7, AF10)>;
-		bias-pull-up;
-		slew-rate = "very-high-speed";
-	};
-
-	quadspi_io2_pc4: quadspi_io2_pc4 {
-		pinmux = <STM32_PINMUX('C', 4, AF10)>;
-		bias-pull-up;
-		slew-rate = "very-high-speed";
-	};
-
-	quadspi_io3_pc5: quadspi_io3_pc5 {
-		pinmux = <STM32_PINMUX('C', 5, AF10)>;
-		bias-pull-up;
-		slew-rate = "very-high-speed";
-	};
-};
-
-&quadspi {
-	status = "okay";
-	pinctrl-0 = <&quadspi_clk_pb1
-	             &quadspi_ncs_pc11
-	             &quadspi_io0_pa6
-	             &quadspi_io1_pa7
-	             &quadspi_io2_pc4
-	             &quadspi_io3_pc5>;
-	pinctrl-names = "default";
-
-	/* Банк 2 (соответствует пинам PC11, PA6, PA7, PC4, PC5) */
-	flash-id = <2>;
-
-	mx25l128: qspi-nor-flash@0 {
-		compatible = "st,stm32-qspi-nor";
-		reg = <0>;
-		qspi-max-frequency = <10000000>;
-		size = <DT_SIZE_M(128)>; /* В битах: 128 Мбит = 16 МБ */
-		jedec-id = [c2 20 18];
-		spi-bus-width = <4>;
-		/* Для MX25L12835F рекомендуется явно указать способ включения Quad-режима */
-		quad-enable-requirements = "S1B6";
-
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			storage_partition: partition@0 {
-				label = "storage";
-				reg = <0x00000000 DT_SIZE_M(16)>; /* В байтах: 16 МБ */
-			};
-		};
-	};
+    lis3dh: lis3dh@0 {
+        compatible = "st,lis2dh"; /* Zephyr управляет LIS3DH через драйвер LIS2DH */
+        reg = <0>;
+        spi-max-frequency = <10000000>; /* Максимальная частота SPI для датчика (10 МГц) */
+        
+        /* Указываем пин прерывания INT1 на PD2 */
+        irq-gpios = <&gpioa 15 GPIO_ACTIVE_HIGH>; 
+        label = "LIS3DH";
+    };
 };

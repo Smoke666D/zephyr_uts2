@@ -1,4 +1,9 @@
 
+# Включаем аппаратный математический сопроцессор (Hardware FPU)
+CONFIG_FPU=y
+# Включаем сохранение контекста fpu 
+CONFIG_FPU_SHARING=y
+
 # Включаем поддержку SEGGER RTT
 CONFIG_USE_SEGGER_RTT=y
 # Переводим стандартный вывод (printk) и консоль в RTT (займет Channel 0)
@@ -44,9 +49,16 @@ CONFIG_SEGGER_RTT_BUFFER_SIZE_DOWN=256
 # Отключаем логи класса CDC ACM
 #CONFIG_USBD_CDC_ACM_LOG_LEVEL_OFF=y
 
+CONFIG_CBPRINTF_FP_SUPPORT=y
+CONFIG_PICOLIBC_IO_FLOAT=y
 
+#CONFIG_FLASH=y
+#CONFIG_FLASH_MAP=y
+#CONFIG_FLASH_PAGE_LAYOUT=y
+#CONFIG_FLASH_LOG_LEVEL_INF=y
 
-CONFIG_FLASH=y
-CONFIG_FLASH_MAP=y
-CONFIG_FLASH_PAGE_LAYOUT=y
-CONFIG_FLASH_LOG_LEVEL_INF=y
+# --- SPI и Акселерометр ---
+CONFIG_SPI=y
+CONFIG_SENSOR=y
+CONFIG_LIS2DH=y
+CONFIG_LIS2DH_TRIGGER_GLOBAL_THREAD=y
