@@ -135,6 +135,14 @@ typedef struct server_request
         .queue = NULL, \
     }
 
+#define SERVER_SETTING_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
+    const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
+        .bus_id = id, \
+        .channel = chan_ptr, \
+        .channel_type = chan_type, \
+        .system_index = index, \
+        .queue = NULL, \
+    }
 
 #define SERVER_OUT_CHANNEL_DEFINE(id, chan_ptr, index, chan_type) \
     const struct system_bus_handler __attribute__((section("param_routes"), used)) route_##id = { \
@@ -174,6 +182,15 @@ typedef struct server_request
         float:      serever_set_real(id, val,  sync, ret)     \
     )
 
+int bus_set_float(SYSTEM_BUS_ID id, float _val);
+int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
+
+
+
+#define SERVER_CH_SET(id, val) _Generic((val),\
+        uint32_t:   bus_set_u32(id, val),     \
+        float:      bus_set_float(id, val)    \
+    )
 
 int server_get_real_fast(SYSTEM_BUS_ID id, float * _val);
 

@@ -83,10 +83,14 @@ static const scpi_command_t scpi_commands[] =
     { .pattern = "*OPC",                        .callback = scpi_cmd_opc            },     
     { .pattern = "*OPC?",                       .callback = scpi_cmd_opc_q          },   
 
-        // Управление выходами питания
-    { .pattern = "OUTPut:OD[:STATe]",        .callback = cmd_output_state           },
-    { .pattern = "OUTPut:OD[:STATe]?",       .callback = cmd_output_state_q         },   
+    // Управление выходами питания
+    { .pattern = "OUTPut:OD[:STATe]",           .callback = cmd_output_state        },
+    { .pattern = "OUTPut:OD[:STATe]?",          .callback = cmd_output_state_q      },   
     { .pattern = "SENSe:ACCeleration[:DATA]?",  .callback = cmd_sense_accel_q,      },
+    { .pattern = "INPut:DIN[:STATe]?",          .callback = cmd_input_din_state_q,  },
+    { .pattern = "INPut:DIN:FILTer",            .callback = cmd_input_din_filter,   },
+    { .pattern = "INPut:DIN:PULLup",     .callback = cmd_input_din_pullup,          }, 
+    { .pattern = "INPut:DIN:PULLup?",    .callback = cmd_input_din_pullup_q,        }, 
     SCPI_CMD_LIST_END
 };
 

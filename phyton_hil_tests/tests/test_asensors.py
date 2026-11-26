@@ -8,7 +8,7 @@ class TestAccelerometer:
 
     @allure.step("Запрос и проверка показаний акселерометра через RTT")
     def test_accelerometer_axes_rtt(self, target):
-        time.sleep(0.1)
+        
         
         with allure.step("1. Очистка буфера и отправка команды 'SENS:ACC?' на плату"):
             # Очищаем старый мусор из RTT-буфера

@@ -15,7 +15,24 @@
 
 LOG_MODULE_REGISTER(input_control_module, LOG_LEVEL_INF);
 
-#define OUT_CONTROL_LINE_CNT 14
+typedef enum
+{
+    OUTPUT_OD1              = 0,
+    OUTPUT_OD2              = 1,
+    OUTPUT_OD3              = 2,
+    OUTPUT_OD4              = 3,
+    OUTPUT_OD5              = 4,
+    OUTPUT_OD6              = 5,
+    OUTPUT_OD7              = 6,
+    OUTPUT_OD8              = 7,
+    OUTPUT_OD9              = 8,
+    OUTPUT_OD10             = 9,
+    OUTPUT_OD11             = 10,    
+    OUTPUT_IN3_PU_ON        = 11,
+    OUTPUT_IN4_PU_ON        = 12,
+    OUTPUT_P                = 13,
+    OUT_CONTROL_LINE_CNT    = 14,
+} out_names_t;
 
 typedef struct out_control_line_msg 
 {
@@ -103,6 +120,7 @@ static void  _pwr_ctl_update_handler(struct k_work *_work)
             {
                 cache_enable_state.state[_ch_id] = req.value.sd_bool;
                 gpio_pin_set_dt(&out_switches[_ch_id], cache_enable_state.state[_ch_id] ? 1 : 0); 
+                
             }
             zbus_chan_pub(&out_control_chan, &cache_enable_state, K_MSEC(2));            
         }        
@@ -146,21 +164,20 @@ static int _power_control_init(void)
 
 SYS_INIT(_power_control_init, OUT_CTL_INIT_LEVEL,  OUT_CTL_INIT_PRIOR);
 
-
-SERVER_OUT_CHANNEL_DEFINE(OD1, &out_control_chan, 0, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD2, &out_control_chan, 1, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD3, &out_control_chan, 2, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD4, &out_control_chan, 3, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD5, &out_control_chan, 4, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD6, &out_control_chan, 5, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD7, &out_control_chan, 6, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD8, &out_control_chan, 7, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD9, &out_control_chan, 8, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD10, &out_control_chan, 9, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD11, &out_control_chan, 10, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(IN3_CONFIG, &out_control_chan, 11, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(IN4_CONFIG, &out_control_chan, 12, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OUT_P, &out_control_chan, 13, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD1,       &out_control_chan, OUTPUT_OD1, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD2,       &out_control_chan, OUTPUT_OD2, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD3,       &out_control_chan, OUTPUT_OD3, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD4,       &out_control_chan, OUTPUT_OD4, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD5,       &out_control_chan, OUTPUT_OD5, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD6,       &out_control_chan, OUTPUT_OD6, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD7,       &out_control_chan, OUTPUT_OD7, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD8,       &out_control_chan, OUTPUT_OD8, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD9,       &out_control_chan, OUTPUT_OD9, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD10,      &out_control_chan, OUTPUT_OD10, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD11,      &out_control_chan, OUTPUT_OD11, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(IN3_PU_ON, &out_control_chan, OUTPUT_IN3_PU_ON, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(IN4_PU_ON, &out_control_chan, OUTPUT_IN4_PU_ON, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OUT_P,     &out_control_chan, OUTPUT_P, BOOL_DATA);
 
 
 /***************************************************************************************************

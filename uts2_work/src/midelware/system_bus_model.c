@@ -320,7 +320,13 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
 
     return 0;
 }
+int bus_set_float(SYSTEM_BUS_ID id, float _val)
+{
 
+ 
+
+    return 0;
+}
 
 /**
  * @brief Установить (в единицу) конкретный бит (0..31) по системному ID
