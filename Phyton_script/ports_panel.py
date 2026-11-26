@@ -69,7 +69,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                         ' px-3 rounded shadow whitespace-nowrap'
                     )
 
-            # --- 2. Карточка SCPI / Команды (250 000 бод) ---
+            # --- 2. Карточка SCPI / Команды (115 200 бод) ---
             with ui.card().classes(
                 'bg-slate-700/50 p-2 flex-1 rounded border border-slate-600'
             ):
@@ -88,7 +88,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                         .classes('w-28 bg-slate-700 rounded text-xs')
                     )
 
-                    def toggle_shell():
+                    def toggle_shell(trigger_callback=True):
                         curr = shell_ref.get('ser')
                         if curr and getattr(curr, 'is_open', False):
                             try:
@@ -103,18 +103,22 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                             try:
                                 p_name = shell_select.value
                                 if not p_name or p_name == 'Нет портов':
-                                    raise ValueError('Порт не выбран!')                                
+                                    raise ValueError('Порт не выбран!')
                                 shell_ref['ser'] = serial.Serial(
                                     p_name, baudrate=115200, timeout=0.05
                                 )
                                 shell_btn.text = 'Закрыть'
                                 shell_btn.classes(remove='bg-emerald-600', add='bg-red-600')
                                 ui.notify(f'SCPI открыт на {p_name} (115,2 кбод)', type='positive')
+
+                                # При ручном открытии запускаем синхронизацию (UID + OUTP:POW?)
+                                if trigger_callback and on_device_connected:
+                                    ui.timer(0.15, on_device_connected, once=True)
                             except Exception as e:
                                 shell_ref['ser'] = None
                                 ui.notify(f'Ошибка открытия SCPI: {e}', type='negative')
 
-                    shell_btn = ui.button('Открыть', on_click=toggle_shell).classes(
+                    shell_btn = ui.button('Открыть', on_click=lambda: toggle_shell(True)).classes(
                         'bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold'
                         ' py-1.5 px-3 rounded shadow whitespace-nowrap'
                     )
@@ -142,7 +146,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
 
                 async def global_auto_scan():
                     ui.notify(
-                        'Автопоиск портов (SCPI 250k *IDN? + Телеметрия)...', type='info'
+                        'Автопоиск портов (SCPI 115,2k *IDN? + Телеметрия)...', type='info'
                     )
                     current_ports = get_available_ports()
                     tel_select.options = current_ports
@@ -173,7 +177,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                             except Exception:
                                 pass
 
-                        # Поиск SCPI порта по запросу *IDN? на скорости 250 000 бод
+                        # Поиск SCPI порта по запросу *IDN? на скорости 115 200 бод
                         if not found_shell:
                             try:
                                 s = serial.Serial(p_name, baudrate=115200, timeout=0.2)
@@ -209,7 +213,8 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                             shell_ref.get('ser')
                             and getattr(shell_ref['ser'], 'is_open', False)
                         ):
-                            toggle_shell()
+                            # Передаем False, чтобы коллбэк вызвался ровно один раз после *RST
+                            toggle_shell(trigger_callback=False)
 
                         curr_scpi = shell_ref.get('ser')
                         if curr_scpi and getattr(curr_scpi, 'is_open', False):
@@ -232,7 +237,7 @@ def build_ports_panel(ports_refs, on_device_connected=None):
                                 on_device_connected()
                     else:
                         ui.notify(
-                            'SCPI порт (Author-ALARM,UST2) не найден на 250 кбод!', type='warning'
+                            'SCPI порт (Author-ALARM,UST2) не найден на 115,2 кбод!', type='warning'
                         )
 
                 ui.button('Автопоиск портов', on_click=global_auto_scan).classes(

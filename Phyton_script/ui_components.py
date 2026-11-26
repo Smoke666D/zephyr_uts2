@@ -15,6 +15,7 @@ from sensors_panel import build_sensors_panel
 from system_panel import build_system_panel, read_all_uids_async
 from uart_detect_panel import build_uart_detect_panel
 from iv_curve_panel import build_iv_curve_panel
+from power_panel import build_power_panel, sync_power_states_async
 
 can_logs_dict = {}
 lin_logs_dict = {}
@@ -80,6 +81,12 @@ def build_dashboard(ports_refs, ui_labels):
         #Система: UID, SN, HW, USER (system_panel.py)
         system_callbacks['read_all_uids'] = lambda: read_all_uids_async(shell_ref)
         build_system_panel(ports_refs)
+        
+        async def on_scpi_ready():
+          if 'read_all_uids' in system_callbacks:
+            await system_callbacks['read_all_uids']()
+          await asyncio.sleep(0.05)
+          await sync_power_states_async(shell_ref)
 
     container.make_sortable()
     return can_logs_dict, lin_logs_dict, raw_logs_dict
