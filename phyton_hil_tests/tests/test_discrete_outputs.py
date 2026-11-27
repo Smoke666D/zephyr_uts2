@@ -10,23 +10,26 @@ class TestDiscreteOutputs:
     def setup_teardown_initial_state(self, bench, target):
         """Сброс состояния стенда и DUT в исходное (пакетно)"""
         # Сброс выходов стенда в LOW одним пакетом
-        bench.send("OUTP:DOUT 1, LOW; DOUT 2, LOW; DOUT 3, LOW; DOUT 4, LOW; DOUT 5, LOW")
+        bench.send("OUTP:DOUT 1, LOW; DOUT 2, LOW; DOUT 3, LOW; DOUT 4, LOW; DOUT 5, LOW;")
+        bench.send("OUTP:DOUT 6, LOW; DOUT 7, LOW; DOUT 8, LOW; DOUT 9, LOW; DOUT 10, LOW; DOUT 11, LOW;")
         
         # Сброс всех OD выходов DUT в OFF одним пакетом по RTT
-        target.send_cmd("OUTPut:OD OD1, OFF; OD2, OFF; OD3, OFF; OD4, OFF; OD5, OFF")
+        target.send_cmd("CAN:STAT 1,OFF")
+        target.send_cmd("CAN:STAT 2,OFF")
+        target.send_cmd("CAN:STAT 3,OFF")
         
         time.sleep(0.1)
+        target.send_cmd("OUTPut:OD OD7, OFF; OD OD8, OFF; OD OD9, OFF; OD OD10, OFF; OD OD11, OFF; OD LIN_BREAK, ON;")
+        time.sleep(0.1)
+        target.send_cmd("OUTPut:OD LIN_SLEEP, ON; OD CAN1_STB, ON; OD CAN2_STB, ON; OD CAN3_STB, ON;")
         yield
-        
-        # Teardown
-        bench.send("OUTP:DOUT 1, LOW; DOUT 2, LOW; DOUT 3, LOW; DOUT 4, LOW; DOUT 5, LOW")
-        target.send_cmd("OUTPut:OD OD1, OFF; OD2, OFF; OD3, OFF; OD4, OFF; OD5, OFF")
+                        
 
     @allure.step("Шаг 1. Проверка исходного состояния (все LOW, все OFF)")
     def test_step1_baseline(self, bench, target):
         with allure.step("1.1 Пакетная установка всех выходов стенда в LOW, выключение DUT OD"):
             bench.send("OUTP:DOUT 1, LOW; DOUT 2, LOW; DOUT 3, LOW; DOUT 4, LOW; DOUT 5, LOW")
-            target.send_cmd("OUTPut:OD OD1, OFF; OD2, OFF; OD3, OFF; OD4, OFF; OD5, OFF")
+            target.send_cmd("OUTPut:OD OD1, OFF; OD OD2, OFF; OD OD3, OFF; OD OD4, OFF; OD OD5, OFF")
             time.sleep(0.05)
 
         with allure.step("1.2 Проверка общего тока утечки (SENS:CURR? BRD_HIGH < 1mA)"):
@@ -45,23 +48,26 @@ class TestDiscreteOutputs:
 
     @allure.step("Шаг 2. Бегущая единица со стенда (проверка обратной связи AIN)")
     def test_step2_running_one_from_bench(self, bench):
-        for active_channel in range(1, 6):
+        for active_channel in range(1, 12):
             with allure.step(f"2.1 Пакетная установка HIGH для канала {active_channel}, остальные LOW"):
                 cmd_parts = []
-                for i in range(1, 6):
+                for i in range(1, 12):
                     state = "HIGH" if i == active_channel else "LOW"
                     cmd_parts.append(f"DOUT {i}, {state}")
                 
                 packet_cmd = "OUTP:" + "; ".join(cmd_parts)
-                bench.send(packet_cmd)
-                time.sleep(0.02)
+                bench.send(packet_cmd)               
+                time.sleep(0.02)                
 
             with allure.step(f"2.2 Проверка токов и напряжений для активного канала {active_channel}"):
                 curr_str = bench.query("SENS:CURR? BRD_HIGH")
                 current_ma = float(curr_str) * 1000.0
-                assert current_ma < 2.0, f"Ток на шаге канала {active_channel} превысил 2мА: {current_ma:.3f}мА"
-
-                volt_str = bench.query("SENSe:VOLTage? AIN_AO1, AIN_AO2, AIN_AO3, AIN_AO4, AIN_AO5")
+                if i < 6:
+                    assert current_ma < 2.0, f"Ток на шаге канала {active_channel} превысил 2мА: {current_ma:.3f}мА"
+                else:
+                    assert current_ma < 3.0, f"Ток на шаге канала {active_channel} превысил 3мА: {current_ma:.3f}мА"
+                
+                volt_str = bench.query("SENSe:VOLTage? AIN_AO1, AIN_AO2, AIN_AO3, AIN_AO4, AIN_AO5, AIN_AO6, AIN_AO7, AIN_AO8, AIN_AO9, AIN_AO10, AIN_AO11 ")
                 voltages = [float(v.strip()) for v in volt_str.split(",")]
 
                 for idx, volt in enumerate(voltages, start=1):
@@ -72,10 +78,10 @@ class TestDiscreteOutputs:
 
     @allure.step("Шаг 3. Проверка коммутации Open Drain со стороны DUT (поштучно через RTT)")
     def test_step3_dut_od_switching(self, bench, target):
-        for ch in range(1, 6):
+        for ch in range(1, 12):
             with allure.step(f"3.1 Пакетная настройка стенда: линия {ch} в HIGH, остальные в LOW"):
                 cmd_parts = []
-                for i in range(1, 6):
+                for i in range(1, 12):
                     state = "HIGH" if i == ch else "LOW"
                     cmd_parts.append(f"DOUT {i}, {state}")
                 
@@ -104,4 +110,6 @@ class TestDiscreteOutputs:
                 time.sleep(0.02)
 
                 v_restored = float(bench.query(f"SENSe:VOLTage? AIN_AO{ch}"))
-                assert v_restored > 11.0, f"Напряжение на AIN_AO{ch} не восстановилось после выключения OD: {v_restored}В"
+                assert v_restored > 11.0, f"Напряжение на AIN_AO{ch} не восстановилось после выключения OD: {v_restored}В"            
+                
+    

@@ -178,28 +178,20 @@ scpi_result_t cmd_can_mode(scpi_t *context)
 /* ========================================================================= */
 scpi_result_t cmd_can_state(scpi_t *context)
 {
-  /*  int32_t ch;
+    int32_t ch;
     scpi_bool_t state;
     if (!SCPI_ParamInt32(context, &ch, TRUE)) return SCPI_RES_ERR;
-    if (ch < 1 || ch > CAN_CH_COUNT) {
+    if (ch < 1 || ch > CAN_CH_COUNT) 
+    {
         SCPI_ErrorPush(context, SCPI_ERROR_DATA_OUT_OF_RANGE);
         return SCPI_RES_ERR;
     }
-
     if (!SCPI_ParamBool(context, &state, TRUE)) return SCPI_RES_ERR;
 
-    const struct device *dev = can_devs[ch - 1];
-    if (dev == NULL || !device_is_ready(dev)) {
-        SCPI_ErrorPush(context, SCPI_ERROR_HARDWARE_ERROR);
-        return SCPI_RES_ERR;
-    }
+    SYSTEM_BUS_ID state_ch[3] = { CAN1_STATE,CAN2_STATE,CAN3_STATE};
 
-    int err = state ? can_start(dev) : can_stop(dev);
-    if (err != 0 && err != -EALREADY) {
-        SCPI_ErrorPush(context, SCPI_ERROR_EXECUTION_ERROR);
-        return SCPI_RES_ERR;
-    }
-*/
+    SERVER_CH_SET(state_ch[ch-1],(bool)state);
+
     return SCPI_RES_OK;
 }
 

@@ -184,12 +184,13 @@ typedef struct server_request
 
 int bus_set_float(SYSTEM_BUS_ID id, float _val);
 int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val);
-
+int bus_set_bool(SYSTEM_BUS_ID id, bool _val);
 
 
 #define SERVER_CH_SET(id, val) _Generic((val),\
         uint32_t:   bus_set_u32(id, val),     \
-        float:      bus_set_float(id, val)    \
+        float:      bus_set_float(id, val),    \
+        bool:       bus_set_bool(id, val)     \
     )
 
 int server_get_real_fast(SYSTEM_BUS_ID id, float * _val);

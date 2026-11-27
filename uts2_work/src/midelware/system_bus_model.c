@@ -320,6 +320,27 @@ int bus_set_u32(SYSTEM_BUS_ID id, uint32_t _val)
 
     return 0;
 }
+
+int bus_set_bool(SYSTEM_BUS_ID id, bool _val)
+{
+    const struct system_bus_handler *handler;
+    void *raw_msg;
+
+    if (!_validate_and_claim_handler(id, BOOL_DATA,&handler, &raw_msg)) {
+        return -ENODEV;
+    }
+
+    bool *msg = (bool *)raw_msg;
+    msg[handler->system_index] = _val;
+
+    // Освобождаем канал и уведомляем подписчиков Zbus
+    zbus_chan_finish(handler->channel);
+    zbus_chan_notify(handler->channel, K_NO_WAIT);
+
+    return 0;
+
+}
+
 int bus_set_float(SYSTEM_BUS_ID id, float _val)
 {
 

@@ -2,16 +2,37 @@ from nicegui import ui
 
 
 def build_can_panel(ports_refs, can_logs_dict):
-    """Строит блок из 3 интерфейсов CAN (Classic/CANFD, выбор скоростей, логирование, отправка)"""
+    """Строит блок из 3 интерфейсов CAN (вкл/выкл, Classic/CANFD, выбор скоростей, логирование, отправка)"""
     shell_ref = ports_refs['shell']
 
     ui.label('Интерфейсы CAN (1-3)').classes('text-sm font-bold text-sky-300 mt-3')
 
     for can_idx in range(1, 4):
         with ui.card().classes('bg-slate-800 p-2 w-full cursor-grab'):
-            ui.label(f'CAN Интерфейс {can_idx}').classes(
-                'text-xs font-semibold text-yellow-300 mb-1'
-            )
+            # Шапка карточки: название и чекбокс состояния контроллера
+            with ui.row().classes('w-full justify-between items-center mb-1'):
+                ui.label(f'CAN Интерфейс {can_idx}').classes(
+                    'text-xs font-semibold text-yellow-300'
+                )
+
+                def make_can_stat_handler(c_idx):
+                    def handler(e):
+                        state = 'ON' if e.value else 'OFF'
+                        cmd = f'CAN:STAT {c_idx}, {state}\r\n'
+                        curr_shell = shell_ref.get('ser')
+                        if curr_shell and getattr(curr_shell, 'is_open', False):
+                            curr_shell.write(cmd.encode('utf-8'))
+                            ui.notify(f'[CAN{c_idx}] SCPI: {cmd.strip()}', type='info')
+                        else:
+                            ui.notify('SCPI порт закрыт!', type='warning')
+
+                    return handler
+
+                ui.checkbox(
+                    'Контроллер включен',
+                    value=False,
+                    on_change=make_can_stat_handler(can_idx),
+                ).props('dense').classes('text-white text-xs font-medium')
 
             with ui.row().classes('w-full gap-2 items-center'):
                 can_speed_data = ui.select(
@@ -78,7 +99,7 @@ def build_can_panel(ports_refs, can_logs_dict):
                     cmd = f'can send {c_idx} {cid} {cdata}\r\n'
                     curr_shell = shell_ref.get('ser')
 
-                    if curr_shell and curr_shell.is_open:
+                    if curr_shell and getattr(curr_shell, 'is_open', False):
                         curr_shell.write(cmd.encode('utf-8'))
                         log.push(f'TX -> ID: {cid} | DATA: {cdata}')
                         id_inp.set_value('')

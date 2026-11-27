@@ -18,6 +18,7 @@ struct can_instance_config {
     const struct device *can_device; /* Ссылка на физический драйвер FDCAN */
 };
 
+
 static const struct can_instance_config can_channels[] = {
     { .can_device = DEVICE_DT_GET(DT_NODELABEL(fdcan1)) },
     { .can_device = DEVICE_DT_GET(DT_NODELABEL(fdcan2)) },
@@ -25,6 +26,14 @@ static const struct can_instance_config can_channels[] = {
 };
 
 #define NUM_CAN_CHANNELS ARRAY_SIZE(can_channels)
+
+
+typedef struct canfd_state_t
+{
+    bool value[NUM_CAN_CHANNELS];
+
+}canfd_state_t;
+
 
 typedef enum 
 {
@@ -62,10 +71,24 @@ static struct k_work_poll can_task                  __attribute__((section("DTCM
 
 /* Прототипы функций теперь видят структуру правильно */
 static void _can_tx_handler(struct k_work *_work);
+static void _can_state_listener_cb(const struct zbus_channel *_chan);
 
 static void can1_tx_callback(const struct device *dev, int error, void *user_data);
 static void can2_tx_callback(const struct device *dev, int error, void *user_data);
 static void can3_tx_callback(const struct device *dev, int error, void *user_data);
+
+
+ZBUS_LISTENER_DEFINE(can_state_listener, _can_state_listener_cb);
+
+ZBUS_CHAN_DEFINE(can_state_chan,
+                 canfd_state_t,
+                 NULL, 
+                 NULL, 
+                 can_state_listener, 
+                 ZBUS_MSG_INIT(0) 
+);
+
+
 
 
 ZBUS_CHAN_DEFINE(can1_rx_chan,
@@ -89,6 +112,27 @@ ZBUS_CHAN_DEFINE(can3_rx_chan,
                  ZBUS_OBSERVERS_EMPTY, 
                  ZBUS_MSG_INIT(0) 
 );
+
+/***************************************************************************************************
+ *                                        PRIVATE FUNCTIONS
+ **************************************************************************************************/
+
+ static void _can_state_listener_cb(const struct zbus_channel *_chan)
+ {
+        canfd_state_t * msg = zbus_chan_msg(&can_state_chan);
+
+        for (uint8_t i = 0; i < NUM_CAN_CHANNELS; i++)
+        {                            
+            if (msg->value[i] == true)
+            {
+                can_start(can_channels[i].can_device);
+            } 
+            else 
+            {
+                can_stop(can_channels[i].can_device);
+            }                            
+        }
+ }
 
 
 /* TX Callback от CAN драйвера: вызывается, когда фрейм успешно ушел в шину */
@@ -314,7 +358,7 @@ static int dev_can_init(void)
         };
 
         if (can_set_timing(cfg->can_device, &timing) != 0) {
-            printk("Failed to set custom CAN timing\n");
+            LOG_ERR("Failed to set custom CAN timing\n");
         }
         
         ret = can_set_mode(cfg->can_device, CAN_MODE_NORMAL);
@@ -385,3 +429,7 @@ SERVER_OUT_QUEUE_ONLY_CHANNEL_DEFINE(CAN3_TX, &can3_tx_msgq, CAN_MSG_DATA);
 SERVER_IN_CHANNEL_DEFINE(CAN1_RX, &can1_rx_chan, 0, CAN_MSG_DATA);
 SERVER_IN_CHANNEL_DEFINE(CAN2_RX, &can2_rx_chan, 0, CAN_MSG_DATA);
 SERVER_IN_CHANNEL_DEFINE(CAN3_RX, &can3_rx_chan, 0, CAN_MSG_DATA);
+
+SERVER_SETTING_CHANNEL_DEFINE(CAN1_STATE,    &can_state_chan, 0 , BOOL_DATA);
+SERVER_SETTING_CHANNEL_DEFINE(CAN2_STATE,    &can_state_chan, 1 , BOOL_DATA);
+SERVER_SETTING_CHANNEL_DEFINE(CAN3_STATE,    &can_state_chan, 2 , BOOL_DATA);

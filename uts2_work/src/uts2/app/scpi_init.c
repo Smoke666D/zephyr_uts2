@@ -156,7 +156,7 @@ static const scpi_command_t scpi_commands[] =
   //  { .pattern = "CAN:BAUDrate",             .callback = cmd_can_baud,              },
   //  { .pattern = "CAN:BAUDrate?",            .callback = cmd_can_baud_q,            },
    // { .pattern = "CAN:MODE",                 .callback = cmd_can_mode,              },
-  //  { .pattern = "CAN[:STATe]",              .callback = cmd_can_state,             },
+    { .pattern = "CAN[:STATe]",              .callback = cmd_can_state,             },
     { .pattern = "CAN:TRANsmit",             .callback = cmd_can_transmit,          },
     { .pattern = "CAN:RECEive?",             .callback = cmd_can_receive_q          },
     { .pattern = "CAN:COUNt?",               .callback = cmd_can_count_q,           },

@@ -1,4 +1,4 @@
 [pytest]
 pythonpath = .
-addopts = -v --alluredir=allure-results
+addopts = -v -x --alluredir=allure-results
 testpaths = tests

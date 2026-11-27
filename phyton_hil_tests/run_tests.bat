@@ -24,7 +24,7 @@ echo MCU: %DEFAULT_MCU%
 echo.
 
 :: Запуск pytest с автоматическим созданием allure-results и очисткой
-python -m pytest --scpi-port=%DEFAULT_PORT% --mcu-device=%DEFAULT_MCU% --alluredir=allure-results --clean-alluredir %*
+python -m pytest -x --scpi-port=%DEFAULT_PORT% --mcu-device=%DEFAULT_MCU% --alluredir=allure-results --clean-alluredir %*
 
 echo.
 echo ========================================================
