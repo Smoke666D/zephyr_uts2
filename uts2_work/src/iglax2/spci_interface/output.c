@@ -52,9 +52,17 @@ static const scpi_choice_def_t out_channel_choices[] =
     {"OD8", OD8},
     {"OD9", OD9},
     {"OD10", OD10},    
+    {"OD11", OD11},    
     {"PU_ON3", IN3_PU_ON},
     {"PU_ON4", IN4_PU_ON},
-    {"OUT_P", OUT_P},    
+    {"OUT_P", OUT_P},
+    {"LIN1_PU", LIN1_PU},
+    {"LIN2_PU", LIN2_PU},
+    {"LIN_BREAK", LIN_BREAK},
+    {"LIN_SLEEP", LIN_SLEEP},
+    {"CAN1_STB", CAN1_STB},
+    {"CAN2_STB", CAN2_STB},
+    {"CAN3_STB", CAN3_STB},
     SCPI_CHOICE_LIST_END
 };
 

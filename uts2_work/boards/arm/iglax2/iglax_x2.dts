@@ -88,6 +88,27 @@
 		out_gate: out_gate {
 			gpios = <&gpioe 7 GPIO_ACTIVE_HIGH>;
 		};
+		lin1_pullup: lin1_pullup {
+			gpios = <&gpioe 0 GPIO_ACTIVE_HIGH>;
+		};
+		lin2_pullup: lin2_pullup {
+			gpios = <&gpioe 1 GPIO_ACTIVE_HIGH>;
+		};
+		lin_sleep: lin_sleep {
+			gpios = <&gpioe 2 GPIO_ACTIVE_HIGH>;
+		};
+		lin_break: lin_break {
+			gpios = <&gpioe 3 GPIO_ACTIVE_HIGH>;
+		};
+		can1_stb: can1_stb {
+			gpios = <&gpiod 4 GPIO_ACTIVE_HIGH>;
+		};
+		can2_stb: can2_stb {
+			gpios = <&gpiod 0 GPIO_ACTIVE_HIGH>;
+		};
+		can3_stb: can3_stb {
+			gpios = <&gpioe 11 GPIO_ACTIVE_HIGH>;
+		};
 	};
 };
 

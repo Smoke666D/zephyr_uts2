@@ -31,7 +31,14 @@ typedef enum
     OUTPUT_IN3_PU_ON        = 11,
     OUTPUT_IN4_PU_ON        = 12,
     OUTPUT_P                = 13,
-    OUT_CONTROL_LINE_CNT    = 14,
+    OUTPUT_LIN1_PU          = 14,
+    OUTPUT_LIN2_PU          = 15,
+    OUTPUT_LIN_SLEEP        = 16,
+    OUTPUT_LIN_BREAK        = 17,
+    OUTPUT_CAN1_STB         = 18,
+    OUTPUT_CAN2_STB         = 19,
+    OUTPUT_CAN3_STB         = 20,
+    OUT_CONTROL_LINE_CNT    = 21,
 } out_names_t;
 
 typedef struct out_control_line_msg 
@@ -83,8 +90,16 @@ static const struct gpio_dt_spec out_switches[OUT_CONTROL_LINE_CNT] =
     GPIO_DT_SPEC_GET(DT_NODELABEL(pd_on_in3), gpios),
     GPIO_DT_SPEC_GET(DT_NODELABEL(pd_on_in4), gpios),
     GPIO_DT_SPEC_GET(DT_NODELABEL(out_gate),  gpios),        
+    GPIO_DT_SPEC_GET(DT_NODELABEL(lin1_pullup),  gpios),        
+    GPIO_DT_SPEC_GET(DT_NODELABEL(lin2_pullup),  gpios),    
+    GPIO_DT_SPEC_GET(DT_NODELABEL(lin_sleep),  gpios),        
+    GPIO_DT_SPEC_GET(DT_NODELABEL(lin_break),  gpios),      
+    GPIO_DT_SPEC_GET(DT_NODELABEL(can1_stb),  gpios),        
+    GPIO_DT_SPEC_GET(DT_NODELABEL(can2_stb),  gpios), 
+    GPIO_DT_SPEC_GET(DT_NODELABEL(can3_stb),  gpios)
 };
 
+    
 
 /***************************************************************************************************
  *                                        PRIVATE FUNCTIONS
@@ -164,22 +179,29 @@ static int _power_control_init(void)
 
 SYS_INIT(_power_control_init, OUT_CTL_INIT_LEVEL,  OUT_CTL_INIT_PRIOR);
 
-SERVER_OUT_CHANNEL_DEFINE(OD1,       &out_control_chan, OUTPUT_OD1, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD2,       &out_control_chan, OUTPUT_OD2, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD3,       &out_control_chan, OUTPUT_OD3, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD4,       &out_control_chan, OUTPUT_OD4, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD5,       &out_control_chan, OUTPUT_OD5, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD6,       &out_control_chan, OUTPUT_OD6, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD7,       &out_control_chan, OUTPUT_OD7, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD8,       &out_control_chan, OUTPUT_OD8, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD9,       &out_control_chan, OUTPUT_OD9, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD10,      &out_control_chan, OUTPUT_OD10, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OD11,      &out_control_chan, OUTPUT_OD11, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD1,       &out_control_chan, OUTPUT_OD1,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD2,       &out_control_chan, OUTPUT_OD2,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD3,       &out_control_chan, OUTPUT_OD3,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD4,       &out_control_chan, OUTPUT_OD4,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD5,       &out_control_chan, OUTPUT_OD5,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD6,       &out_control_chan, OUTPUT_OD6,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD7,       &out_control_chan, OUTPUT_OD7,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD8,       &out_control_chan, OUTPUT_OD8,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD9,       &out_control_chan, OUTPUT_OD9,       BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD10,      &out_control_chan, OUTPUT_OD10,      BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OD11,      &out_control_chan, OUTPUT_OD11,      BOOL_DATA);
 SERVER_OUT_CHANNEL_DEFINE(IN3_PU_ON, &out_control_chan, OUTPUT_IN3_PU_ON, BOOL_DATA);
 SERVER_OUT_CHANNEL_DEFINE(IN4_PU_ON, &out_control_chan, OUTPUT_IN4_PU_ON, BOOL_DATA);
-SERVER_OUT_CHANNEL_DEFINE(OUT_P,     &out_control_chan, OUTPUT_P, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(OUT_P,     &out_control_chan, OUTPUT_P,         BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LIN1_PU,   &out_control_chan, OUTPUT_LIN1_PU,   BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LIN2_PU,   &out_control_chan, OUTPUT_LIN2_PU,   BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LIN_SLEEP, &out_control_chan, OUTPUT_LIN_SLEEP, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(LIN_BREAK, &out_control_chan, OUTPUT_LIN_BREAK, BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(CAN1_STB,  &out_control_chan, OUTPUT_CAN1_STB , BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(CAN2_STB,  &out_control_chan, OUTPUT_CAN2_STB , BOOL_DATA);
+SERVER_OUT_CHANNEL_DEFINE(CAN3_STB,  &out_control_chan, OUTPUT_CAN3_STB , BOOL_DATA);
 
 
 /***************************************************************************************************
  *                                           END OF FILE
- **************************************************************************************************/
+ ***************************************************************************************************/
